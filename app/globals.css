@@ -950,6 +950,37 @@ h3 {
   gap: 10px;
 }
 
+.memberCelebrationList {
+  display: grid;
+  gap: 8px;
+}
+
+.memberCelebrationCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 10px 12px;
+}
+
+.memberCelebrationCard div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.memberCelebrationCard strong {
+  font-size: 15px;
+}
+
+.memberCelebrationCard span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .memberEventCard {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1018,6 +1049,10 @@ h3 {
 
 .compactRow {
   grid-template-columns: 42px minmax(150px, 1fr) minmax(110px, 0.8fr) minmax(90px, 0.7fr) minmax(120px, 1fr) auto;
+}
+
+.celebrationAdminRow {
+  grid-template-columns: 42px minmax(150px, 1fr) minmax(130px, 0.8fr) minmax(90px, 0.6fr) minmax(120px, 0.9fr) auto auto;
 }
 
 .dueRow {
@@ -1441,6 +1476,7 @@ h3 {
   .clubLedgerRow,
   .fundOpeningRow,
   .compactRow,
+  .celebrationAdminRow,
   .dueRow,
   .financeDueRow,
   .specialStatusRow,
@@ -1452,6 +1488,14 @@ h3 {
 
   .documentCard {
     grid-template-columns: 1fr;
+  }
+
+  .memberCelebrationCard {
+    grid-template-columns: 1fr;
+  }
+
+  .memberCelebrationCard .miniActions {
+    flex-wrap: wrap;
   }
 
   .documentCard button {

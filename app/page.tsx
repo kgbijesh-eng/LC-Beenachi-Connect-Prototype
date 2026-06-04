@@ -803,7 +803,7 @@ export default function Prototype() {
   }
 
   function isExpanded(group: NavGroup) {
-    return expandedGroups.includes(group.title) || isActiveGroup(group);
+    return expandedGroups.includes(group.title);
   }
 
   function toggleGroup(group: NavGroup) {
@@ -830,6 +830,12 @@ export default function Prototype() {
     setExpandedGroups([group.title]);
   }
 
+  function openGrandChild(child: NavItem, group: NavGroup, parentItem: NavItem) {
+    const key = `${role}-${group.title}-${parentItem.label}`;
+    setExpandedSubItems((current) => current.includes(key) ? current : [...current, key]);
+    openChild(child, group);
+  }
+
   function openDirect(item: NavItem) {
     if (!item.screen) return;
     setScreen(item.screen);
@@ -846,7 +852,7 @@ export default function Prototype() {
   }
 
   function isSubItemExpanded(group: NavGroup, item: NavItem) {
-    return expandedSubItems.includes(`${role}-${group.title}-${item.label}`) || isItemActive(item);
+    return expandedSubItems.includes(`${role}-${group.title}-${item.label}`);
   }
 
   function openDashboardDetail(detail: DashboardDetail) {
@@ -928,7 +934,7 @@ export default function Prototype() {
                                     <button
                                       key={`${role}-${group.title}-${item.label}-${child.label}`}
                                       className={navItemMatches(child) ? "active navButton grandChildNavButton" : "navButton grandChildNavButton"}
-                                      onClick={() => openChild(child, group)}
+                                      onClick={() => openGrandChild(child, group, item)}
                                     >
                                       {child.label}
                                     </button>
@@ -1869,10 +1875,37 @@ function celebrationsForRole(role: Role) {
       rows.push({ name: member.name, type: "Birthday", date: member.birthday, remaining: member.birthday === "Today" ? "Today" : "This month", contact: member.consentContact ? member.phone : "Hidden", wishStatus: member.wishStatus });
     }
     if ((role !== "member" || member.consentAnniversary) && member.anniversary !== "Hidden") {
-      rows.push({ name: member.name, type: "Anniversary", date: member.anniversary, remaining: "This month", contact: member.consentContact ? member.phone : "Hidden", wishStatus: member.wishStatus });
+      rows.push({ name: member.name, type: "Wedding Anniversary", date: member.anniversary, remaining: "This month", contact: member.consentContact ? member.phone : "Hidden", wishStatus: member.wishStatus });
     }
     return rows;
   });
+}
+
+function memberCelebrationSections() {
+  return {
+    today: [
+      {
+        name: "Lion Ajith Kumar",
+        type: "Birthday",
+        status: "Today",
+        phone: "+91 98765 10004"
+      }
+    ],
+    recent: [
+      {
+        name: "Lion Secretary User",
+        type: "Birthday",
+        status: "Yesterday",
+        phone: "+91 98765 10002"
+      },
+      {
+        name: "Lion Bijesh",
+        type: "Wedding Anniversary",
+        status: "2 days ago",
+        phone: "+91 98765 10001"
+      }
+    ]
+  };
 }
 
 function DashboardDetailScreen({
@@ -3171,23 +3204,71 @@ function ActivityCard({ activity }: { activity: Activity }) {
 function Celebrations({ role }: { role: Role }) {
   const items = celebrationsForRole(role);
   const filters = ["Today", "This week", "This month", "Birthdays", "Anniversaries"];
+  if (role === "member") return <MemberCelebrations />;
+
   return (
     <section className="stack">
-      <Toolbar title="Celebrations" actionLabel="Birthdays + anniversaries" />
+      <Toolbar title="Celebrations" actionLabel="Official greeting tracking" />
       <div className="filterBar">{filters.map((filter) => <button className="filterButton" key={filter}>{filter}</button>)}</div>
       <div className="tableLike">
         {items.map((item) => (
-          <div className="staticRow compactRow" key={`${item.name}-${item.type}-${item.date}`}>
+          <div className="staticRow celebrationAdminRow" key={`${item.name}-${item.type}-${item.date}`}>
             <Avatar name={item.name} />
             <strong>{item.name}</strong>
             <span>{item.type}</span>
             <span>{item.date}</span>
             <span>{item.contact}</span>
             <span className="tag">{item.wishStatus}</span>
+            <button className="filterButton">Mark as Sent</button>
           </div>
         ))}
       </div>
     </section>
+  );
+}
+
+function MemberCelebrations() {
+  const sections = memberCelebrationSections();
+  return (
+    <section className="stack">
+      <Toolbar title="Celebrations" actionLabel="Member wishing" />
+      <section className="compactPanel">
+        <Toolbar title="Today’s Celebrations" actionLabel={`${sections.today.length} today`} />
+        <MemberCelebrationList items={sections.today} emptyText="No celebrations today." />
+      </section>
+      <section className="compactPanel">
+        <Toolbar title="Recently Completed Celebrations" actionLabel="Last 1–2 days" />
+        <MemberCelebrationList items={sections.recent} emptyText="No recent celebrations." />
+      </section>
+    </section>
+  );
+}
+
+function MemberCelebrationList({
+  items,
+  emptyText
+}: {
+  items: { name: string; type: string; status: string; phone?: string }[];
+  emptyText: string;
+}) {
+  if (items.length === 0) return <div className="memberEmptyState">{emptyText}</div>;
+
+  return (
+    <div className="memberCelebrationList">
+      {items.map((item) => (
+        <article className="memberCelebrationCard" key={`${item.name}-${item.type}-${item.status}`}>
+          <div>
+            <strong>{item.name}</strong>
+            <span>{item.type} · {item.status}</span>
+          </div>
+          <div className="miniActions">
+            {item.phone && <button className="filterButton">Call</button>}
+            {item.phone && <button className="filterButton">WhatsApp</button>}
+            <button className="filterButton">Wish</button>
+          </div>
+        </article>
+      ))}
+    </div>
   );
 }
 
