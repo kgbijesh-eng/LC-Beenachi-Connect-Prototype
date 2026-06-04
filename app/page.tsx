@@ -10,6 +10,7 @@ type Screen =
   | "operations-module"
   | "finance-module"
   | "reports-tools-module"
+  | "notifications-reminders"
   | "club-visibility-module"
   | "report-detail"
   | "nav-detail"
@@ -74,6 +75,15 @@ type ReportsSection =
   | "Celebration Reports"
   | "Blood Donor Consent Report"
   | "Document Reports";
+type ReminderSection =
+  | "Reminder Overview"
+  | "Dues Reminders"
+  | "Meeting Reminders"
+  | "Celebration Reminders"
+  | "Announcement Reminders"
+  | "Message Templates"
+  | "Reminder History"
+  | "Reminder Settings";
 type ClubVisibilitySection = "Members" | "Events & Meetings" | "Announcements" | "Documents" | "Projects / Activities" | "Celebrations";
 type DashboardDetail =
   | "pending-member-updates"
@@ -452,6 +462,28 @@ const roleLabels: Record<Role, string> = {
   member: "Normal Member"
 };
 
+const reminderSections: ReminderSection[] = [
+  "Reminder Overview",
+  "Dues Reminders",
+  "Meeting Reminders",
+  "Celebration Reminders",
+  "Announcement Reminders",
+  "Message Templates",
+  "Reminder History",
+  "Reminder Settings"
+];
+
+const duesReminderRows = [
+  { member: "Lion Ajith", amount: 1000, type: "Monthly Dues + Special Collection", channel: "WhatsApp", status: "Pending" },
+  { member: "Lion Rajesh", amount: 500, type: "Monthly Dues", channel: "WhatsApp", status: "Ready" }
+];
+
+const reminderHistoryRows = [
+  { date: "03 Jun 2026", title: "June dues reminder preview", channel: "WhatsApp", status: "Prototype previewed" },
+  { date: "02 Jun 2026", title: "Family fellowship reminder", channel: "In-app", status: "Scheduled dummy" },
+  { date: "01 Jun 2026", title: "Birthday greeting reminder", channel: "WhatsApp", status: "Marked as sent" }
+];
+
 const reportMenuItems: NavItem[] = [
   {
     label: "Member Reports",
@@ -678,6 +710,7 @@ const navByRole: Record<Role, NavGroup[]> = {
     { title: "Finance", items: financeMenuItems },
     { title: "Reports & Tools", items: [
       ...reportMenuItems,
+      { label: "Notifications & Reminders", screen: "notifications-reminders" },
       { label: "Authorized Donor Search", screen: "donor-search" }
     ] },
     { title: "System", direct: true, items: [{ label: "Settings / Roles", screen: "settings" }] }
@@ -688,6 +721,7 @@ const navByRole: Record<Role, NavGroup[]> = {
     { title: "Operations", items: operationsMenuItems },
     { title: "Reports & Tools", items: [
       ...reportMenuItems,
+      { label: "Notifications & Reminders", screen: "notifications-reminders" },
       { label: "Authorized Donor Search", screen: "donor-search" }
     ] }
   ],
@@ -698,7 +732,10 @@ const navByRole: Record<Role, NavGroup[]> = {
       ...peopleMenuItems,
       ...operationsMenuItems.filter((item) => item.label !== "Fellowship")
     ] },
-    { title: "Reports", items: reportMenuItems }
+    { title: "Reports & Tools", items: [
+      ...reportMenuItems,
+      { label: "Notifications & Reminders", screen: "notifications-reminders" }
+    ] }
   ],
   member: [
     { title: "Member", direct: true, items: [
@@ -1021,6 +1058,9 @@ export default function Prototype() {
         {screen === "reports-tools-module" && (
           <ReportsToolsModule section={reportsSection} setSection={setReportsSection} role={role} setScreen={setScreen} />
         )}
+        {screen === "notifications-reminders" && (
+          <NotificationsReminders role={role} setScreen={setScreen} />
+        )}
         {screen === "report-detail" && (
           <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={setScreen} />
         )}
@@ -1047,11 +1087,11 @@ export default function Prototype() {
         {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
         {screen === "fellowship-payments" && <FellowshipPayments setScreen={setScreen} />}
         {screen === "finance-reports" && <FinanceReports />}
-        {screen === "events-meetings" && <EventsMeetings role={role} member={activeMember} selectedSponsors={selectedSponsors} />}
+        {screen === "events-meetings" && <EventsMeetings role={role} member={activeMember} selectedSponsors={selectedSponsors} setScreen={setScreen} />}
         {screen === "announcements" && <Announcements role={role} member={activeMember} selectedSponsors={selectedSponsors} />}
         {screen === "documents" && <Documents role={role} />}
         {screen === "projects" && <ProjectsActivities setScreen={setScreen} />}
-        {screen === "celebrations" && <Celebrations role={role} />}
+        {screen === "celebrations" && <Celebrations role={role} setScreen={setScreen} />}
         {screen === "donor-consent" && <DonorConsent member={activeMember} />}
         {screen === "donor-search" && <DonorSearch bloodGroup={bloodGroup} setBloodGroup={setBloodGroup} allowedDonors={allowedDonors} />}
         {screen === "reports" && <Reports />}
@@ -1082,6 +1122,7 @@ function screenTitle(screen: Screen) {
     "operations-module": "Operations",
     "finance-module": "Finance",
     "reports-tools-module": "Reports & Tools",
+    "notifications-reminders": "Notifications & Reminders",
     "club-visibility-module": "Club Visibility",
     "report-detail": "Report Detail",
     "nav-detail": "Detail",
@@ -1196,7 +1237,7 @@ function PeopleModule({
       <ModuleHeader title="People" label="Choose people section" value={section} options={options} onChange={setSection} setScreen={setScreen} />
       {section === "Members" && <MembersList setScreen={setScreen} role={role} />}
       {section === "Board & Committees" && <Committees />}
-      {section === "Celebrations" && <Celebrations role={role} />}
+      {section === "Celebrations" && <Celebrations role={role} setScreen={setScreen} />}
     </section>
   );
 }
@@ -1224,7 +1265,7 @@ function OperationsModule({
   return (
     <section className="stack">
       <ModuleHeader title="Operations" label="Choose operations section" value={section} options={options} onChange={setSection} setScreen={setScreen} />
-      {section === "Events & Meetings" && <EventsMeetings role={role} member={member} selectedSponsors={selectedSponsors} />}
+      {section === "Events & Meetings" && <EventsMeetings role={role} member={member} selectedSponsors={selectedSponsors} setScreen={setScreen} />}
       {section === "Announcements" && <Announcements role={role} member={member} selectedSponsors={selectedSponsors} />}
       {section === "Documents" && <Documents role={role} />}
       {section === "Projects / Activities" && <ProjectsActivities setScreen={setScreen} />}
@@ -1391,9 +1432,266 @@ function ReportsToolsModule({
   ];
   return (
     <section className="stack">
-      <ModuleHeader title={role === "treasurer" ? "Reports" : "Reports & Tools"} label="Select report category" value={section} options={options} onChange={setSection} setScreen={setScreen} />
+      <ModuleHeader title="Reports & Tools" label="Select report category" value={section} options={options} onChange={setSection} setScreen={setScreen} />
+      <div className="actionGrid">
+        {role !== "member" && (
+          <Action
+            title="Notifications & Reminders"
+            body="Prototype-only dues, meeting, celebration and announcement reminder control screen."
+            onClick={() => setScreen("notifications-reminders")}
+          />
+        )}
+      </div>
       <ReportCategory section={section} />
     </section>
+  );
+}
+
+function NotificationsReminders({ role, setScreen }: { role: Role; setScreen: (screen: Screen) => void }) {
+  const [section, setSection] = useState<ReminderSection>("Reminder Overview");
+  const [previewTitle, setPreviewTitle] = useState("Dues reminder preview");
+  const [prototypeStatus, setPrototypeStatus] = useState("No real reminder has been sent.");
+  const allowedSections = reminderSections.filter((item) => {
+    if (role === "president") return true;
+    if (role === "secretary") return !["Dues Reminders", "Reminder Settings"].includes(item);
+    if (role === "treasurer") return ["Reminder Overview", "Dues Reminders", "Message Templates", "Reminder History"].includes(item);
+    return false;
+  });
+
+  function openPreview(title: string, status = "Dummy preview opened.") {
+    setPreviewTitle(title);
+    setPrototypeStatus(status);
+  }
+
+  if (role === "member") {
+    return (
+      <section className="stack">
+        <Toolbar title="Notifications & Reminders" actionLabel="No control access" />
+        <div className="notice">Normal Members only receive reminders. They do not have access to this control screen.</div>
+        <button className="secondaryButton" onClick={() => setScreen("dashboard")}>Back to Home</button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="stack">
+      <Toolbar title="Notifications & Reminders" actionLabel="Milestone 1A prototype only" />
+      <div className="notice">
+        Prototype only. Real WhatsApp/SMS/in-app automation will be implemented in backend phase.
+      </div>
+
+      <div className="reminderTabs">
+        {allowedSections.map((item) => (
+          <button
+            className={section === item ? "filterButton activeFilter" : "filterButton"}
+            key={item}
+            onClick={() => setSection(item)}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+
+      {section === "Reminder Overview" && (
+        <section className="stack">
+          <div className="metricsGrid">
+            <button className="clickableMetric" onClick={() => setSection("Dues Reminders")} disabled={role === "secretary"}>
+              <span>Pending Due Reminders</span>
+              <strong>12</strong>
+              <small>{role === "secretary" ? "Treasurer access" : "Open dues reminders"}</small>
+            </button>
+            <button className="clickableMetric" onClick={() => setSection("Meeting Reminders")} disabled={role === "treasurer"}>
+              <span>Meeting Reminders Scheduled</span>
+              <strong>2</strong>
+              <small>{role === "treasurer" ? "Secretary access" : "Open meeting reminders"}</small>
+            </button>
+            <button className="clickableMetric" onClick={() => setSection("Celebration Reminders")} disabled={role === "treasurer"}>
+              <span>Celebrations Today</span>
+              <strong>3</strong>
+              <small>{role === "treasurer" ? "Secretary access" : "Open celebrations"}</small>
+            </button>
+            <button className="clickableMetric" onClick={() => setSection("Announcement Reminders")} disabled={role === "treasurer"}>
+              <span>Announcements Pending</span>
+              <strong>1</strong>
+              <small>{role === "treasurer" ? "Secretary access" : "Open announcements"}</small>
+            </button>
+            <button className="clickableMetric" onClick={() => setSection("Reminder History")}>
+              <span>Failed / Not Sent</span>
+              <strong>0</strong>
+              <small>Open history</small>
+            </button>
+          </div>
+          <ReminderPreview title={previewTitle} status={prototypeStatus} />
+        </section>
+      )}
+
+      {section === "Dues Reminders" && (
+        <section className="compactPanel">
+          <Toolbar title="Dues Reminders" actionLabel="Treasurer workflow" />
+          <div className="tableLike">
+            {duesReminderRows.map((row) => (
+              <div className="staticRow reminderDueRow" key={row.member}>
+                <strong>{row.member}</strong>
+                <span>{money(row.amount)}</span>
+                <span>{row.type}</span>
+                <span>{row.channel}</span>
+                <span className="tag">{row.status}</span>
+                <button className="filterButton" onClick={() => openPreview(`${row.member} dues reminder`, "Preview panel only. No WhatsApp message sent.")}>Preview</button>
+              </div>
+            ))}
+          </div>
+          <ReminderActions
+            onPreview={() => openPreview("Dues reminder message", "Preview panel only.")}
+            onSend={() => openPreview("Dues reminder send now", "Prototype status: send now clicked, no real sending.")}
+            onSchedule={() => openPreview("Dues reminder schedule", "Prototype status: dummy reminder scheduled.")}
+            onMark={() => openPreview("Dues reminder contacted", "Prototype status: marked as contacted.")}
+          />
+          <ReminderPreview title={previewTitle} status={prototypeStatus} />
+        </section>
+      )}
+
+      {section === "Meeting Reminders" && (
+        <section className="compactPanel">
+          <Toolbar title="Meeting Reminders" actionLabel="Secretary workflow" />
+          <div className="summaryList">
+            <Field label="Meeting/Event" value="Monthly Family Fellowship" />
+            <Field label="Date" value="15 June 2026" />
+            <Field label="Time" value="7:00 PM" />
+            <Field label="Venue" value="Club Hall" />
+            <Field label="Audience" value="Members & Family" />
+            <Field label="Reminder Timing" value="1 day before / Same day morning / 1 hour before" />
+          </div>
+          <div className="buttonRow">
+            <button onClick={() => openPreview("Monthly Family Fellowship reminder", "Preview panel only. No message sent.")}>Preview Reminder</button>
+            <button className="secondaryButton" onClick={() => openPreview("Meeting reminder schedule", "Prototype status: dummy schedule saved.")}>Schedule Reminder</button>
+            <button className="secondaryButton" onClick={() => openPreview("Meeting test reminder", "Prototype status: test reminder simulated.")}>Send Test Reminder</button>
+          </div>
+          <ReminderPreview title={previewTitle} status={prototypeStatus} />
+        </section>
+      )}
+
+      {section === "Celebration Reminders" && (
+        <section className="compactPanel">
+          <Toolbar title="Celebration Reminders" actionLabel="Official greeting tracking" />
+          <div className="notice">Normal Members see only today's celebrations and recently completed celebrations. Secretary/Admin manage official greeting status here.</div>
+          <div className="tableLike">
+            {["Lion Ajith - Birthday today", "Lion Pradeep - Anniversary recently completed", "Lion Rajesh - Birthday today"].map((item, index) => (
+              <div className="staticRow reminderSimpleRow" key={item}>
+                <strong>{item}</strong>
+                <span>{index === 1 ? "Greeting sent" : "Official greeting pending"}</span>
+                <span className="tag">{index === 1 ? "Sent" : "Pending"}</span>
+                <button className="filterButton" onClick={() => openPreview(item, "Prototype status: greeting reminder opened.")}>Preview</button>
+                <button className="filterButton" onClick={() => openPreview(item, "Prototype status: marked as sent.")}>Mark as sent</button>
+              </div>
+            ))}
+          </div>
+          <ReminderPreview title={previewTitle} status={prototypeStatus} />
+        </section>
+      )}
+
+      {section === "Announcement Reminders" && (
+        <section className="compactPanel">
+          <Toolbar title="Announcement Reminders" actionLabel="Secretary workflow" />
+          <div className="tableLike">
+            {announcements.map((item) => (
+              <div className="staticRow reminderSimpleRow" key={item.title}>
+                <strong>{item.title}</strong>
+                <span>{item.audience}</span>
+                <span className="tag">{item.status}</span>
+                <button className="filterButton" onClick={() => openPreview(item.title, "Prototype status: announcement reminder preview opened.")}>Preview</button>
+                <button className="filterButton" onClick={() => openPreview(item.title, "Prototype status: dummy schedule saved.")}>Schedule</button>
+              </div>
+            ))}
+          </div>
+          <ReminderPreview title={previewTitle} status={prototypeStatus} />
+        </section>
+      )}
+
+      {section === "Message Templates" && (
+        <section className="compactPanel">
+          <Toolbar title="Message Templates" actionLabel="Dummy templates" />
+          <div className="templateGrid">
+            {["Dues Reminder", "Meeting Reminder", "Celebration Greeting", "Announcement Follow-up"].map((template) => (
+              <article className="templateCard" key={template}>
+                <h3>{template}</h3>
+                <p>Dear Lion, this is a prototype template preview. Real approved WhatsApp templates belong to the backend/integration phase.</p>
+                <button className="filterButton" onClick={() => openPreview(template, "Prototype template opened. No API/template asset created.")}>Preview Template</button>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {section === "Reminder History" && (
+        <section className="compactPanel">
+          <Toolbar title="Reminder History" actionLabel="Dummy log" />
+          <div className="tableLike">
+            {reminderHistoryRows.map((row) => (
+              <div className="staticRow reminderHistoryRow" key={`${row.date}-${row.title}`}>
+                <strong>{row.date}</strong>
+                <span>{row.title}</span>
+                <span>{row.channel}</span>
+                <span className="tag">{row.status}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {section === "Reminder Settings" && (
+        <section className="compactPanel">
+          <Toolbar title="Reminder Settings" actionLabel="Auto-send off" />
+          <div className="settingsGrid">
+            <Field label="Enable Dues Reminders" value="Yes" />
+            <Field label="Enable Meeting Reminders" value="Yes" />
+            <Field label="Enable Celebration Reminders" value="Yes" />
+            <Field label="Enable Announcement Reminders" value="Yes" />
+            <Field label="Primary Channel" value="WhatsApp" />
+            <Field label="Secondary Channel" value="In-app Notification" />
+            <Field label="Optional Backup" value="SMS" />
+            <Field label="Auto-send" value="Off by default" />
+            <Field label="Approval required before sending" value="Yes" />
+          </div>
+          <div className="buttonRow">
+            <button disabled>Auto-send Off</button>
+            <button className="secondaryButton" onClick={() => openPreview("Reminder settings", "Prototype status: settings preview only.")}>Preview Settings</button>
+          </div>
+          <div className="notice">Auto-send remains OFF by default to avoid accidental or embarrassing reminders from wrong dues or meeting data.</div>
+        </section>
+      )}
+    </section>
+  );
+}
+
+function ReminderActions({
+  onPreview,
+  onSend,
+  onSchedule,
+  onMark
+}: {
+  onPreview: () => void;
+  onSend: () => void;
+  onSchedule: () => void;
+  onMark: () => void;
+}) {
+  return (
+    <div className="buttonRow">
+      <button onClick={onPreview}>Preview Message</button>
+      <button className="secondaryButton" onClick={onSend}>Send Now</button>
+      <button className="secondaryButton" onClick={onSchedule}>Schedule Reminder</button>
+      <button className="secondaryButton" onClick={onMark}>Mark as Contacted</button>
+    </div>
+  );
+}
+
+function ReminderPreview({ title, status }: { title: string; status: string }) {
+  return (
+    <aside className="compactPanel reminderPreview">
+      <Toolbar title="Dummy Preview Panel" actionLabel="No real sending" />
+      <h3>{title}</h3>
+      <p>Dear Lion, this is a prototype reminder message for LC Beenachi Connect Milestone 1A review.</p>
+      <span>{status}</span>
+    </aside>
   );
 }
 
@@ -1418,11 +1716,11 @@ function ClubVisibilityModule({
       <ModuleHeader title="Club Visibility" label="Choose view-only section" value={section} options={options} onChange={setSection} setScreen={setScreen} />
       <div className="notice">Treasurer view is mostly read-only outside Finance.</div>
       {section === "Members" && <MembersList setScreen={setScreen} role={role} />}
-      {section === "Events & Meetings" && <EventsMeetings role={role} member={member} selectedSponsors={selectedSponsors} />}
+      {section === "Events & Meetings" && <EventsMeetings role={role} member={member} selectedSponsors={selectedSponsors} setScreen={setScreen} />}
       {section === "Announcements" && <Announcements role={role} member={member} selectedSponsors={selectedSponsors} />}
       {section === "Documents" && <Documents role={role} />}
       {section === "Projects / Activities" && <ProjectsActivities setScreen={setScreen} />}
-      {section === "Celebrations" && <Celebrations role={role} />}
+      {section === "Celebrations" && <Celebrations role={role} setScreen={setScreen} />}
     </section>
   );
 }
@@ -2627,7 +2925,12 @@ function Ledger({ role, member, setScreen }: { role: Role; member: Member; setSc
           </div>
         ))}
       </div>
-      {(role === "president" || role === "treasurer") && <button onClick={() => setScreen("payments")}>Open Payments / Receipts</button>}
+      {(role === "president" || role === "treasurer") && (
+        <div className="buttonRow">
+          <button onClick={() => setScreen("payments")}>Open Payments / Receipts</button>
+          <button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Due Reminder</button>
+        </div>
+      )}
     </section>
   );
 }
@@ -3004,7 +3307,17 @@ function FinanceReports() {
   );
 }
 
-function EventsMeetings({ role, member, selectedSponsors }: { role: Role; member: Member; selectedSponsors: string[] }) {
+function EventsMeetings({
+  role,
+  member,
+  selectedSponsors,
+  setScreen
+}: {
+  role: Role;
+  member: Member;
+  selectedSponsors: string[];
+  setScreen: (screen: Screen) => void;
+}) {
   const visible = role === "member" ? eventsMeetings.filter((item) => item.visibility === "All Members") : eventsMeetings;
   const memberIsFellowshipSponsor = selectedSponsors.includes(member.name) || selectedSponsors.includes(member.dashboardName);
   const sections: EventMeeting["section"][] = ["Upcoming Events", "Upcoming Meetings", "Past Events", "Meeting Notices"];
@@ -3017,6 +3330,11 @@ function EventsMeetings({ role, member, selectedSponsors }: { role: Role; member
   return (
     <section className="stack">
       <Toolbar title="Events & Meetings" actionLabel={role === "member" ? "Available to you" : "Full management visibility"} />
+      {role !== "member" && (
+        <div className="buttonRow">
+          <button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Meeting Reminder</button>
+        </div>
+      )}
       {sections.map((section) => {
         const sectionItems = visible.filter((item) => item.section === section);
         const sectionTitle = role === "member" && section === "Upcoming Meetings" ? "Upcoming Meetings & Events" : section;
@@ -3201,7 +3519,7 @@ function ActivityCard({ activity }: { activity: Activity }) {
   );
 }
 
-function Celebrations({ role }: { role: Role }) {
+function Celebrations({ role, setScreen }: { role: Role; setScreen: (screen: Screen) => void }) {
   const items = celebrationsForRole(role);
   const filters = ["Today", "This week", "This month", "Birthdays", "Anniversaries"];
   if (role === "member") return <MemberCelebrations />;
@@ -3209,6 +3527,9 @@ function Celebrations({ role }: { role: Role }) {
   return (
     <section className="stack">
       <Toolbar title="Celebrations" actionLabel="Official greeting tracking" />
+      <div className="buttonRow">
+        <button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Greeting Reminder</button>
+      </div>
       <div className="filterBar">{filters.map((filter) => <button className="filterButton" key={filter}>{filter}</button>)}</div>
       <div className="tableLike">
         {items.map((item) => (

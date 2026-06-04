@@ -1175,6 +1175,12 @@ h3 {
   gap: 8px;
 }
 
+.reminderTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .subParentStack {
   display: grid;
   gap: 8px;
@@ -1356,6 +1362,49 @@ h3 {
   font-size: 13px;
 }
 
+.reminderDueRow {
+  grid-template-columns: minmax(120px, 0.9fr) minmax(80px, 0.5fr) minmax(220px, 1.4fr) minmax(90px, 0.6fr) auto auto;
+}
+
+.reminderSimpleRow {
+  grid-template-columns: minmax(220px, 1.4fr) minmax(140px, 0.8fr) auto auto auto;
+}
+
+.reminderHistoryRow {
+  grid-template-columns: minmax(110px, 0.6fr) minmax(220px, 1.4fr) minmax(100px, 0.6fr) auto;
+}
+
+.templateGrid,
+.settingsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.templateCard,
+.reminderPreview {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 14px;
+}
+
+.templateCard h3,
+.reminderPreview h3 {
+  font-size: 16px;
+}
+
+.templateCard p,
+.reminderPreview p,
+.reminderPreview span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 @media (max-width: 980px) {
   .shell {
     grid-template-columns: 1fr;
@@ -1378,6 +1427,8 @@ h3 {
   .queueGrid,
   .permissionGrid,
   .summaryList,
+  .templateGrid,
+  .settingsGrid,
   .fundSummaryGrid,
   .compactDashboardGrid,
   .quickActionGrid,
@@ -1477,6 +1528,9 @@ h3 {
   .fundOpeningRow,
   .compactRow,
   .celebrationAdminRow,
+  .reminderDueRow,
+  .reminderSimpleRow,
+  .reminderHistoryRow,
   .dueRow,
   .financeDueRow,
   .specialStatusRow,
