@@ -24,7 +24,10 @@ type Screen =
   | "ledger"
   | "member-dues-detail"
   | "special-collection"
-  | "payments"
+  | "record-member-payment"
+  | "collection-box"
+  | "receipt-list"
+  | "payment-history"
   | "outstanding-dues"
   | "collection-summary"
   | "fellowship-payments"
@@ -663,10 +666,10 @@ const financeMenuItems: NavItem[] = [
   {
     label: "Payments / Receipts",
     children: [
-      { label: "Record Payment", screen: "payments" },
-      { label: "Voluntary Contribution / Collection Box", screen: "payments" },
-      detailItem("Finance", "Receipt List"),
-      detailItem("Finance", "Payment History")
+      { label: "Record Member Payment", screen: "record-member-payment" },
+      { label: "Voluntary Contribution / Collection Box", screen: "collection-box" },
+      { label: "Receipt List", screen: "receipt-list" },
+      { label: "Payment History", screen: "payment-history" }
     ]
   },
   {
@@ -958,7 +961,7 @@ export default function Prototype() {
                           {item.children ? (
                             <>
                               <button
-                                className={isItemActive(item) ? "active navButton childNavButton" : "navButton childNavButton"}
+                                className={isItemActive(item) ? "navButton childNavButton activeParentButton" : "navButton childNavButton"}
                                 onClick={() => toggleSubItem(group, item)}
                                 aria-expanded={isSubItemExpanded(group, item)}
                               >
@@ -1082,7 +1085,10 @@ export default function Prototype() {
         {screen === "ledger" && <Ledger role={role} member={activeMember} setScreen={setScreen} />}
         {screen === "member-dues-detail" && <MemberDuesDetail member={activeMember} setScreen={setScreen} />}
         {screen === "special-collection" && <SpecialCollection setScreen={setScreen} />}
-        {screen === "payments" && <PaymentEntry role={role} />}
+        {screen === "record-member-payment" && <RecordMemberPayment role={role} />}
+        {screen === "collection-box" && <CollectionBoxReceipt role={role} />}
+        {screen === "receipt-list" && <ReceiptList />}
+        {screen === "payment-history" && <PaymentHistory />}
         {screen === "outstanding-dues" && <OutstandingDues setScreen={setScreen} />}
         {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
         {screen === "fellowship-payments" && <FellowshipPayments setScreen={setScreen} />}
@@ -1136,7 +1142,10 @@ function screenTitle(screen: Screen) {
     ledger: "Member Ledger / Dues",
     "member-dues-detail": "Current Dues Details",
     "special-collection": "Special Collection",
-    payments: "Payments / Receipts",
+    "record-member-payment": "Record Member Payment",
+    "collection-box": "Voluntary Contribution / Collection Box",
+    "receipt-list": "Receipt List",
+    "payment-history": "Payment History",
     "outstanding-dues": "Outstanding Dues",
     "collection-summary": "Collection Summary",
     "fellowship-payments": "Fellowship Payments",
@@ -1295,7 +1304,7 @@ function FinanceModule({
     <section className="stack">
       {section === "Club Account Statement" && <ClubAccountStatement section={statementSection} />}
       {section === "Member Ledger / Dues" && <Ledger role={role} member={member} setScreen={setScreen} />}
-      {section === "Payments / Receipts" && <PaymentEntry role={role} />}
+      {section === "Payments / Receipts" && <PaymentsReceiptsHub setScreen={setScreen} />}
       {section === "Outstanding Dues" && <OutstandingDues setScreen={setScreen} />}
       {section === "Collection Summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
       {section === "Fellowship Payments" && <FellowshipPayments setScreen={setScreen} />}
@@ -1401,7 +1410,80 @@ function ClubAccountStatement({ section }: { section: ClubStatementSection }) {
 
         {section === "Kuri / Chit Fund - Future Phase" && (
           <div className="statementSectionPanel">
-            <div className="notice">Kuri / Chit Fund is deferred. It is not included in the V1 club account statement flow.</div>
+            <div className="notice">
+              Future Module: Member Kuri / Rotating Support Fund. Status: Deferred to Milestone 2 / V2. Accounting treatment will be handled through separate ledger heads after backend, CA, and legal review.
+            </div>
+            <div className="metricsGrid">
+              <Metric label="Milestone 1A status" value="Deferred" />
+              <Metric label="Real operations" value="Not active" />
+              <Metric label="Accounting mode" value="Separate ledger heads" />
+              <Metric label="Next design phase" value="Milestone 2 / V2" />
+            </div>
+            <section className="compactPanel">
+              <Toolbar title="Planned Accounting Treatment" actionLabel="Roadmap note only" />
+              <div className="tableLike">
+                {[
+                  ["Member kuri collections", "Kuri Member Pool Liability"],
+                  ["Kuri payout to winning member", "Liability settlement"],
+                  ["5% retained by club", "Kuri Administration Fee Income"],
+                  ["Member dues deducted", "Member dues recovery / member ledger credit"],
+                  ["Net paid to member", "Bank / Cash payout"]
+                ].map(([particular, treatment]) => (
+                  <div className="staticRow fundOpeningRow" key={particular}>
+                    <strong>{particular}</strong>
+                    <span>{treatment}</span>
+                    <span className="tag">Future</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="compactPanel">
+              <Toolbar title="Recommended Ledger Heads" actionLabel="Future backend" />
+              <div className="permissionGrid">
+                {[
+                  "Kuri Member Pool Liability",
+                  "Kuri Administration Fee Income",
+                  "Member Dues Receivable",
+                  "Bank / Cash",
+                  "Kuri Payout Payable"
+                ].map((head) => (
+                  <div className="permissionItem" key={head}>
+                    <strong>{head}</strong>
+                    <span>Future kuri ledger head. Not posted in Milestone 1A.</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="compactPanel">
+              <Toolbar title="Example Settlement View" actionLabel="Dummy accounting example" />
+              <div className="summaryList">
+                <Field label="Gross kuri amount" value={money(50000)} />
+                <Field label="Less: Kuri Administration Fee @ 5%" value={money(2500)} />
+                <Field label="Less: Member pending dues deducted" value={money(1000)} />
+                <Field label="Net paid to winning member" value={money(46500)} />
+              </div>
+              <div className="notice">
+                Do not treat the full kuri amount as club income. Only the retained administration fee is planned as club income.
+              </div>
+            </section>
+            <section className="compactPanel">
+              <Toolbar title="Milestone 2 Planning" actionLabel="Backend design later" />
+              <div className="flowStrip">
+                {[
+                  "Kuri Groups",
+                  "Kuri Members",
+                  "Kuri Installments",
+                  "Kuri Draws / Selections",
+                  "Kuri Payouts",
+                  "Kuri Payout Deductions",
+                  "Kuri Ledger Entries",
+                  "Member + Club Ledgers"
+                ].map((item) => <span key={item}>{item}</span>)}
+              </div>
+              <div className="notice">
+                Member dues deducted from a kuri payout should clear member dues as a ledger credit. It should not be recorded again as fresh income.
+              </div>
+            </section>
           </div>
         )}
       </section>
@@ -1975,7 +2057,7 @@ function Dashboard({
           <Action title="Update activity" body="Use annual plan or template." onClick={() => setScreen("projects")} />
         </>}
         {role === "treasurer" && <>
-          <Action title="Record payment" body="Select outstanding due and auto-allocate." onClick={() => setScreen("payments")} />
+          <Action title="Record payment" body="Select outstanding due and auto-allocate." onClick={() => setScreen("record-member-payment")} />
           <Action title="Add due" body="Use due category defaults." onClick={() => setScreen("ledger")} />
           <Action title="View member ledger" body="Search member account history." onClick={() => setScreen("ledger")} />
           <Action title="Fellowship payment status" body="Track sponsor payments." onClick={() => setScreen("fellowship")} />
@@ -2054,7 +2136,7 @@ function PresidentDashboard({
         <div className="quickActionGrid">
           <button onClick={() => setScreen("members")}>Add Member</button>
           <button onClick={() => setScreen("announcements")}>Create Announcement</button>
-          <button onClick={() => setScreen("payments")}>Record Payment</button>
+          <button onClick={() => setScreen("record-member-payment")}>Record Payment</button>
           <button onClick={() => setScreen("fellowship")}>Open Fellowship</button>
           <button onClick={() => setScreen("reports-tools-module")}>Open Reports</button>
           <button onClick={() => setScreen("celebrations")}>Open Celebrations</button>
@@ -2384,7 +2466,7 @@ function PendingDuesDetail({ role, member, setScreen }: { role: Role; member: Me
           <span>{due.dueDate}</span>
           <span>{money(due.amount)}</span>
           <span className="tag">{due.status}</span>
-          <button className="filterButton" disabled={role === "member"} onClick={() => setScreen("payments")}>Record Payment</button>
+          <button className="filterButton" disabled={role === "member"} onClick={() => setScreen("record-member-payment")}>Record Payment</button>
         </div>
       ))}
     </div>
@@ -2927,7 +3009,7 @@ function Ledger({ role, member, setScreen }: { role: Role; member: Member; setSc
       </div>
       {(role === "president" || role === "treasurer") && (
         <div className="buttonRow">
-          <button onClick={() => setScreen("payments")}>Open Payments / Receipts</button>
+          <button onClick={() => setScreen("record-member-payment")}>Open Payments / Receipts</button>
           <button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Due Reminder</button>
         </div>
       )}
@@ -3052,7 +3134,7 @@ function SpecialCollection({ setScreen }: { setScreen: (screen: Screen) => void 
               <span>Due: {specialCollection.dueDate}</span>
               <span>{money(specialCollection.amountPerMember)}</span>
               <span className="tag">{status}</span>
-              <button className="filterButton" onClick={() => setScreen("payments")}>Record Payment</button>
+              <button className="filterButton" onClick={() => setScreen("record-member-payment")}>Record Payment</button>
             </div>
           ))}
         </div>
@@ -3064,30 +3146,54 @@ function SpecialCollection({ setScreen }: { setScreen: (screen: Screen) => void 
   );
 }
 
-function PaymentEntry({ role }: { role: Role }) {
+function PaymentsReceiptsHub({ setScreen }: { setScreen: (screen: Screen) => void }) {
+  return (
+    <section className="stack">
+      <Toolbar title="Payments / Receipts" actionLabel="Choose finance workflow" />
+      <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
+      <div className="actionGrid">
+        <Action title="Record Member Payment" body="Clear member dues and preview a dummy receipt." onClick={() => setScreen("record-member-payment")} />
+        <Action title="Voluntary Contribution / Collection Box" body="Record club income without changing member dues." onClick={() => setScreen("collection-box")} />
+        <Action title="Receipt List" body="View dummy receipt rows." onClick={() => setScreen("receipt-list")} />
+        <Action title="Payment History" body="View dummy payment history rows." onClick={() => setScreen("payment-history")} />
+      </div>
+    </section>
+  );
+}
+
+function RecordMemberPayment({ role }: { role: Role }) {
   const canEdit = role === "president" || role === "treasurer";
   const selectedMember = members[3];
   const selectedDues = outstandingDues.filter((due) => due.member === selectedMember.name);
   const outstandingBefore = selectedDues.reduce((sum, due) => sum + due.amount, 0);
   const paymentAmount = selectedDues.filter((due) => due.selected).reduce((sum, due) => sum + due.amount, 0);
   const outstandingAfter = outstandingBefore - paymentAmount;
+  const selectedDueItems = selectedDues.filter((due) => due.selected);
 
   return (
     <section className="stack">
+      <Toolbar title="Record Member Payment" actionLabel="Member dues payment" />
+      <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
       {!canEdit && <div className="notice">Secretary and non-finance roles can view summaries, but payment editing is disabled by default.</div>}
       <div className="formPanel">
         <div className="fieldGrid">
           <label>Member<select defaultValue={selectedMember.id} disabled={!canEdit}>{members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label>
           <label>Payment mode<select defaultValue="upi" disabled={!canEdit}><option value="cash">Cash</option><option value="bank">Bank transfer</option><option value="upi">UPI</option></select></label>
           <label>Reference number<input value="UPI-REF-20260603-001" readOnly /></label>
-          <label>Receipt placeholder<input value="Receipt will be generated after save" readOnly /></label>
+          <label>Payment amount<input value={money(paymentAmount)} readOnly /></label>
         </div>
       </div>
       <div className="compactPanel">
-        <Toolbar title="Outstanding Dues" actionLabel="Select due or auto-allocate" />
-        <div className="tableLike">
+        <Toolbar title="Outstanding Dues" actionLabel="Compact dummy list" />
+        <div className="tableLike compactFinanceTable">
+          <div className="staticRow compactDueHeader">
+            <span>Select</span>
+            <strong>Due Type</strong>
+            <span>Amount</span>
+            <span>Status</span>
+          </div>
           {selectedDues.map((due) => (
-            <div className="staticRow dueRow" key={due.id}>
+            <div className="staticRow compactDueRow" key={due.id}>
               <span>{due.selected ? "✓" : ""}</span>
               <strong>{due.label}</strong>
               <span>{money(due.amount)}</span>
@@ -3095,24 +3201,40 @@ function PaymentEntry({ role }: { role: Role }) {
             </div>
           ))}
         </div>
-        <div className="buttonRow">
-          <button disabled={!canEdit}>Auto-Allocate Payment</button>
-          <button className="secondaryButton" disabled={!canEdit}>Select All Outstanding</button>
-        </div>
       </div>
       <div className="metricsGrid">
         <Metric label="Outstanding before payment" value={money(outstandingBefore)} />
-        <Metric label="Selected due item" value="2 selected" />
+        <Metric label="Selected due items" value={`${selectedDueItems.length} selected`} />
         <Metric label="Payment amount" value={money(paymentAmount)} />
         <Metric label="Outstanding after payment" value={money(outstandingAfter)} />
-        <Metric label="Receipt/reference" value="UPI-REF-001" />
       </div>
+      <ReceiptPreview
+        title="Dummy Receipt Preview"
+        rows={[
+          ["Receipt No", "RCP-001"],
+          ["Member", "Lion Ajith Kumar"],
+          ["Amount", money(paymentAmount)],
+          ["Mode", "UPI"],
+          ["Allocated to", "Monthly dues - June: ₹500; Special Collection: ₹500"],
+          ["Ledger impact", "Credit member account ₹1,000"]
+        ]}
+      />
       <button disabled={!canEdit}>Create Payment + Credit Ledger Entry</button>
-      <section className="compactPanel">
-        <Toolbar title="Voluntary Member Contribution / Collection Box" actionLabel="Receipt income, not dues" />
-        <div className="notice">
-          Collection box money is recorded only after the cash is opened, counted, and verified. It does not create member dues, receivables, or individual member account entries.
-        </div>
+    </section>
+  );
+}
+
+function CollectionBoxReceipt({ role }: { role: Role }) {
+  const canEdit = role === "president" || role === "treasurer";
+
+  return (
+    <section className="stack">
+      <Toolbar title="Voluntary Contribution / Collection Box" actionLabel="Club income receipt" />
+      <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
+      <div className="notice">
+        Collection box money is recorded only after the cash is opened, counted, and verified. It does not create member dues, receivables, or individual member account entries.
+      </div>
+      <div className="formPanel">
         <div className="fieldGrid">
           <label>Activity / Event<input value={voluntaryContribution.activity} readOnly /></label>
           <label>Purpose<input value={voluntaryContribution.purpose} readOnly /></label>
@@ -3125,14 +3247,82 @@ function PaymentEntry({ role }: { role: Role }) {
           <label>Reference<input value={voluntaryContribution.reference} readOnly /></label>
           <label>Voucher placeholder<input value={voluntaryContribution.voucher} readOnly /></label>
         </div>
-        <div className="metricsGrid">
-          <Metric label="Account head" value={voluntaryContribution.accountHead} />
-          <Metric label="Fund section" value={voluntaryContribution.fundSection} />
-          <Metric label="Income recorded" value={money(voluntaryContribution.amount)} />
-          <Metric label="Member dues impact" value="None" />
-        </div>
-        <button disabled={!canEdit}>Record Collection Box Receipt</button>
-      </section>
+      </div>
+      <ReceiptPreview
+        title="Dummy Receipt Preview"
+        rows={[
+          ["Receipt No", voluntaryContribution.voucher],
+          ["Activity / Event", voluntaryContribution.activity],
+          ["Amount", money(voluntaryContribution.amount)],
+          ["Mode", voluntaryContribution.mode],
+          ["Fund section", voluntaryContribution.fundSection],
+          ["Ledger impact", "Record club income only; no member dues impact"]
+        ]}
+      />
+      <button disabled={!canEdit}>Record Collection Box Receipt</button>
+    </section>
+  );
+}
+
+function ReceiptList() {
+  const receipts = [
+    ["RCP-001", "Lion Ajith Kumar", "Member dues", money(1000), "UPI"],
+    [voluntaryContribution.voucher, voluntaryContribution.activity, "Collection Box", money(voluntaryContribution.amount), voluntaryContribution.mode],
+    ["RCP-044", "Lion Bijesh", "Monthly dues", money(500), "Bank"]
+  ];
+
+  return (
+    <section className="stack">
+      <Toolbar title="Receipt List" actionLabel="Dummy receipts" />
+      <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
+      <div className="tableLike compactFinanceTable">
+        {receipts.map(([receipt, party, type, amount, mode]) => (
+          <div className="staticRow receiptRow" key={receipt}>
+            <strong>{receipt}</strong>
+            <span>{party}</span>
+            <span>{type}</span>
+            <span>{amount}</span>
+            <span className="tag">{mode}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PaymentHistory() {
+  const rows = [
+    ["03 Jun 2026", "Lion Ajith Kumar", "Member payment", money(1000), "Credit member account"],
+    ["02 Jun 2026", voluntaryContribution.activity, "Collection box", money(voluntaryContribution.amount), "Club income only"],
+    ["01 Jun 2026", "Lion Secretary User", "Member payment", money(500), "Credit member account"]
+  ];
+
+  return (
+    <section className="stack">
+      <Toolbar title="Payment History" actionLabel="Dummy audit trail" />
+      <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
+      <div className="tableLike compactFinanceTable">
+        {rows.map(([date, party, type, amount, impact]) => (
+          <div className="staticRow paymentHistoryRow" key={`${date}-${party}`}>
+            <strong>{date}</strong>
+            <span>{party}</span>
+            <span>{type}</span>
+            <span>{amount}</span>
+            <span>{impact}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReceiptPreview({ title, rows }: { title: string; rows: [string, string][] }) {
+  return (
+    <section className="compactPanel receiptPreviewPanel">
+      <Toolbar title={title} actionLabel="Prototype only" />
+      <div className="summaryList">
+        {rows.map(([label, value]) => <Field key={label} label={label} value={value} />)}
+      </div>
     </section>
   );
 }
@@ -3149,7 +3339,7 @@ function OutstandingDues({ setScreen }: { setScreen: (screen: Screen) => void })
             <span>{due.dueDate}</span>
             <span>{money(due.amount)}</span>
             <span className="tag">{due.status}</span>
-            <button className="filterButton" onClick={() => setScreen("payments")}>Record Payment</button>
+            <button className="filterButton" onClick={() => setScreen("record-member-payment")}>Record Payment</button>
           </div>
         ))}
       </div>
@@ -3277,7 +3467,7 @@ function FellowshipPayments({ setScreen }: { setScreen: (screen: Screen) => void
             <span>{money(2500)}</span>
             <span className="tag">{index === 0 ? "Paid" : "Pending"}</span>
             <span>{index === 0 ? "Receipt ready" : "Reminder prepared"}</span>
-            <button className="filterButton" onClick={() => setScreen("payments")}>Record Payment</button>
+            <button className="filterButton" onClick={() => setScreen("record-member-payment")}>Record Payment</button>
           </div>
         ))}
       </div>

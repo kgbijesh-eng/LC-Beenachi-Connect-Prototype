@@ -287,6 +287,12 @@ h3 {
   padding-left: 8px;
 }
 
+.activeParentButton {
+  background: #f8fbff;
+  color: var(--blue-900);
+  font-weight: 800;
+}
+
 .grandChildNavButton.active {
   background: #dfeaff;
 }
@@ -1073,6 +1079,40 @@ h3 {
   gap: 6px;
 }
 
+.compactFinanceTable {
+  gap: 6px;
+}
+
+.compactDueHeader,
+.compactDueRow {
+  grid-template-columns: 52px minmax(180px, 1fr) minmax(90px, 0.45fr) auto;
+  min-height: 46px;
+  padding: 7px 10px;
+}
+
+.compactDueHeader {
+  background: var(--blue-100);
+  color: var(--blue-900);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.receiptRow {
+  grid-template-columns: minmax(90px, 0.5fr) minmax(180px, 1fr) minmax(110px, 0.7fr) minmax(90px, 0.45fr) auto;
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.paymentHistoryRow {
+  grid-template-columns: minmax(110px, 0.55fr) minmax(170px, 1fr) minmax(120px, 0.7fr) minmax(90px, 0.45fr) minmax(160px, 1fr);
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.receiptPreviewPanel .summaryList {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .collectionDetailRow {
   grid-template-columns: repeat(6, minmax(110px, 1fr));
 }
@@ -1531,6 +1571,10 @@ h3 {
   .reminderDueRow,
   .reminderSimpleRow,
   .reminderHistoryRow,
+  .compactDueHeader,
+  .compactDueRow,
+  .receiptRow,
+  .paymentHistoryRow,
   .dueRow,
   .financeDueRow,
   .specialStatusRow,
