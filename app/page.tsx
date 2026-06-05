@@ -34,6 +34,7 @@ type Screen =
   | "finance-reports"
   | "events-meetings"
   | "announcements"
+  | "announcement-detail"
   | "documents"
   | "projects"
   | "celebrations"
@@ -52,6 +53,8 @@ type NavItem = {
   detailParent?: string;
   detailTitle?: string;
   fellowshipTab?: FellowshipTab;
+  eventMeetingSection?: EventMeetingSection;
+  announcementDetail?: AnnouncementDetail;
   financeSection?: FinanceSection;
   statementSection?: ClubStatementSection;
   collectionDetail?: Exclude<CollectionDetail, null>;
@@ -59,6 +62,8 @@ type NavItem = {
 };
 type NavGroup = { title: string; items: NavItem[]; direct?: boolean };
 type CollectionDetail = "today" | "month" | "pending" | "fellowship" | "split" | null;
+type EventMeetingSection = EventMeeting["section"];
+type AnnouncementDetail = "Published" | "Draft / Pending" | "High Priority";
 type PeopleSection = "Members" | "Board & Committees" | "Celebrations";
 type OperationsSection = "Events & Meetings" | "Announcements" | "Documents" | "Projects / Activities" | "Fellowship";
 type FinanceSection = "Club Account Statement" | "Member Ledger / Dues" | "Payments / Receipts" | "Outstanding Dues" | "Collection Summary" | "Fellowship Payments" | "Finance Reports";
@@ -231,13 +236,14 @@ const eventsMeetings: EventMeeting[] = [
     time: "7:00 PM",
     venue: "Club Hall",
     type: "Event",
-    section: "Upcoming Meetings",
+    section: "Upcoming Events",
     visibility: "All Members",
     status: "Published"
   },
   {
     title: "Board Meeting",
     date: "10 Jun 2026",
+    time: "7:30 PM",
     venue: "Club Hall",
     type: "Meeting",
     section: "Upcoming Meetings",
@@ -247,11 +253,32 @@ const eventsMeetings: EventMeeting[] = [
   {
     title: "PST Review",
     date: "14 Jun 2026",
+    time: "6:30 PM",
     venue: "Online",
     type: "Meeting",
-    section: "Meeting Notices",
+    section: "Upcoming Meetings",
     visibility: "PST",
-    status: "Draft"
+    status: "Published"
+  },
+  {
+    title: "Medical Camp",
+    date: "24 Jun 2026",
+    time: "9:00 AM",
+    venue: "Community Hall",
+    type: "Event",
+    section: "Upcoming Events",
+    visibility: "All Members",
+    status: "Published"
+  },
+  {
+    title: "General Body Meeting",
+    date: "28 Jun 2026",
+    time: "7:00 PM",
+    venue: "Club Hall",
+    type: "Meeting",
+    section: "Upcoming Meetings",
+    visibility: "All Members",
+    status: "Published"
   },
   {
     title: "Service Project Visit",
@@ -340,10 +367,10 @@ const fellowshipQueue = [
 ];
 
 const ledgerRows = [
-  { date: "01 Jun", member: "Lion Ajith Kumar - Member", type: "Monthly dues", debit: 500, credit: 0 },
-  { date: "05 Jun", member: "Lion Ajith Kumar - Member", type: "Payment received", debit: 0, credit: 1000 },
-  { date: "08 Jun", member: "Lion Treasurer User", type: "Fellowship sponsor ledger entry", debit: 2500, credit: 0 },
-  { date: "12 Jun", member: "Lion Bijesh", type: "Project share", debit: 500, credit: 0 }
+  { id: "ledger-001", date: "01 Jun", member: "Lion Ajith Kumar - Member", type: "Monthly dues", debit: 500, credit: 0 },
+  { id: "ledger-002", date: "05 Jun", member: "Lion Ajith Kumar - Member", type: "Payment received", debit: 0, credit: 1000 },
+  { id: "ledger-003", date: "08 Jun", member: "Lion Treasurer User", type: "Fellowship sponsor ledger entry", debit: 2500, credit: 0 },
+  { id: "ledger-004", date: "12 Jun", member: "Lion Bijesh", type: "Project share", debit: 500, credit: 0 }
 ];
 
 const outstandingDues = [
@@ -368,7 +395,6 @@ const specialCollection = {
 
 const voluntaryContribution = {
   date: "15 Jun 2026",
-  activity: "Monthly Family Fellowship",
   type: "Voluntary Member Contribution",
   purpose: "Recreational activity collection box",
   amount: 2350,
@@ -376,10 +402,9 @@ const voluntaryContribution = {
   fundSection: "Fellowship & Member Activity Fund",
   voucher: "RCP-045",
   accountHead: "Voluntary Member Contribution",
-  description: "Collection box amount from Monthly Family Fellowship",
+  description: "Collection box amount for recreational activity",
   countedBy: "Lion Treasurer User",
   verifiedBy: "Lion Bijesh - President/Admin",
-  reference: "Collection Box - June Fellowship",
   depositStatus: "Cash counted, pending bank deposit",
   notes: "No member dues or receivable is created for this entry."
 };
@@ -599,18 +624,18 @@ const operationsMenuItems: NavItem[] = [
   {
     label: "Events & Meetings",
     children: [
-      detailItem("Operations", "Upcoming Events"),
-      detailItem("Operations", "Upcoming Meetings"),
-      detailItem("Operations", "Past Events"),
-      detailItem("Operations", "Meeting Notices")
+      { label: "Upcoming Events", screen: "events-meetings", eventMeetingSection: "Upcoming Events" },
+      { label: "Upcoming Meetings", screen: "events-meetings", eventMeetingSection: "Upcoming Meetings" },
+      { label: "Past Events", screen: "events-meetings", eventMeetingSection: "Past Events" },
+      { label: "Meeting Notices", screen: "events-meetings", eventMeetingSection: "Meeting Notices" }
     ]
   },
   {
     label: "Announcements",
     children: [
-      detailItem("Operations", "Published"),
-      detailItem("Operations", "Draft / Pending"),
-      detailItem("Operations", "High Priority")
+      { label: "Published", screen: "announcement-detail", announcementDetail: "Published" },
+      { label: "Draft / Pending", screen: "announcement-detail", announcementDetail: "Draft / Pending" },
+      { label: "High Priority", screen: "announcement-detail", announcementDetail: "High Priority" }
     ]
   },
   {
@@ -780,7 +805,7 @@ function parentGroupForScreen(role: Role, screen: Screen) {
 function ContextBack({ parent, onBack }: { parent: string; onBack: () => void }) {
   return (
     <div className="contextBack">
-      <button className="secondaryButton" onClick={onBack}>← Back to {parent}</button>
+      <button className="secondaryButton" onClick={onBack}>← {parent}</button>
     </div>
   );
 }
@@ -800,6 +825,8 @@ export default function Prototype() {
   const [dashboardDetail, setDashboardDetail] = useState<DashboardDetail | null>(null);
   const [peopleSection, setPeopleSection] = useState<PeopleSection>("Members");
   const [operationsSection, setOperationsSection] = useState<OperationsSection>("Events & Meetings");
+  const [eventMeetingSection, setEventMeetingSection] = useState<EventMeetingSection | null>(null);
+  const [announcementDetail, setAnnouncementDetail] = useState<AnnouncementDetail>("Published");
   const [financeSection, setFinanceSection] = useState<FinanceSection>("Club Account Statement");
   const [clubStatementSection, setClubStatementSection] = useState<ClubStatementSection>("Account Overview");
   const [reportsSection, setReportsSection] = useState<ReportsSection>("Member Reports");
@@ -820,6 +847,7 @@ export default function Prototype() {
     setExpandedGroups([]);
     setExpandedSubItems([]);
     setCollectionDetail(null);
+    setEventMeetingSection(null);
     setDashboardDetail(null);
   }
 
@@ -831,6 +859,8 @@ export default function Prototype() {
     if (item.collectionDetail && item.collectionDetail !== collectionDetail) return false;
     if (item.fellowshipTab && item.fellowshipTab !== fellowshipTab) return false;
     if (item.detailTitle && item.detailTitle !== navDetail.title) return false;
+    if (item.eventMeetingSection && item.eventMeetingSection !== eventMeetingSection) return false;
+    if (item.announcementDetail && item.announcementDetail !== announcementDetail) return false;
     return true;
   }
 
@@ -860,12 +890,15 @@ export default function Prototype() {
     if (item.reportSection) setReportsSection(item.reportSection);
     if (item.reportDetail) setReportDetail(item.reportDetail);
     if (item.detailTitle) setNavDetail({ parent: item.detailParent || group.title, title: item.detailTitle });
+    if (item.eventMeetingSection) setEventMeetingSection(item.eventMeetingSection);
+    if (item.announcementDetail) setAnnouncementDetail(item.announcementDetail);
     if (item.fellowshipTab) setFellowshipTab(item.fellowshipTab);
     if (item.financeSection) setFinanceSection(item.financeSection);
     if (item.statementSection) setClubStatementSection(item.statementSection);
     if (item.collectionDetail) setCollectionDetail(item.collectionDetail);
     setScreen(item.screen);
     if (!item.collectionDetail) setCollectionDetail(null);
+    if (item.screen !== "events-meetings" || !item.eventMeetingSection) setEventMeetingSection(null);
     setDashboardDetail(null);
     setExpandedGroups([group.title]);
   }
@@ -880,6 +913,7 @@ export default function Prototype() {
     if (!item.screen) return;
     setScreen(item.screen);
     setCollectionDetail(null);
+    setEventMeetingSection(null);
     setDashboardDetail(null);
     setExpandedGroups([]);
     setExpandedSubItems([]);
@@ -1003,12 +1037,13 @@ export default function Prototype() {
 
       <section className="workspace">
         <Header role={roleLabels[role]} user={activeMember.dashboardName} screen={screen} />
-        {activeParent && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && (
+        {activeParent && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
           <ContextBack
             parent={activeParent}
             onBack={() => {
-              setScreen("dashboard");
+              setScreen(parentScreen(activeParent));
               setCollectionDetail(null);
+              setEventMeetingSection(null);
               setExpandedGroups([activeParent]);
             }}
           />
@@ -1070,6 +1105,9 @@ export default function Prototype() {
         {screen === "nav-detail" && (
           <NavDetailScreen parent={navDetail.parent} title={navDetail.title} setScreen={setScreen} />
         )}
+        {screen === "announcement-detail" && (
+          <AnnouncementDetailScreen detail={announcementDetail} setScreen={setScreen} />
+        )}
         {screen === "club-visibility-module" && (
           <ClubVisibilityModule section={clubVisibilitySection} setSection={setClubVisibilitySection} role={role} member={activeMember} selectedSponsors={selectedSponsors} setScreen={setScreen} />
         )}
@@ -1093,7 +1131,7 @@ export default function Prototype() {
         {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
         {screen === "fellowship-payments" && <FellowshipPayments setScreen={setScreen} />}
         {screen === "finance-reports" && <FinanceReports />}
-        {screen === "events-meetings" && <EventsMeetings role={role} member={activeMember} selectedSponsors={selectedSponsors} setScreen={setScreen} />}
+        {screen === "events-meetings" && <EventsMeetings role={role} member={activeMember} selectedSponsors={selectedSponsors} setScreen={setScreen} selectedSection={eventMeetingSection} />}
         {screen === "announcements" && <Announcements role={role} member={activeMember} selectedSponsors={selectedSponsors} />}
         {screen === "documents" && <Documents role={role} />}
         {screen === "projects" && <ProjectsActivities setScreen={setScreen} />}
@@ -1152,6 +1190,7 @@ function screenTitle(screen: Screen) {
     "finance-reports": "Finance Reports",
     "events-meetings": "Events & Meetings",
     announcements: "Announcements",
+    "announcement-detail": "Announcements",
     documents: "Documents",
     projects: "Projects / Activities",
     celebrations: "Celebrations",
@@ -1343,19 +1382,18 @@ function ClubAccountStatement({ section }: { section: ClubStatementSection }) {
 
         {section === "Fund-wise Opening Balance" && (
           <div className="statementSectionPanel">
-            <div className="tableLike">
+            <div className="fundOpeningGrid">
               {clubAccountFunds.map((fund) => (
-                <div className="staticRow fundOpeningRow" key={`${fund.name}-opening`}>
-                  <strong>{fund.name}</strong>
-                  <span>Opening Balance</span>
-                  <span>{money(fund.opening)}</span>
-                </div>
+                <article className="fundOpeningCard" key={`${fund.name}-opening`}>
+                  <h3>{fund.name}</h3>
+                  <span>Opening Balance: {money(fund.opening)}</span>
+                </article>
               ))}
-              <div className="staticRow fundOpeningRow">
-                <strong>Total</strong>
-                <span>Must equal main Opening Balance</span>
+              <article className="fundOpeningCard totalFundCard">
+                <h3>Total Opening Balance</h3>
                 <span>{money(openingBreakupTotal)}</span>
-              </div>
+                <small>Must equal main Opening Balance</small>
+              </article>
             </div>
           </div>
         )}
@@ -1384,17 +1422,16 @@ function ClubAccountStatement({ section }: { section: ClubStatementSection }) {
             {clubAccountFunds.map((fund) => (
               <section className="fundTransactionGroup" key={`${fund.name}-transactions`}>
                 <Toolbar title={fund.name} actionLabel="Recent Transactions" />
-                <div className="tableLike">
+                <div className="transactionCardList">
                   {fund.transactions.map((transaction) => (
-                    <div className="staticRow clubLedgerRow" key={`${fund.name}-${transaction.voucher}`}>
-                      <strong>{transaction.date}</strong>
-                      <span>{transaction.voucher}</span>
-                      <span>{transaction.head}</span>
-                      <span>{transaction.description}</span>
-                      <span>{transaction.head === "Opening Balance" ? `Opening Balance: ${money(transaction.income)}` : transaction.income ? `Income ${money(transaction.income)}` : "-"}</span>
-                      <span>{transaction.expense ? `Expense ${money(transaction.expense)}` : "-"}</span>
-                      <span>{transaction.mode}</span>
-                    </div>
+                    <article className="transactionCard" key={`${fund.name}-${transaction.voucher}`}>
+                      <h3>{transaction.date}</h3>
+                      <span>Voucher No.: {transaction.voucher}</span>
+                      <span>Account Head: {transaction.head}</span>
+                      <span>Description: {transaction.description}</span>
+                      <span>Amount: {money(transaction.income || transaction.expense)}</span>
+                      <span>Mode: {transaction.mode}</span>
+                    </article>
                   ))}
                 </div>
               </section>
@@ -1611,8 +1648,8 @@ function NotificationsReminders({ role, setScreen }: { role: Role; setScreen: (s
         <section className="compactPanel">
           <Toolbar title="Dues Reminders" actionLabel="Treasurer workflow" />
           <div className="tableLike">
-            {duesReminderRows.map((row) => (
-              <div className="staticRow reminderDueRow" key={row.member}>
+            {duesReminderRows.map((row, index) => (
+              <div className="staticRow reminderDueRow" key={`${row.member}-${row.type}-${index}`}>
                 <strong>{row.member}</strong>
                 <span>{money(row.amount)}</span>
                 <span>{row.type}</span>
@@ -1844,7 +1881,7 @@ function ReportDetailScreen({ section, detail, setScreen }: { section: ReportsSe
       <div className="tableLike">
         {rows.map((row) => (
           <div className="staticRow dashboardDetailRow" key={row.join("-")}>
-            {row.map((item, index) => index === 0 ? <strong key={item}>{item}</strong> : <span key={item}>{item}</span>)}
+            {row.map((item, index) => index === 0 ? <strong key={`${row[0]}-${index}`}>{item}</strong> : <span key={`${row[0]}-${index}`}>{item}</span>)}
           </div>
         ))}
       </div>
@@ -1853,21 +1890,91 @@ function ReportDetailScreen({ section, detail, setScreen }: { section: ReportsSe
 }
 
 function NavDetailScreen({ parent, title, setScreen }: { parent: string; title: string; setScreen: (screen: Screen) => void }) {
-  const rows = navDetailRows(parent, title);
+  if (parent === "Operations" && title === "Draft / Pending") {
+    return <DraftPendingAnnouncements setScreen={setScreen} />;
+  }
+
+  const rows = navDetailCards(parent, title);
   return (
     <section className="stack">
       <div className="compactPanel">
         <Toolbar title={title} actionLabel={parent} />
-        <div className="buttonRow">
-          <button onClick={() => setScreen("dashboard")}>Back to Dashboard</button>
-          <button className="secondaryButton" onClick={() => setScreen(parentScreen(parent))}>Back to {parent}</button>
-        </div>
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen(parentScreen(parent))}>← {parent}</button>
+        <div className="notice">{navDetailNote(parent, title)}</div>
       </div>
-      <div className="tableLike">
-        {rows.map((row) => (
-          <div className="staticRow dashboardDetailRow" key={row.join("-")}>
-            {row.map((item, index) => index === 0 ? <strong key={item}>{item}</strong> : <span key={item}>{item}</span>)}
-          </div>
+      <div className="draftPendingGrid">
+        {rows.map((row, index) => (
+          <article className="draftPendingCard" key={`${parent}-${title}-${row.title}-${index}`}>
+            <div>
+              <h3>{row.title}</h3>
+              {row.meta.map((line) => <span key={line}>{line}</span>)}
+            </div>
+            <button className="filterButton">{row.action}</button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DraftPendingAnnouncements({ setScreen }: { setScreen: (screen: Screen) => void }) {
+  return <AnnouncementDetailScreen detail="Draft / Pending" setScreen={setScreen} />;
+}
+
+function AnnouncementDetailScreen({ detail, setScreen }: { detail: AnnouncementDetail; setScreen: (screen: Screen) => void }) {
+  const config: Record<AnnouncementDetail, {
+    title: string;
+    note: string;
+    action: string;
+    rows: { title: string; meta: string[] }[];
+  }> = {
+    Published: {
+      title: "Published Announcements",
+      note: "Dummy data only.",
+      action: "View",
+      rows: [
+        { title: "District Governor Visit Update", meta: ["Audience: All Members", "Status: Published"] },
+        { title: "Monthly Fellowship Notice", meta: ["Audience: Members & Family", "Status: Published"] }
+      ]
+    },
+    "Draft / Pending": {
+      title: "Draft / Pending Announcements",
+      note: "Dummy data only. Real approval workflow will be implemented in backend phase.",
+      action: "Review",
+      rows: [
+        { title: "Board Meeting Notice", meta: ["Type: Meeting Notice", "Owner: Secretary", "Status: Draft"] },
+        { title: "Medical Camp Announcement", meta: ["Type: Event / Activity", "Owner: President/Admin", "Status: Pending Approval"] },
+        { title: "Fellowship Reminder", meta: ["Type: Announcement", "Owner: Secretary", "Status: Draft"] }
+      ]
+    },
+    "High Priority": {
+      title: "High Priority Announcements",
+      note: "Dummy data only.",
+      action: "View",
+      rows: [
+        { title: "Emergency Blood Requirement", meta: ["Audience: Members with donor consent", "Priority: High"] },
+        { title: "District Visit Preparation", meta: ["Audience: Board & PST", "Priority: High"] }
+      ]
+    }
+  };
+  const current = config[detail];
+
+  return (
+    <section className="stack">
+      <div className="compactPanel">
+        <Toolbar title={current.title} actionLabel="Operations / Announcements" />
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("events-meetings")}>← Operations</button>
+        <div className="notice">{current.note}</div>
+      </div>
+      <div className="draftPendingGrid">
+        {current.rows.map((item) => (
+          <article className="draftPendingCard" key={item.title}>
+            <div>
+              <h3>{item.title}</h3>
+              {item.meta.map((line) => <span key={line}>{line}</span>)}
+            </div>
+            <button className="filterButton">{current.action}</button>
+          </article>
         ))}
       </div>
     </section>
@@ -1879,6 +1986,62 @@ function parentScreen(parent: string): Screen {
   if (parent === "Operations") return "events-meetings";
   if (parent === "Finance") return "ledger";
   return "dashboard";
+}
+
+function navDetailNote(parent: string, title: string) {
+  if (parent === "Operations" && title.includes("Documents")) {
+    return "Dummy data only. Real document upload, approval, and access control will be implemented in backend phase.";
+  }
+  return "Dummy data only. This screen validates layout and navigation before backend implementation.";
+}
+
+function navDetailCards(parent: string, title: string): { title: string; meta: string[]; action: string }[] {
+  if (parent === "Finance" && title === "Add Due") {
+    return outstandingDues.map((due) => ({
+      title: due.member,
+      meta: [
+        `Due Type: ${due.label}`,
+        `Due Date: ${due.dueDate}`,
+        `Amount: ${money(due.amount)}`,
+        `Status: ${due.status}`,
+        ...("purpose" in due && due.purpose ? [`Purpose: ${due.purpose}`] : [])
+      ],
+      action: "Review"
+    }));
+  }
+  if (parent === "Finance" && title === "Due Categories") {
+    return [
+      { title: "Monthly Dues", meta: ["Default Amount: ₹500", "Applies to: Active members", "Status: Active"], action: "View" },
+      { title: "Special Collection", meta: ["Amount: Configurable", "Purpose: Club-approved contribution", "Status: Active"], action: "View" },
+      { title: "Family Fellowship Contribution", meta: ["Amount: Sponsor based", "Applies to: Selected sponsors", "Status: Preview only"], action: "View" },
+      { title: "Membership Fee", meta: ["Amount: On admission", "Applies to: New members", "Status: Future setup"], action: "View" }
+    ];
+  }
+  if (parent === "Operations" && title === "Club Documents") {
+    return [
+      { title: "General Body Minutes", meta: ["Type: Minutes", "Visibility: Members", "Status: Published"], action: "View" },
+      { title: "Member Guidelines", meta: ["Type: Guidelines", "Visibility: All Members", "Status: Published"], action: "View" },
+      { title: "Board Meeting Minutes", meta: ["Type: Minutes", "Visibility: Board / PST only", "Status: Restricted"], action: "View" }
+    ];
+  }
+  if (parent === "Operations" && title === "Meeting Minutes") {
+    return [
+      { title: "General Body Minutes - May 2026", meta: ["Type: Minutes", "Visibility: Members", "Status: Published"], action: "View" },
+      { title: "Board Meeting Minutes - May 2026", meta: ["Type: Minutes", "Visibility: Board / PST only", "Status: Restricted"], action: "View" }
+    ];
+  }
+  if (parent === "Operations" && title === "Circulars") {
+    return [
+      { title: "Public Circular - June Meeting", meta: ["Type: Member Circular", "Visibility: Members", "Status: Published"], action: "View" },
+      { title: "Annual Plan Update Circular", meta: ["Type: Club Circular", "Visibility: All Members", "Status: Published"], action: "View" }
+    ];
+  }
+  const rows = navDetailRows(parent, title);
+  return rows.map((row) => ({
+    title: row[0],
+    meta: row.slice(1).map((item, index) => `${["Type", "Date / Owner", "Visibility / Status", "Status / Note"][index] || "Detail"}: ${item}`),
+    action: "View"
+  }));
 }
 
 function navDetailRows(parent: string, title: string) {
@@ -1898,9 +2061,9 @@ function navDetailRows(parent: string, title: string) {
     return outstandingDues.map((due) => [due.member, due.label, due.dueDate, money(due.amount), due.status]);
   }
   return [
-    [title, parent, "Dummy detail row", "Prototype only", "Review"],
-    [`${title} item 2`, parent, "Dummy detail row", "Prototype only", "Review"],
-    [`${title} item 3`, parent, "Dummy detail row", "Prototype only", "Review"]
+    [title, parent, "Prototype placeholder", "Dummy data only", "View"],
+    [`${title} item 2`, parent, "Prototype placeholder", "Dummy data only", "View"],
+    [`${title} item 3`, parent, "Prototype placeholder", "Dummy data only", "View"]
   ];
 }
 
@@ -2677,16 +2840,22 @@ function FellowshipDashboard({
   }
 
   const tabs: typeof tab[] = ["Overview", "Queue", "Selected Sponsors", "Payments", "History"];
+  const progressByTab: Record<typeof tab, string> = {
+    Overview: "Step 3 — Select sponsors",
+    Queue: "Step 2 — See suggested queue members",
+    "Selected Sponsors": "Step 3 — Select sponsors",
+    Payments: "Step 7 — Payments tracked",
+    History: "Month history review"
+  };
   const progress = [
     ["Month selected", true],
     ["Queue ready", true],
     ["Sponsors selected", true],
     ["Group confirmed", false],
-    ["Ledger entries created", false],
+    ["Ledger impact previewed", false],
     ["Payments tracked", false],
     ["Month closed", false]
   ] as const;
-  const completeCount = progress.filter(([, done]) => done).length;
 
   return (
     <section className="stack">
@@ -2701,7 +2870,7 @@ function FellowshipDashboard({
         <div className="metricsGrid">
           <Metric label="Month" value="June 2026" />
           <Metric label="Status" value="Confirmation pending" />
-          <Metric label="Progress" value={`${completeCount}/${progress.length} steps`} />
+          <Metric label="Progress" value={progressByTab[tab]} />
           <Metric label="Current section" value={tab} />
         </div>
         <label className="moduleSelect">
@@ -2721,7 +2890,7 @@ function FellowshipDashboard({
               "Select sponsors",
               "Confirm group",
               "Sponsor rows generated",
-              "Ledger entries created",
+              "Ledger impact previewed",
               "Payments tracked",
               "Close month"
             ].map((item, index) => (
@@ -2741,7 +2910,7 @@ function FellowshipDashboard({
             <Action title="Copy previous month setup" body="Use meeting date and amount defaults." onClick={() => undefined} />
             <Action title="Suggest next eligible sponsors" body="Queue-based recommendation ready." onClick={() => setTab("Queue")} />
             <Action title="Generate reminder draft" body="Prepare sponsor reminder message." onClick={() => undefined} />
-            <Action title="Open payments" body="Track sponsor contribution status." onClick={() => setTab("Payments")} />
+            <Action title="Open Sponsor Payments" body="Track sponsor contribution status." onClick={() => setTab("Payments")} />
           </div>
         </>
       )}
@@ -2764,14 +2933,16 @@ function FellowshipDashboard({
       {tab === "Selected Sponsors" && (
         <div className="compactPanel">
           <Toolbar title="Selected Sponsors" actionLabel={`${selectedSponsors.length} selected`} />
-          <div className="tableLike">
+          <div className="selectedSponsorGrid">
             {selectedSponsors.map((sponsor) => (
-              <div className="staticRow" key={sponsor}>
-                <strong>{sponsor}</strong>
-                <span>{money(2500)}</span>
-                <span>Auto-created sponsor row</span>
-                <span className="tag">Review</span>
-              </div>
+              <article className="selectedSponsorCard" key={sponsor}>
+                <div>
+                  <strong>{sponsor}</strong>
+                  <span>Amount: {money(2500)}</span>
+                  <span>Status: Auto-created sponsor row</span>
+                </div>
+                <button className="filterButton">Review</button>
+              </article>
             ))}
           </div>
           <button onClick={() => setScreen("confirm-sponsors")}>Confirm Group + Auto-Generate Rows</button>
@@ -2780,15 +2951,18 @@ function FellowshipDashboard({
 
       {tab === "Payments" && (
         <div className="compactPanel">
-          <Toolbar title="Payment Status" actionLabel="Ledger dues auto-created" />
-          <div className="tableLike">
+          <Toolbar title="Payment Status" actionLabel="Sponsor dues preview ready" />
+          <div className="selectedSponsorGrid">
             {selectedSponsors.map((sponsor, index) => (
-              <div className="staticRow" key={sponsor}>
-                <strong>{sponsor}</strong>
-                <span>{money(2500)}</span>
-                <span>{index === 0 ? "Paid" : "Pending"}</span>
-                <span className="tag">{index === 0 ? "Receipt ready" : "Reminder prepared"}</span>
-              </div>
+              <article className="selectedSponsorCard" key={sponsor}>
+                <div>
+                  <strong>{sponsor}</strong>
+                  <span>Amount: {money(2500)}</span>
+                  <span>Payment status: {index === 0 ? "Paid" : "Pending"}</span>
+                  <span>Receipt/reminder status: {index === 0 ? "Receipt ready" : "Reminder prepared"}</span>
+                </div>
+                <button className="filterButton">Review</button>
+              </article>
             ))}
           </div>
         </div>
@@ -2978,7 +3152,7 @@ function Ledger({ role, member, setScreen }: { role: Role; member: Member; setSc
           <Toolbar title="Dues & Payment History" actionLabel="Member-friendly view" />
           <div className="memberLedgerList">
             {[...visibleRows].reverse().map((row) => (
-              <div key={`${row.date}-${row.type}`} className="memberLedgerCard">
+              <div key={row.id} className="memberLedgerCard">
                 <div className="memberLedgerDate">{row.date}</div>
                 <div>
                   <strong>{row.debit ? "Monthly Dues Added" : "You Paid"}</strong>
@@ -3185,20 +3359,13 @@ function RecordMemberPayment({ role }: { role: Role }) {
       </div>
       <div className="compactPanel">
         <Toolbar title="Outstanding Dues" actionLabel="Compact dummy list" />
-        <div className="tableLike compactFinanceTable">
-          <div className="staticRow compactDueHeader">
-            <span>Select</span>
-            <strong>Due Type</strong>
-            <span>Amount</span>
-            <span>Status</span>
-          </div>
+        <div className="financeCardList">
           {selectedDues.map((due) => (
-            <div className="staticRow compactDueRow" key={due.id}>
-              <span>{due.selected ? "✓" : ""}</span>
-              <strong>{due.label}</strong>
-              <span>{money(due.amount)}</span>
-              <span className="tag">{due.selected ? "Selected due" : "Available"}</span>
-            </div>
+            <article className="financeStackCard" key={due.id}>
+              <h3>{due.selected ? `✓ ${due.label}` : due.label}</h3>
+              <span>Amount: {money(due.amount)}</span>
+              <span>Status: {due.selected ? "Selected due" : "Available"}</span>
+            </article>
           ))}
         </div>
       </div>
@@ -3215,8 +3382,9 @@ function RecordMemberPayment({ role }: { role: Role }) {
           ["Member", "Lion Ajith Kumar"],
           ["Amount", money(paymentAmount)],
           ["Mode", "UPI"],
-          ["Allocated to", "Monthly dues - June: ₹500; Special Collection: ₹500"],
-          ["Ledger impact", "Credit member account ₹1,000"]
+          ["Allocated to", "Monthly dues - June: ₹500"],
+          ["Allocated to", "Special Collection: ₹500"],
+          ["Ledger Impact", "Credit member account ₹1,000"]
         ]}
       />
       <button disabled={!canEdit}>Create Payment + Credit Ledger Entry</button>
@@ -3236,27 +3404,28 @@ function CollectionBoxReceipt({ role }: { role: Role }) {
       </div>
       <div className="formPanel">
         <div className="fieldGrid">
-          <label>Activity / Event<input value={voluntaryContribution.activity} readOnly /></label>
+          <label>Receipt Source<input value="Collection Box" readOnly /></label>
           <label>Purpose<input value={voluntaryContribution.purpose} readOnly /></label>
-          <label>Amount counted<input value={money(voluntaryContribution.amount)} readOnly /></label>
-          <label>Fund section<input value={voluntaryContribution.fundSection} readOnly /></label>
+          <label>Amount Counted<input value={money(voluntaryContribution.amount)} readOnly /></label>
+          <label>Fund Section<input value={voluntaryContribution.fundSection} readOnly /></label>
           <label>Mode<input value={voluntaryContribution.mode} readOnly /></label>
-          <label>Counted by<input value={voluntaryContribution.countedBy} readOnly /></label>
-          <label>Verified by<input value={voluntaryContribution.verifiedBy} readOnly /></label>
-          <label>Deposit status<input value={voluntaryContribution.depositStatus} readOnly /></label>
-          <label>Reference<input value={voluntaryContribution.reference} readOnly /></label>
-          <label>Voucher placeholder<input value={voluntaryContribution.voucher} readOnly /></label>
+          <label>Counted By<input value={voluntaryContribution.countedBy} readOnly /></label>
+          <label>Verified By<input value={voluntaryContribution.verifiedBy} readOnly /></label>
+          <label>Deposit Status<input value={voluntaryContribution.depositStatus} readOnly /></label>
+          <label>Voucher No<input value={voluntaryContribution.voucher} readOnly /></label>
+          <label>Ledger Impact<input value="Club income only; no member dues impact" readOnly /></label>
         </div>
       </div>
       <ReceiptPreview
         title="Dummy Receipt Preview"
         rows={[
           ["Receipt No", voluntaryContribution.voucher],
-          ["Activity / Event", voluntaryContribution.activity],
+          ["Receipt Source", "Collection Box"],
+          ["Purpose", voluntaryContribution.purpose],
           ["Amount", money(voluntaryContribution.amount)],
           ["Mode", voluntaryContribution.mode],
-          ["Fund section", voluntaryContribution.fundSection],
-          ["Ledger impact", "Record club income only; no member dues impact"]
+          ["Fund Section", voluntaryContribution.fundSection],
+          ["Ledger Impact", "Club income only; no member dues impact"]
         ]}
       />
       <button disabled={!canEdit}>Record Collection Box Receipt</button>
@@ -3266,24 +3435,24 @@ function CollectionBoxReceipt({ role }: { role: Role }) {
 
 function ReceiptList() {
   const receipts = [
-    ["RCP-001", "Lion Ajith Kumar", "Member dues", money(1000), "UPI"],
-    [voluntaryContribution.voucher, voluntaryContribution.activity, "Collection Box", money(voluntaryContribution.amount), voluntaryContribution.mode],
-    ["RCP-044", "Lion Bijesh", "Monthly dues", money(500), "Bank"]
+    { receiptNo: "RCP-001", partyLabel: "Name", party: "Lion Ajith Kumar", type: "Member dues", amount: money(1000), mode: "UPI" },
+    { receiptNo: voluntaryContribution.voucher, partyLabel: "Source", party: "Collection Box", type: "Voluntary Contribution / Collection Box", amount: money(voluntaryContribution.amount), mode: voluntaryContribution.mode },
+    { receiptNo: "RCP-044", partyLabel: "Name", party: "Lion Bijesh", type: "Monthly dues", amount: money(500), mode: "Bank" }
   ];
 
   return (
     <section className="stack">
       <Toolbar title="Receipt List" actionLabel="Dummy receipts" />
       <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
-      <div className="tableLike compactFinanceTable">
-        {receipts.map(([receipt, party, type, amount, mode]) => (
-          <div className="staticRow receiptRow" key={receipt}>
-            <strong>{receipt}</strong>
-            <span>{party}</span>
-            <span>{type}</span>
-            <span>{amount}</span>
-            <span className="tag">{mode}</span>
-          </div>
+      <div className="financeCardList">
+        {receipts.map((receipt) => (
+          <article className="financeStackCard" key={receipt.receiptNo}>
+            <h3>Receipt No: {receipt.receiptNo}</h3>
+            <span>{receipt.partyLabel}: {receipt.party}</span>
+            <span>Receipt Type: {receipt.type}</span>
+            <span>Amount: {receipt.amount}</span>
+            <span>Mode: {receipt.mode}</span>
+          </article>
         ))}
       </div>
     </section>
@@ -3292,24 +3461,24 @@ function ReceiptList() {
 
 function PaymentHistory() {
   const rows = [
-    ["03 Jun 2026", "Lion Ajith Kumar", "Member payment", money(1000), "Credit member account"],
-    ["02 Jun 2026", voluntaryContribution.activity, "Collection box", money(voluntaryContribution.amount), "Club income only"],
-    ["01 Jun 2026", "Lion Secretary User", "Member payment", money(500), "Credit member account"]
+    { date: "03 Jun 2026", partyLabel: "Party", party: "Lion Ajith Kumar", type: "Member payment", amount: money(1000), impact: "Credit member account" },
+    { date: "02 Jun 2026", partyLabel: "Source", party: "Collection Box", type: "Club income receipt", amount: money(voluntaryContribution.amount), impact: "Club income only" },
+    { date: "01 Jun 2026", partyLabel: "Party", party: "Lion Bijesh", type: "Monthly dues", amount: money(500), impact: "Credit member account" }
   ];
 
   return (
     <section className="stack">
       <Toolbar title="Payment History" actionLabel="Dummy audit trail" />
       <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
-      <div className="tableLike compactFinanceTable">
-        {rows.map(([date, party, type, amount, impact]) => (
-          <div className="staticRow paymentHistoryRow" key={`${date}-${party}`}>
-            <strong>{date}</strong>
-            <span>{party}</span>
-            <span>{type}</span>
-            <span>{amount}</span>
-            <span>{impact}</span>
-          </div>
+      <div className="financeCardList">
+        {rows.map((row) => (
+          <article className="financeStackCard" key={`${row.date}-${row.party}-${row.type}`}>
+            <h3>Date: {row.date}</h3>
+            <span>{row.partyLabel}: {row.party}</span>
+            <span>Type: {row.type}</span>
+            <span>Amount: {row.amount}</span>
+            <span>Ledger Impact: {row.impact}</span>
+          </article>
         ))}
       </div>
     </section>
@@ -3320,8 +3489,13 @@ function ReceiptPreview({ title, rows }: { title: string; rows: [string, string]
   return (
     <section className="compactPanel receiptPreviewPanel">
       <Toolbar title={title} actionLabel="Prototype only" />
-      <div className="summaryList">
-        {rows.map(([label, value]) => <Field key={label} label={label} value={value} />)}
+      <div className="receiptPreviewList">
+        {rows.map(([label, value], index) => (
+          <div className="receiptPreviewLine" key={`${label}-${index}`}>
+            <span>{label}:</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -3331,16 +3505,16 @@ function OutstandingDues({ setScreen }: { setScreen: (screen: Screen) => void })
   return (
     <section className="stack">
       <Toolbar title="Outstanding Dues" actionLabel="Treasurer working list" />
-      <div className="tableLike">
+      <div className="financeCardList">
         {outstandingDues.map((due) => (
-          <div className="staticRow financeDueRow" key={due.id}>
-            <strong>{due.member}</strong>
-            <span>{due.label}</span>
-            <span>{due.dueDate}</span>
-            <span>{money(due.amount)}</span>
-            <span className="tag">{due.status}</span>
-            <button className="filterButton" onClick={() => setScreen("record-member-payment")}>Record Payment</button>
-          </div>
+          <article className="financeStackCard" key={due.id}>
+            <h3>Member: {due.member}</h3>
+            <span>Due Type: {due.label}</span>
+            <span>Due Date: {due.dueDate}</span>
+            <span>Amount: {money(due.amount)}</span>
+            <span>Status: {due.status}</span>
+            <button className="filterButton compactActionButton" onClick={() => setScreen("record-member-payment")}>Record Payment</button>
+          </article>
         ))}
       </div>
     </section>
@@ -3384,7 +3558,7 @@ function CollectionSummary({ detail, setDetail }: { detail: CollectionDetail; se
 function CollectionDetailPanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="compactPanel">
-      <Toolbar title={title} actionLabel="Dummy detail view" />
+      <Toolbar title={title} actionLabel="Dummy summary" />
       <div className="tableLike">{children}</div>
     </div>
   );
@@ -3398,7 +3572,7 @@ function todayCollectionRows() {
   ];
   return rows.map((row) => (
     <div className="staticRow collectionDetailRow" key={row[0]}>
-      {row.map((item) => <span key={item}>{item}</span>)}
+      {row.map((item, index) => <span key={`${row[0]}-${index}`}>{item}</span>)}
     </div>
   ));
 }
@@ -3411,7 +3585,7 @@ function monthlyCollectionRows() {
   ];
   return rows.map((row) => (
     <div className="staticRow collectionDetailRow" key={row[0]}>
-      {row.map((item) => <span key={item}>{item}</span>)}
+      {row.map((item, index) => <span key={`${row[0]}-${index}`}>{item}</span>)}
     </div>
   ));
 }
@@ -3437,7 +3611,7 @@ function fellowshipPendingRows() {
   ];
   return rows.map((row) => (
     <div className="staticRow collectionDetailRow" key={`${row[0]}-${row[1]}`}>
-      {row.map((item) => <span key={item}>{item}</span>)}
+      {row.map((item, index) => <span key={`${row[0]}-${row[1]}-${index}`}>{item}</span>)}
     </div>
   ));
 }
@@ -3450,7 +3624,7 @@ function modeSplitRows() {
   ];
   return rows.map((row) => (
     <div className="staticRow collectionDetailRow" key={row[0]}>
-      {row.map((item) => <span key={item}>{item}</span>)}
+      {row.map((item, index) => <span key={`${row[0]}-${index}`}>{item}</span>)}
     </div>
   ));
 }
@@ -3458,17 +3632,18 @@ function modeSplitRows() {
 function FellowshipPayments({ setScreen }: { setScreen: (screen: Screen) => void }) {
   return (
     <section className="stack">
-      <Toolbar title="Fellowship Payments" actionLabel="June 2026" />
-      <div className="tableLike">
+      <Toolbar title="Fellowship Payments" actionLabel="Sponsor dues preview ready" />
+      <div className="selectedSponsorGrid">
         {["Lion Bijesh", "Lion Secretary User", "Lion Treasurer User"].map((sponsor, index) => (
-          <div className="staticRow financeDueRow" key={sponsor}>
-            <strong>{sponsor}</strong>
-            <span>June fellowship</span>
-            <span>{money(2500)}</span>
-            <span className="tag">{index === 0 ? "Paid" : "Pending"}</span>
-            <span>{index === 0 ? "Receipt ready" : "Reminder prepared"}</span>
+          <article className="selectedSponsorCard" key={sponsor}>
+            <div>
+              <strong>{sponsor}</strong>
+              <span>Amount: {money(2500)}</span>
+              <span>Payment Status: {index === 0 ? "Paid" : "Pending"}</span>
+              <span>Reminder Status: {index === 0 ? "Receipt ready" : "Reminder prepared"}</span>
+            </div>
             <button className="filterButton" onClick={() => setScreen("record-member-payment")}>Record Payment</button>
-          </div>
+          </article>
         ))}
       </div>
     </section>
@@ -3501,25 +3676,29 @@ function EventsMeetings({
   role,
   member,
   selectedSponsors,
-  setScreen
+  setScreen,
+  selectedSection
 }: {
   role: Role;
   member: Member;
   selectedSponsors: string[];
   setScreen: (screen: Screen) => void;
+  selectedSection?: EventMeetingSection | null;
 }) {
   const visible = role === "member" ? eventsMeetings.filter((item) => item.visibility === "All Members") : eventsMeetings;
   const memberIsFellowshipSponsor = selectedSponsors.includes(member.name) || selectedSponsors.includes(member.dashboardName);
-  const sections: EventMeeting["section"][] = ["Upcoming Events", "Upcoming Meetings", "Past Events", "Meeting Notices"];
+  const sections: EventMeetingSection[] = selectedSection ? [selectedSection] : ["Upcoming Events", "Upcoming Meetings", "Past Events", "Meeting Notices"];
   const emptyMessages: Record<EventMeeting["section"], string> = {
     "Upcoming Events": "No events available at the moment.",
-    "Upcoming Meetings": "No upcoming meetings or events announced.",
+    "Upcoming Meetings": "No upcoming meetings announced.",
     "Past Events": "No past events available at the moment.",
     "Meeting Notices": "No new meeting notices at the moment."
   };
+  const title = selectedSection ? selectedSection : "Events & Meetings";
   return (
     <section className="stack">
-      <Toolbar title="Events & Meetings" actionLabel={role === "member" ? "Available to you" : "Full management visibility"} />
+      <Toolbar title={title} actionLabel={role === "member" ? "Available to you" : "Full management visibility"} />
+      {selectedSection && <p className="breadcrumbText">Operations → Events & Meetings → {selectedSection}</p>}
       {role !== "member" && (
         <div className="buttonRow">
           <button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Meeting Reminder</button>
@@ -3546,13 +3725,16 @@ function EventsMeetings({
                   <span className="tag">{item.status === "Published" ? "Upcoming" : item.status}</span>
                 </article>
               ) : (
-                <div className="staticRow" key={item.title}>
-                  <strong>{item.title}</strong>
-                  <span>{item.date}{item.time ? ` · ${item.time}` : ""}</span>
-                  <span>{item.venue}</span>
-                  <span>{item.visibility}</span>
+                <article className="adminEventCard" key={item.title}>
+                  <div>
+                    <h3>{item.title}</h3>
+                    <p>{item.date}{item.time ? ` · ${item.time}` : ""}</p>
+                  </div>
+                  <span>Venue: {item.venue}</span>
+                  <span>Audience: {item.visibility}</span>
                   <span className="tag">{item.status}</span>
-                </div>
+                  <button className="filterButton">View details</button>
+                </article>
               ))}
               {sectionItems.length === 0 && <div className="memberEmptyState">{role === "member" ? emptyMessages[section] : "No items in this section."}</div>}
             </div>

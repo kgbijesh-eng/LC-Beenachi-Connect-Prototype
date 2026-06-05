@@ -41,6 +41,13 @@ button {
   cursor: pointer;
 }
 
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--blue-700);
+  outline-offset: 2px;
+}
+
 button:disabled {
   background: #d8dce5;
   color: #6c7280;
@@ -405,6 +412,24 @@ h3 {
   gap: 10px;
 }
 
+.contextBack {
+  display: flex;
+}
+
+.contextBack .secondaryButton {
+  min-height: 34px;
+  width: auto;
+  padding: 7px 11px;
+  font-size: 13px;
+}
+
+.compactBackButton {
+  min-height: 34px;
+  width: max-content;
+  padding: 7px 11px;
+  font-size: 13px;
+}
+
 .secondaryButton {
   background: var(--blue-100);
   color: var(--blue-900);
@@ -660,6 +685,38 @@ h3 {
 .queueItem.selected {
   border-color: var(--blue-700);
   background: var(--blue-100);
+}
+
+.selectedSponsorGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.selectedSponsorCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px;
+}
+
+.selectedSponsorCard div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.selectedSponsorCard strong {
+  font-size: 16px;
+}
+
+.selectedSponsorCard span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .memberHero {
@@ -951,9 +1008,102 @@ h3 {
   margin-top: 12px;
 }
 
+.fundOpeningGrid,
+.transactionCardList {
+  display: grid;
+  gap: 10px;
+}
+
+.fundOpeningCard,
+.transactionCard {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px;
+}
+
+.fundOpeningCard h3,
+.transactionCard h3 {
+  font-size: 17px;
+}
+
+.fundOpeningCard span,
+.fundOpeningCard small,
+.transactionCard span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.totalFundCard {
+  background: var(--blue-100);
+  border-color: #c6d8f5;
+}
+
 .memberEventList {
   display: grid;
   gap: 10px;
+}
+
+.adminEventCard {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(130px, 0.8fr) minmax(130px, 0.8fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 10px 12px;
+}
+
+.adminEventCard div {
+  display: grid;
+  gap: 4px;
+}
+
+.adminEventCard h3 {
+  font-size: 16px;
+}
+
+.adminEventCard p,
+.adminEventCard span:not(.tag) {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.draftPendingGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.draftPendingCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px;
+}
+
+.draftPendingCard div {
+  display: grid;
+  gap: 6px;
+}
+
+.draftPendingCard h3 {
+  font-size: 17px;
+}
+
+.draftPendingCard span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .memberCelebrationList {
@@ -1079,38 +1229,46 @@ h3 {
   gap: 6px;
 }
 
-.compactFinanceTable {
+.financeCardList,
+.receiptPreviewList {
+  display: grid;
+  gap: 10px;
+}
+
+.financeStackCard,
+.receiptPreviewLine {
+  display: grid;
   gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px;
 }
 
-.compactDueHeader,
-.compactDueRow {
-  grid-template-columns: 52px minmax(180px, 1fr) minmax(90px, 0.45fr) auto;
-  min-height: 46px;
-  padding: 7px 10px;
+.financeStackCard h3 {
+  font-size: 17px;
 }
 
-.compactDueHeader {
-  background: var(--blue-100);
-  color: var(--blue-900);
-  font-size: 12px;
-  font-weight: 900;
+.financeStackCard span,
+.receiptPreviewLine span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
-.receiptRow {
-  grid-template-columns: minmax(90px, 0.5fr) minmax(180px, 1fr) minmax(110px, 0.7fr) minmax(90px, 0.45fr) auto;
-  min-height: 48px;
-  padding: 8px 10px;
+.compactActionButton {
+  justify-self: start;
+  width: auto;
+  min-height: 34px;
+  padding: 7px 12px;
+  white-space: nowrap;
 }
 
-.paymentHistoryRow {
-  grid-template-columns: minmax(110px, 0.55fr) minmax(170px, 1fr) minmax(120px, 0.7fr) minmax(90px, 0.45fr) minmax(160px, 1fr);
-  min-height: 48px;
-  padding: 8px 10px;
-}
-
-.receiptPreviewPanel .summaryList {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.receiptPreviewLine strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.35;
 }
 
 .collectionDetailRow {
@@ -1571,10 +1729,6 @@ h3 {
   .reminderDueRow,
   .reminderSimpleRow,
   .reminderHistoryRow,
-  .compactDueHeader,
-  .compactDueRow,
-  .receiptRow,
-  .paymentHistoryRow,
   .dueRow,
   .financeDueRow,
   .specialStatusRow,
@@ -1586,6 +1740,21 @@ h3 {
 
   .documentCard {
     grid-template-columns: 1fr;
+  }
+
+  .adminEventCard {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .draftPendingCard {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .selectedSponsorCard {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
   .memberCelebrationCard {
