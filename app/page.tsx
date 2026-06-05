@@ -2334,7 +2334,7 @@ function Dashboard({
 
   return (
     <section className="stack">
-      <PstOverview totalOutstanding={totalOutstanding} openDashboardDetail={openDashboardDetail} />
+      <PstOverview role={role} totalOutstanding={totalOutstanding} openDashboardDetail={openDashboardDetail} />
       <section className="compactPanel">
         <div className="toolbar">
           <h2>What needs my attention today?</h2>
@@ -2351,7 +2351,7 @@ function Dashboard({
       </section>
       <div className="metricsGrid">
         <ClickableMetric label="Active members" value="64" action="Open" onClick={() => openDashboardDetail("active-members")} />
-        <ClickableMetric label={role === "treasurer" ? "Payments pending" : "Pending dues summary"} value={role === "treasurer" ? "5 receipts" : money(totalOutstanding)} action="Review" onClick={() => openDashboardDetail("pending-dues")} />
+        <ClickableMetric label={role === "treasurer" ? "Payments pending" : role === "secretary" ? "Pending dues summary (view only)" : "Pending dues summary"} value={role === "treasurer" ? "5 receipts" : money(totalOutstanding)} action="Review" onClick={() => openDashboardDetail("pending-dues")} />
         <ClickableMetric label="Fellowship month status" value={role === "treasurer" ? "2 payments pending" : "Confirmation pending"} action="Continue" onClick={() => openDashboardDetail(role === "treasurer" ? "fellowship-pending" : "fellowship-status")} />
         <ClickableMetric label={role === "secretary" ? "Pending documents" : "Pending activity reports"} value="2" action="Review" onClick={() => openDashboardDetail(role === "secretary" ? "published-items" : "activity-reports")} />
         <ClickableMetric label="Upcoming events/meetings" value="3" action="View details" onClick={() => openDashboardDetail("upcoming-events")} />
@@ -2492,21 +2492,21 @@ function CompactDashboardCard({ label, value, action, onClick }: { label: string
   );
 }
 
-function PstOverview({ totalOutstanding, openDashboardDetail }: { totalOutstanding: number; openDashboardDetail: (detail: DashboardDetail) => void }) {
+function PstOverview({ role, totalOutstanding, openDashboardDetail }: { role: Role; totalOutstanding: number; openDashboardDetail: (detail: DashboardDetail) => void }) {
   const items: { label: string; value: string; detail: DashboardDetail; action: string }[] = [
     { label: "Pending member updates", value: "3", detail: "pending-member-updates", action: "Review" },
     { label: "Upcoming meetings/events", value: "3", detail: "upcoming-events", action: "View details" },
     { label: "Fellowship month status", value: "Draft", detail: "fellowship-status", action: "Continue" },
-    { label: "Pending dues summary", value: money(totalOutstanding), detail: "pending-dues", action: "Review" },
+    { label: role === "secretary" ? "Pending dues summary (view only)" : "Pending dues summary", value: money(totalOutstanding), detail: "pending-dues", action: "Review" },
     { label: "Pending activity/project reports", value: "2", detail: "activity-reports", action: "Update" },
-    { label: "Published announcements/documents", value: "6", detail: "published-items", action: "Open" },
+    { label: "Recent announcements/docs", value: "6", detail: "published-items", action: "Open" },
     { label: "Celebration reminders", value: "4 this week", detail: "celebration-reminders", action: "Review" },
     { label: "Important club reminders", value: "PST review due", detail: "club-reminders", action: "Review" }
   ];
   return (
     <section className="pstPanel">
       <div className="toolbar">
-        <h2>PST Overview</h2>
+        <h2>PST Coordination Overview</h2>
         <span className="statusPill">President/Admin + Secretary + Treasurer</span>
       </div>
       <div className="pstGrid">
