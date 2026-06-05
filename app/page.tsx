@@ -2013,7 +2013,7 @@ function NavDetailScreen({ parent, title, setScreen }: { parent: string; title: 
   return (
     <section className="stack">
       <div className="compactPanel">
-        <Toolbar title={title} actionLabel={parent} />
+        <Toolbar title={navDetailTitle(parent, title)} actionLabel={parent} />
         <button className="secondaryButton compactBackButton" onClick={() => setScreen(parentScreen(parent))}>← {parent}</button>
         <div className="notice">{navDetailNote(parent, title)}</div>
       </div>
@@ -2030,6 +2030,19 @@ function NavDetailScreen({ parent, title, setScreen }: { parent: string; title: 
       </div>
     </section>
   );
+}
+
+function navDetailTitle(parent: string, title: string) {
+  if (parent === "People") {
+    const titles: Record<string, string> = {
+      Today: "Today’s Celebrations",
+      "This Week": "This Week’s Celebrations",
+      Birthdays: "Birthday List",
+      Anniversaries: "Anniversary List"
+    };
+    return titles[title] || title;
+  }
+  return title;
 }
 
 function DraftPendingAnnouncements({ setScreen }: { setScreen: (screen: Screen) => void }) {
@@ -2111,6 +2124,9 @@ function navDetailNote(parent: string, title: string) {
 }
 
 function navDetailCards(parent: string, title: string): { title: string; meta: string[]; action: string }[] {
+  if (parent === "People" && ["Today", "This Week", "Birthdays", "Anniversaries"].includes(title)) {
+    return peopleCelebrationCards(title);
+  }
   if (parent === "Finance" && title === "Add Due") {
     return outstandingDues.map((due) => ({
       title: due.member,
@@ -2162,11 +2178,36 @@ function navDetailCards(parent: string, title: string): { title: string; meta: s
   }));
 }
 
+function peopleCelebrationCards(title: string): { title: string; meta: string[]; action: string }[] {
+  const items = celebrationsForRole("president").filter((item) => {
+    if (title === "Today") return item.date === "Today";
+    if (title === "This Week") return item.date === "Today" || item.date === "12 Jun";
+    if (title === "Birthdays") return item.type === "Birthday";
+    if (title === "Anniversaries") return item.type === "Wedding Anniversary";
+    return true;
+  });
+
+  if (title === "Today" && items.length === 0) {
+    return [{ title: "No celebrations today", meta: [], action: "View" }];
+  }
+
+  return items.map((item) => ({
+    title: `Member: ${item.name}`,
+    meta: [
+      `Type: ${item.type}`,
+      `Date: ${item.date}`,
+      `Contact: ${item.contact === "Hidden" ? "Hidden" : item.contact}`,
+      `Status: ${item.wishStatus}`
+    ],
+    action: "View"
+  }));
+}
+
 function navDetailRows(parent: string, title: string) {
   if (parent === "People" && title.includes("Member")) {
     return members.map((member) => [member.name, member.clubRole, member.status, member.bloodGroup, member.consentContact ? member.phone : "Contact hidden"]);
   }
-  if (parent === "People" && title.includes("Celebration") || title === "Today" || title === "This Week" || title === "Birthdays" || title === "Anniversaries") {
+  if (parent === "People" && title.includes("Celebration")) {
     return celebrationsForRole("president").map((item) => [item.name, item.type, item.date, item.contact, item.wishStatus]);
   }
   if (parent === "Operations" && (title.includes("Event") || title.includes("Meeting"))) {
