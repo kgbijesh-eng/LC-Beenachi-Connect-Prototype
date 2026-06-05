@@ -2042,6 +2042,15 @@ function navDetailTitle(parent: string, title: string) {
     };
     return titles[title] || title;
   }
+  if (parent === "Operations") {
+    const titles: Record<string, string> = {
+      "This Month": "This Month’s Activities",
+      "Pending Reports": "Pending Activity Reports",
+      "Completed Activities": "Completed Activities",
+      "Category-wise Activities": "Category-wise Activities"
+    };
+    return titles[title] || title;
+  }
   return title;
 }
 
@@ -2127,6 +2136,9 @@ function navDetailCards(parent: string, title: string): { title: string; meta: s
   if (parent === "People" && ["Today", "This Week", "Birthdays", "Anniversaries"].includes(title)) {
     return peopleCelebrationCards(title);
   }
+  if (parent === "Operations" && ["This Month", "Pending Reports", "Completed Activities", "Category-wise Activities"].includes(title)) {
+    return projectActivityCards(title);
+  }
   if (parent === "Finance" && title === "Add Due") {
     return outstandingDues.map((due) => ({
       title: due.member,
@@ -2176,6 +2188,32 @@ function navDetailCards(parent: string, title: string): { title: string; meta: s
     meta: row.slice(1).map((item, index) => `${labels[index] || "Detail"}: ${item}`),
     action: "View"
   }));
+}
+
+function projectActivityCards(title: string): { title: string; meta: string[]; action: string }[] {
+  const filtered = activities.filter((activity) => {
+    if (title === "This Month") return activity.month === "June";
+    if (title === "Pending Reports") return activity.reportDocument !== "Uploaded";
+    if (title === "Completed Activities") return activity.status === "Completed";
+    return true;
+  });
+
+  return filtered.map((activity) => ({
+    title: `Activity: ${activity.name}`,
+    meta: [
+      `Date: ${activity.date}`,
+      `Category / Committee: ${activityCommitteeLabel(activity)}`,
+      `People Served: ${activity.peopleServed}`,
+      `Report Status: ${activity.reportDocument}`
+    ],
+    action: "View"
+  }));
+}
+
+function activityCommitteeLabel(activity: Activity) {
+  if (activity.lead.endsWith("Committee")) return activity.lead;
+  if (activity.lead.includes("Secretary")) return `${activity.category} / Secretary`;
+  return `${activity.category} / ${activity.lead}`;
 }
 
 function peopleCelebrationCards(title: string): { title: string; meta: string[]; action: string }[] {
