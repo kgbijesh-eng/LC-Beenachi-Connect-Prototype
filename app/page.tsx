@@ -1032,7 +1032,7 @@ export default function Prototype() {
       </aside>
 
       <section className="workspace">
-        <Header role={roleLabels[role]} user={activeMember.dashboardName} screen={screen} />
+        <Header role={roleLabels[role]} user={activeMember.dashboardName} screen={screen} reportDetail={reportDetail} />
         {activeParent && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
           <ContextBack
             parent={activeParent}
@@ -1141,8 +1141,8 @@ export default function Prototype() {
   );
 }
 
-function Header({ role, user, screen }: { role: string; user: string; screen: Screen }) {
-  const title = role === "Normal Member" && screen === "ledger" ? "My Dues" : screenTitle(screen);
+function Header({ role, user, screen, reportDetail }: { role: string; user: string; screen: Screen; reportDetail: string }) {
+  const title = role === "Normal Member" && screen === "ledger" ? "My Dues" : screen === "report-detail" ? reportDetail : screenTitle(screen);
   return (
     <header className="topbar">
       <div>
@@ -2285,7 +2285,12 @@ function reportDetailCards(section: ReportsSection, detail: string) {
     }));
   }
   if (section === "Celebration Reports") {
-    return celebrationsForRole("president").slice(0, 4).map((item) => ({
+    const celebrations = celebrationsForRole("president").filter((item) => {
+      if (detail === "Monthly Birthday Report") return item.type === "Birthday";
+      if (detail === "Monthly Anniversary Report") return item.type === "Wedding Anniversary";
+      return true;
+    });
+    return celebrations.map((item) => ({
       title: item.name,
       meta: [
         `Celebration Type: ${item.type}`,
