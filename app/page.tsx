@@ -3074,7 +3074,7 @@ function FellowshipDashboard({
 
   const tabs: typeof tab[] = ["Overview", "Queue", "Selected Sponsors", "Payments", "History"];
   const progressByTab: Record<typeof tab, string> = {
-    Overview: "Step 3 — Select sponsors",
+    Overview: "Step 4 — Confirm group",
     Queue: "Step 2 — See suggested queue members",
     "Selected Sponsors": "Step 3 — Select sponsors",
     Payments: "Step 7 — Payments tracked",
@@ -3142,7 +3142,7 @@ function FellowshipDashboard({
           <div className="actionGrid">
             <Action title="Copy previous month setup" body="Use meeting date and amount defaults." onClick={() => undefined} />
             <Action title="Suggest next eligible sponsors" body="Queue-based recommendation ready." onClick={() => setTab("Queue")} />
-            <Action title="Generate reminder draft" body="Prepare sponsor reminder message." onClick={() => undefined} />
+            <Action title="Prepare sponsor reminder draft" body="Prepare sponsor reminder message." onClick={() => undefined} />
             <Action title="Open Sponsor Payments" body="Track sponsor contribution status." onClick={() => setTab("Payments")} />
           </div>
         </>
