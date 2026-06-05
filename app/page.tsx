@@ -559,9 +559,9 @@ const reportMenuItems: NavItem[] = [
   {
     label: "Celebration Reports",
     children: [
-      { label: "Today Celebration List", screen: "report-detail", reportSection: "Celebration Reports", reportDetail: "Today Celebration List" },
       { label: "Monthly Birthday Report", screen: "report-detail", reportSection: "Celebration Reports", reportDetail: "Monthly Birthday Report" },
-      { label: "Monthly Anniversary Report", screen: "report-detail", reportSection: "Celebration Reports", reportDetail: "Monthly Anniversary Report" }
+      { label: "Monthly Anniversary Report", screen: "report-detail", reportSection: "Celebration Reports", reportDetail: "Monthly Anniversary Report" },
+      { label: "Celebration Register", screen: "report-detail", reportSection: "Celebration Reports", reportDetail: "Celebration Register" }
     ]
   },
   {
@@ -1847,7 +1847,7 @@ function ReportCategory({ section }: { section: ReportsSection }) {
     "Fellowship Reports": ["Current month sponsorship report", "Sponsor payment report", "Queue history report"],
     "Events & Meetings Reports": ["Upcoming meetings report", "Attendance placeholder report", "Past event summary"],
     "Club Activity / Service Reports": ["Monthly Activity Report", "Yearly Consolidated Activity Report", "Category-wise Activity Report"],
-    "Celebration Reports": ["Today celebration list", "Monthly birthday report", "Monthly anniversary report"],
+    "Celebration Reports": ["Monthly birthday report", "Monthly anniversary report", "Celebration register"],
     "Blood Donor Consent Report": ["Consented donor list", "Blood group summary", "Contact visibility report"],
     "Document Reports": ["Published document report", "Board-only document report", "Pending upload report"]
   };
