@@ -622,6 +622,28 @@ h3 {
   font-weight: 800;
 }
 
+.reminderOverviewCard {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.reminderOverviewCard span,
+.reminderOverviewCard strong,
+.reminderOverviewCard small {
+  display: block;
+  line-height: 1.25;
+}
+
+.reminderOverviewCard:disabled {
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
+.reminderOverviewCard:disabled small {
+  color: var(--muted);
+}
+
 .taskItem,
 .reportCard {
   display: grid;

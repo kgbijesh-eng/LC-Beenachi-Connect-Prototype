@@ -1564,7 +1564,8 @@ function ReportsToolsModule({
 
 function NotificationsReminders({ role, setScreen }: { role: Role; setScreen: (screen: Screen) => void }) {
   const [section, setSection] = useState<ReminderSection>("Reminder Overview");
-  const [previewTitle, setPreviewTitle] = useState("Dues reminder preview");
+  const defaultPreviewTitle = role === "secretary" ? "Meeting reminder preview" : "Dues reminder preview";
+  const [previewTitle, setPreviewTitle] = useState(defaultPreviewTitle);
   const [prototypeStatus, setPrototypeStatus] = useState("No real reminder has been sent.");
   const allowedSections = reminderSections.filter((item) => {
     if (role === "president") return true;
@@ -1610,27 +1611,27 @@ function NotificationsReminders({ role, setScreen }: { role: Role; setScreen: (s
       {section === "Reminder Overview" && (
         <section className="stack">
           <div className="metricsGrid">
-            <button className="clickableMetric" onClick={() => setSection("Dues Reminders")} disabled={role === "secretary"}>
+            <button className="clickableMetric reminderOverviewCard" onClick={() => setSection("Dues Reminders")} disabled={role === "secretary"}>
               <span>Pending Due Reminders</span>
               <strong>12</strong>
-              <small>{role === "secretary" ? "Treasurer access" : "Open dues reminders"}</small>
+              <small>{role === "secretary" ? "Treasurer access required" : "Open dues reminders"}</small>
             </button>
-            <button className="clickableMetric" onClick={() => setSection("Meeting Reminders")} disabled={role === "treasurer"}>
+            <button className="clickableMetric reminderOverviewCard" onClick={() => setSection("Meeting Reminders")} disabled={role === "treasurer"}>
               <span>Meeting Reminders Scheduled</span>
               <strong>2</strong>
               <small>{role === "treasurer" ? "Secretary access" : "Open meeting reminders"}</small>
             </button>
-            <button className="clickableMetric" onClick={() => setSection("Celebration Reminders")} disabled={role === "treasurer"}>
+            <button className="clickableMetric reminderOverviewCard" onClick={() => setSection("Celebration Reminders")} disabled={role === "treasurer"}>
               <span>Celebrations Today</span>
               <strong>3</strong>
               <small>{role === "treasurer" ? "Secretary access" : "Open celebrations"}</small>
             </button>
-            <button className="clickableMetric" onClick={() => setSection("Announcement Reminders")} disabled={role === "treasurer"}>
+            <button className="clickableMetric reminderOverviewCard" onClick={() => setSection("Announcement Reminders")} disabled={role === "treasurer"}>
               <span>Announcements Pending</span>
               <strong>1</strong>
               <small>{role === "treasurer" ? "Secretary access" : "Open announcements"}</small>
             </button>
-            <button className="clickableMetric" onClick={() => setSection("Reminder History")}>
+            <button className="clickableMetric reminderOverviewCard" onClick={() => setSection("Reminder History")}>
               <span>Failed / Not Sent</span>
               <strong>0</strong>
               <small>Open history</small>
