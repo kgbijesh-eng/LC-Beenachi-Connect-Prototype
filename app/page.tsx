@@ -698,9 +698,9 @@ const financeMenuItems: NavItem[] = [
     label: "Payments / Receipts",
     children: [
       { label: "Record Member Payment", screen: "record-member-payment" },
-      { label: "Voluntary Contribution / Collection Box", screen: "collection-box" },
+      { label: "Record Club Income / Donation", screen: "collection-box" },
       { label: "Receipt List", screen: "receipt-list" },
-      { label: "Payment History", screen: "payment-history" }
+      { label: "Transaction History", screen: "payment-history" }
     ]
   },
   {
@@ -1183,9 +1183,9 @@ function screenTitle(screen: Screen) {
     "member-dues-detail": "Current Dues Details",
     "special-collection": "Special Collection",
     "record-member-payment": "Record Member Payment",
-    "collection-box": "Voluntary Contribution / Collection Box",
+    "collection-box": "Record Club Income / Donation",
     "receipt-list": "Receipt List",
-    "payment-history": "Payment History",
+    "payment-history": "Transaction History",
     "outstanding-dues": "Outstanding Dues",
     "collection-summary": "Collection Summary",
     "fellowship-payments": "Fellowship Payments",
@@ -1947,7 +1947,7 @@ function MonthlyFinanceSummaryReport() {
 function PaymentCollectionReport() {
   const receipts = [
     { receiptNo: "RCP-001", party: "Lion Ajith Kumar", type: "Member dues", amount: money(1000), mode: "UPI", date: "03 Jun 2026", recordedBy: "Lion Treasurer User" },
-    { receiptNo: "RCP-045", party: "Collection Box", type: "Voluntary Contribution / Collection Box", amount: money(2350), mode: "Cash", date: "02 Jun 2026", recordedBy: "Lion Treasurer User" },
+    { receiptNo: "RCP-045", party: "Collection Box", type: "Club income / donation", amount: money(2350), mode: "Cash", date: "02 Jun 2026", recordedBy: "Lion Treasurer User" },
     { receiptNo: "RCP-044", party: "Lion Bijesh", type: "Monthly dues", amount: money(500), mode: "Bank", date: "01 Jun 2026", recordedBy: "Lion Treasurer User" }
   ];
 
@@ -3743,9 +3743,9 @@ function PaymentsReceiptsHub({ setScreen }: { setScreen: (screen: Screen) => voi
       <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
       <div className="actionGrid">
         <Action title="Record Member Payment" body="Clear member dues and preview a dummy receipt." onClick={() => setScreen("record-member-payment")} />
-        <Action title="Voluntary Contribution / Collection Box" body="Record club income without changing member dues." onClick={() => setScreen("collection-box")} />
+        <Action title="Record Club Income / Donation" body="Record collection box, donation, or other club income without changing member dues." onClick={() => setScreen("collection-box")} />
         <Action title="Receipt List" body="View dummy receipt rows." onClick={() => setScreen("receipt-list")} />
-        <Action title="Payment History" body="View dummy payment history rows." onClick={() => setScreen("payment-history")} />
+        <Action title="Transaction History" body="View member payments, club income receipts, and finance movement history." onClick={() => setScreen("payment-history")} />
       </div>
     </section>
   );
@@ -3813,7 +3813,7 @@ function CollectionBoxReceipt({ role }: { role: Role }) {
 
   return (
     <section className="stack">
-      <Toolbar title="Voluntary Contribution / Collection Box" actionLabel="Club income receipt" />
+      <Toolbar title="Record Club Income / Donation" actionLabel="Club income receipt" />
       <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
       <div className="notice">
         Collection box money is recorded only after the cash is opened, counted, and verified. It does not create member dues, receivables, or individual member account entries.
@@ -3844,7 +3844,7 @@ function CollectionBoxReceipt({ role }: { role: Role }) {
           ["Ledger Impact", "Club income only; no member dues impact"]
         ]}
       />
-      <button disabled={!canEdit}>Record Collection Box Receipt</button>
+      <button disabled={!canEdit}>Record Club Income Receipt</button>
     </section>
   );
 }
@@ -3852,7 +3852,7 @@ function CollectionBoxReceipt({ role }: { role: Role }) {
 function ReceiptList() {
   const receipts = [
     { receiptNo: "RCP-001", partyLabel: "Name", party: "Lion Ajith Kumar", type: "Member dues", amount: money(1000), mode: "UPI" },
-    { receiptNo: voluntaryContribution.voucher, partyLabel: "Source", party: "Collection Box", type: "Voluntary Contribution / Collection Box", amount: money(voluntaryContribution.amount), mode: voluntaryContribution.mode },
+    { receiptNo: voluntaryContribution.voucher, partyLabel: "Source", party: "Collection Box", type: "Club income / donation", amount: money(voluntaryContribution.amount), mode: voluntaryContribution.mode },
     { receiptNo: "RCP-044", partyLabel: "Name", party: "Lion Bijesh", type: "Monthly dues", amount: money(500), mode: "Bank" }
   ];
 
@@ -3884,7 +3884,7 @@ function PaymentHistory() {
 
   return (
     <section className="stack">
-      <Toolbar title="Payment History" actionLabel="Dummy audit trail" />
+      <Toolbar title="Transaction History" actionLabel="Dummy audit trail" />
       <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
       <div className="financeCardList">
         {rows.map((row) => (
