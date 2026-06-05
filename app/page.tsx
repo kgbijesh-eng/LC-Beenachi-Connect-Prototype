@@ -2305,15 +2305,7 @@ function reportDetailCards(section: ReportsSection, detail: string) {
     return bloodDonorReportCards(detail);
   }
   if (section === "Document Reports") {
-    return documents.map((item) => ({
-      title: item.title,
-      meta: [
-        `Category: ${item.category}`,
-        `Visibility: ${item.visibility}`,
-        "Status: Published",
-        `Report: ${detail}`
-      ]
-    }));
+    return documentReportCards(detail);
   }
   if (section === "Events & Meetings Reports") {
     return eventsMeetings.map((item) => ({
@@ -2375,6 +2367,34 @@ function bloodDonorReportCards(detail: string): { title: string; meta: string[] 
       `Blood Group: ${member.bloodGroup}`,
       `Contact: ${member.consentContact ? member.phone : "Contact hidden"}`,
       "Consent Status: Consented"
+    ]
+  }));
+}
+
+function documentReportCards(detail: string): { title: string; meta: string[] }[] {
+  const boardDocuments = [
+    { title: "Board Meeting Minutes - May 2026", category: "Board minutes", visibility: "Board", status: "Published" },
+    { title: "Board Resolution - June Planning", category: "Board resolution", visibility: "Board", status: "Published" },
+    { title: "PST / Board Internal Planning Notes", category: "Internal planning", visibility: "Board", status: "Restricted" }
+  ];
+  const pendingDocuments = [
+    { title: "Draft minutes pending upload", category: "Meeting minutes", visibility: "PST", status: "Pending Upload" },
+    { title: "Pending project report attachment", category: "Project report", visibility: "Committee", status: "Pending Upload" },
+    { title: "Pending circular/document upload", category: "Circular", visibility: "Members", status: "Pending Upload" }
+  ];
+  const publishedDocuments = documents.filter((item) => item.visibility === "Members" || item.title === "Project Report Template");
+  const records = detail === "Board-only Document Report"
+    ? boardDocuments
+    : detail === "Pending Upload Report"
+      ? pendingDocuments
+      : publishedDocuments.map((item) => ({ ...item, status: "Published" }));
+
+  return records.map((item) => ({
+    title: item.title,
+    meta: [
+      `Category: ${item.category}`,
+      `Visibility: ${item.visibility}`,
+      `Status: ${item.status}`
     ]
   }));
 }
