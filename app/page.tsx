@@ -1876,6 +1876,10 @@ function ReportCategory({ section }: { section: ReportsSection }) {
 }
 
 function ReportDetailScreen({ section, detail, setScreen }: { section: ReportsSection; detail: string; setScreen: (screen: Screen) => void }) {
+  if (section === "Finance / Ledger Reports") {
+    return <FinanceLedgerReportDetail detail={detail} setScreen={setScreen} />;
+  }
+
   const rows = reportDetailRows(section, detail);
   return (
     <section className="stack">
@@ -1894,6 +1898,122 @@ function ReportDetailScreen({ section, detail, setScreen }: { section: ReportsSe
         ))}
       </div>
     </section>
+  );
+}
+
+function FinanceLedgerReportDetail({ detail, setScreen }: { detail: string; setScreen: (screen: Screen) => void }) {
+  return (
+    <section className="stack">
+      <div className="compactPanel">
+        <Toolbar title={detail} actionLabel="Finance / Ledger Reports" />
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button>
+        <div className="notice">Dummy data only. Real finance reports will be generated from backend ledger later.</div>
+      </div>
+      {detail === "Monthly Finance Summary" && <MonthlyFinanceSummaryReport />}
+      {detail === "Payment Collection Report" && <PaymentCollectionReport />}
+      {detail === "Member-wise Outstanding" && <MemberWiseOutstandingReport />}
+      {detail === "Fellowship Payment Report" && <FellowshipPaymentReport />}
+    </section>
+  );
+}
+
+function MonthlyFinanceSummaryReport() {
+  const summary = [
+    ["Total Income", money(35000)],
+    ["Total Expenses", money(18000)],
+    ["Net Balance", money(17000)],
+    ["Pending Dues", money(8000)]
+  ];
+  const breakdown = [
+    "Monthly dues collected: ₹12,000",
+    "Fellowship contributions: ₹7,500",
+    "Collection box income: ₹2,350",
+    "Project share collected: ₹5,000"
+  ];
+
+  return (
+    <>
+      <div className="summaryList">
+        {summary.map(([label, value]) => <Field key={label} label={label} value={value} />)}
+      </div>
+      <div className="compactPanel">
+        <Toolbar title="Breakdown" actionLabel="Prototype summary" />
+        <div className="financeCardList">
+          {breakdown.map((line) => (
+            <article className="financeStackCard" key={line}>
+              <h3>{line}</h3>
+            </article>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PaymentCollectionReport() {
+  const receipts = [
+    { receiptNo: "RCP-001", party: "Lion Ajith Kumar", type: "Member dues", amount: money(1000), mode: "UPI", date: "03 Jun 2026", recordedBy: "Lion Treasurer User" },
+    { receiptNo: "RCP-045", party: "Collection Box", type: "Voluntary Contribution / Collection Box", amount: money(2350), mode: "Cash", date: "02 Jun 2026", recordedBy: "Lion Treasurer User" },
+    { receiptNo: "RCP-044", party: "Lion Bijesh", type: "Monthly dues", amount: money(500), mode: "Bank", date: "01 Jun 2026", recordedBy: "Lion Treasurer User" }
+  ];
+
+  return (
+    <div className="financeCardList">
+      {receipts.map((receipt) => (
+        <article className="financeStackCard" key={receipt.receiptNo}>
+          <h3>Receipt No: {receipt.receiptNo}</h3>
+          <span>Member / Source: {receipt.party}</span>
+          <span>Type: {receipt.type}</span>
+          <span>Amount: {receipt.amount}</span>
+          <span>Mode: {receipt.mode}</span>
+          <span>Date: {receipt.date}</span>
+          <span>Recorded By: {receipt.recordedBy}</span>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function MemberWiseOutstandingReport() {
+  const rows = [
+    { member: "Lion Ajith Kumar - Member", outstanding: money(1000), items: ["Monthly dues - June: ₹500", "Special Collection: ₹500"], status: "Pending" },
+    { member: "Lion Treasurer User", outstanding: money(2500), items: ["Fellowship contribution: ₹2,500"], status: "Pending" },
+    { member: "Lion Bijesh", outstanding: money(500), items: ["Project share: ₹500"], status: "Overdue" }
+  ];
+
+  return (
+    <div className="financeCardList">
+      {rows.map((row) => (
+        <article className="financeStackCard" key={row.member}>
+          <h3>Member: {row.member}</h3>
+          <span>Outstanding Amount: {row.outstanding}</span>
+          <span>Pending Items: {row.items.join("; ")}</span>
+          <span>Status: {row.status}</span>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function FellowshipPaymentReport() {
+  const rows = [
+    { sponsor: "Lion Bijesh", month: "June 2026 Fellowship", amount: money(2500), status: "Paid", receipt: "RCP-010" },
+    { sponsor: "Lion Secretary User", month: "June 2026 Fellowship", amount: money(2500), status: "Pending", receipt: "Not issued" },
+    { sponsor: "Lion Treasurer User", month: "June 2026 Fellowship", amount: money(2500), status: "Pending", receipt: "Not issued" }
+  ];
+
+  return (
+    <div className="financeCardList">
+      {rows.map((row) => (
+        <article className="financeStackCard" key={`${row.month}-${row.sponsor}`}>
+          <h3>Sponsor: {row.sponsor}</h3>
+          <span>Fellowship Month: {row.month}</span>
+          <span>Amount: {row.amount}</span>
+          <span>Payment Status: {row.status}</span>
+          <span>Receipt: {row.receipt}</span>
+        </article>
+      ))}
+    </div>
   );
 }
 
