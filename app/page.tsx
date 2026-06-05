@@ -2458,7 +2458,7 @@ function reportDetailCards(section: ReportsSection, detail: string) {
   if (section === "Celebration Reports") {
     const celebrations = celebrationsForRole("president").filter((item) => {
       if (detail === "Monthly Birthday Report") return item.type === "Birthday";
-      if (detail === "Monthly Anniversary Report") return item.type === "Wedding Anniversary";
+      if (detail === "Monthly Anniversary Report") return item.type === "Wedding Anniversary" && isCurrentPrototypeMonth(item.date);
       return true;
     });
     return celebrations.map((item) => ({
@@ -2467,8 +2467,7 @@ function reportDetailCards(section: ReportsSection, detail: string) {
         `Celebration Type: ${item.type}`,
         `Date: ${item.date}`,
         `Contact: ${item.contact}`,
-        `Greeting Status: ${item.wishStatus}`,
-        `Report: ${detail}`
+        `Greeting Status: ${item.wishStatus}`
       ]
     }));
   }
@@ -2495,6 +2494,10 @@ function reportDetailCards(section: ReportsSection, detail: string) {
     { title: "Month: June 2026", meta: ["Sponsor: Lion Secretary User", `Amount: ${money(2500)}`, "Status: Pending", `Report: ${detail}`] },
     { title: "Month: June 2026", meta: ["Sponsor: Lion Treasurer User", `Amount: ${money(2500)}`, "Status: Pending", `Report: ${detail}`] }
   ];
+}
+
+function isCurrentPrototypeMonth(date: string) {
+  return date === "Today" || date.endsWith("Jun");
 }
 
 function bloodDonorReportCards(detail: string): { title: string; meta: string[] }[] {
