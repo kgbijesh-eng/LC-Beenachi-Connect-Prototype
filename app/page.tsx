@@ -3880,16 +3880,26 @@ function EventsMeetings({
     "Upcoming Events": "No events available at the moment.",
     "Upcoming Meetings": "No upcoming meetings announced.",
     "Past Events": "No past events available at the moment.",
-    "Meeting Notices": "No new meeting notices at the moment."
+    "Meeting Notices": "No meeting notices created yet. Meeting reminder sending will be available after a notice is created."
   };
   const title = selectedSection ? selectedSection : "Events & Meetings";
+  const selectedSectionItems = selectedSection ? visible.filter((item) => item.section === selectedSection) : [];
+  const badge = role === "member"
+    ? "Available to you"
+    : selectedSection === "Meeting Notices"
+      ? "Meeting notice management"
+      : "Management view";
   return (
     <section className="stack">
-      <Toolbar title={title} actionLabel={role === "member" ? "Available to you" : "Full management visibility"} />
+      <Toolbar title={title} actionLabel={badge} />
       {selectedSection && <p className="breadcrumbText">Operations → Events & Meetings → {selectedSection}</p>}
       {role !== "member" && (
         <div className="buttonRow">
-          <button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Meeting Reminder</button>
+          {selectedSection === "Meeting Notices" && selectedSectionItems.length === 0 ? (
+            <button className="secondaryButton">Create Meeting Notice</button>
+          ) : (
+            <button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Meeting Reminder</button>
+          )}
         </div>
       )}
       {sections.map((section) => {
@@ -3924,7 +3934,7 @@ function EventsMeetings({
                   <button className="filterButton">View details</button>
                 </article>
               ))}
-              {sectionItems.length === 0 && <div className="memberEmptyState">{role === "member" ? emptyMessages[section] : "No items in this section."}</div>}
+              {sectionItems.length === 0 && <div className="memberEmptyState">{role === "member" || section === "Meeting Notices" ? emptyMessages[section] : "No items in this section."}</div>}
             </div>
           </div>
         );
