@@ -1877,6 +1877,9 @@ function ReportDetailScreen({ section, detail, setScreen }: { section: ReportsSe
   if (section === "Fellowship Reports" && detail === "Current Month Sponsorship") {
     return <CurrentMonthSponsorshipReport setScreen={setScreen} />;
   }
+  if (section === "Fellowship Reports" && detail === "Sponsor Queue History") {
+    return <SponsorQueueHistoryReport setScreen={setScreen} />;
+  }
 
   const cards = reportDetailCards(section, detail);
   return (
@@ -1891,6 +1894,61 @@ function ReportDetailScreen({ section, detail, setScreen }: { section: ReportsSe
           <article className="financeStackCard" key={`${section}-${detail}-${card.title}-${index}`}>
             <h3>{card.title}</h3>
             {card.meta.map((line) => <span key={line}>{line}</span>)}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SponsorQueueHistoryReport({ setScreen }: { setScreen: (screen: Screen) => void }) {
+  const queueMovements = [
+    {
+      month: "June 2026",
+      member: "Lion Bijesh",
+      position: "1",
+      action: "Selected for sponsorship",
+      result: "Completed",
+      note: "Selected for June fellowship sponsor group",
+      nextStatus: "Moved to end of queue"
+    },
+    {
+      month: "June 2026",
+      member: "Lion Secretary User",
+      position: "2",
+      action: "Selected for sponsorship",
+      result: "Pending completion",
+      note: "Selected for June fellowship sponsor group",
+      nextStatus: "Remains active until month is closed"
+    },
+    {
+      month: "May 2026",
+      member: "Lion Rajesh",
+      position: "1",
+      action: "Skipped",
+      result: "Deferred",
+      note: "Temporarily unavailable",
+      nextStatus: "Carried forward to next eligible month"
+    }
+  ];
+
+  return (
+    <section className="stack">
+      <div className="compactPanel">
+        <Toolbar title="Sponsor Queue History" actionLabel="Fellowship Reports" />
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button>
+        <div className="notice">Dummy data only. This report shows fellowship sponsor queue movement, not payment status.</div>
+      </div>
+      <div className="financeCardList">
+        {queueMovements.map((movement) => (
+          <article className="financeStackCard" key={`${movement.month}-${movement.member}-${movement.action}`}>
+            <h3>Month: {movement.month}</h3>
+            <span>Member: {movement.member}</span>
+            <span>Queue Position: {movement.position}</span>
+            <span>Queue Action: {movement.action}</span>
+            <span>Queue Result: {movement.result}</span>
+            <span>Reason / Note: {movement.note}</span>
+            <span>Next Queue Status: {movement.nextStatus}</span>
           </article>
         ))}
       </div>
