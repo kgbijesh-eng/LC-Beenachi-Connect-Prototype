@@ -108,6 +108,7 @@ type DashboardDetail =
   | "month-collection"
   | "fellowship-pending"
   | "mode-split"
+  | "pst-profiles"
   | "member-dues"
   | "member-fellowship"
   | "member-events"
@@ -605,6 +606,10 @@ const peopleMenuItems: NavItem[] = [
   {
     label: "Board & Committees",
     children: [
+      detailItem("People", "PST Profiles"),
+      detailItem("People", "President Profile"),
+      detailItem("People", "Secretary Profile"),
+      detailItem("People", "Treasurer Profile"),
       detailItem("People", "Board Members"),
       detailItem("People", "Committee List"),
       detailItem("People", "Committee Members")
@@ -764,6 +769,7 @@ const navByRole: Record<Role, NavGroup[]> = {
       { label: "My Profile", screen: "member-profile" },
       { label: "My Digital Card", screen: "digital-card" },
       { label: "Member Directory", screen: "members" },
+      { label: "PST Profiles", screen: "nav-detail", detailParent: "People", detailTitle: "PST Profiles" },
       { label: "My Dues", screen: "ledger" },
       { label: "My Fellowship", screen: "fellowship" },
       { label: "Events & Meetings", screen: "events-meetings" },
@@ -1100,7 +1106,7 @@ export default function Prototype() {
           <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={setScreen} />
         )}
         {screen === "nav-detail" && (
-          <NavDetailScreen parent={navDetail.parent} title={navDetail.title} setScreen={setScreen} />
+          <NavDetailScreen parent={navDetail.parent} title={navDetail.title} role={role} setScreen={setScreen} />
         )}
         {screen === "announcement-detail" && (
           <AnnouncementDetailScreen detail={announcementDetail} setScreen={setScreen} />
@@ -2005,12 +2011,12 @@ function FellowshipPaymentReport() {
   );
 }
 
-function NavDetailScreen({ parent, title, setScreen }: { parent: string; title: string; setScreen: (screen: Screen) => void }) {
+function NavDetailScreen({ parent, title, role, setScreen }: { parent: string; title: string; role: Role; setScreen: (screen: Screen) => void }) {
   if (parent === "Operations" && title === "Draft / Pending") {
     return <DraftPendingAnnouncements setScreen={setScreen} />;
   }
 
-  const rows = navDetailCards(parent, title);
+  const rows = navDetailCards(parent, title, role);
   return (
     <section className="stack">
       <div className="compactPanel">
@@ -2133,9 +2139,12 @@ function navDetailNote(parent: string, title: string) {
   return "Dummy data only. This screen validates layout and navigation before backend implementation.";
 }
 
-function navDetailCards(parent: string, title: string): { title: string; meta: string[]; action: string }[] {
+function navDetailCards(parent: string, title: string, role: Role = "president"): { title: string; meta: string[]; action: string }[] {
   if (parent === "People" && ["Today", "This Week", "Birthdays", "Anniversaries"].includes(title)) {
     return peopleCelebrationCards(title);
+  }
+  if (parent === "People" && ["PST Profiles", "President Profile", "Secretary Profile", "Treasurer Profile"].includes(title)) {
+    return pstProfileCards(title, role);
   }
   if (parent === "Operations" && ["This Month", "Pending Reports", "Completed Activities", "Category-wise Activities"].includes(title)) {
     return projectActivityCards(title);
@@ -2215,6 +2224,65 @@ function activityCommitteeLabel(activity: Activity) {
   if (activity.lead.endsWith("Committee")) return activity.lead;
   if (activity.lead.includes("Secretary")) return `${activity.category} / Secretary`;
   return `${activity.category} / ${activity.lead}`;
+}
+
+function pstProfileCards(title: string, viewerRole: Role = "president"): { title: string; meta: string[]; action: string }[] {
+  const profiles = [
+    {
+      member: members[0],
+      role: "President",
+      designation: "Club President / Admin",
+      responsibility: "Overall club coordination, approvals, board oversight",
+      documentAccess: "Full PST + board documents",
+      financeAccess: "Full finance visibility"
+    },
+    {
+      member: members[1],
+      role: "Secretary",
+      designation: "Club Secretary",
+      responsibility: "Meetings, announcements, documents, activity reports",
+      documentAccess: "PST + board/secretary documents",
+      financeAccess: "View-only finance summary"
+    },
+    {
+      member: members[2],
+      role: "Treasurer",
+      designation: "Club Treasurer",
+      responsibility: "Ledger, payments, receipts, dues and finance reports",
+      documentAccess: "Treasurer + PST documents",
+      financeAccess: "Payment and ledger workflow access"
+    }
+  ];
+  const selected = title === "President Profile"
+    ? profiles.filter((profile) => profile.role === "President")
+    : title === "Secretary Profile"
+      ? profiles.filter((profile) => profile.role === "Secretary")
+      : title === "Treasurer Profile"
+        ? profiles.filter((profile) => profile.role === "Treasurer")
+        : profiles;
+
+  return selected.map((profile) => {
+    const fullMeta = [
+      "Photo: Placeholder",
+      `Mobile: ${profile.member.consentContact ? profile.member.phone : "Contact hidden"}`,
+      `Email: ${profile.member.id.toLowerCase()}@lcbeenachi.example`,
+      `Role: ${profile.role}`,
+      "Term / Lionistic Year: 2026–27",
+      `Designation: ${profile.designation}`,
+      `Committee Responsibility: ${profile.responsibility}`,
+      `Blood Group Visibility: ${profile.member.donorConsent ? profile.member.bloodGroup : "Not shared"}`,
+      `Document Access Level: ${profile.documentAccess}`,
+      `Finance Access Level: ${profile.financeAccess}`,
+      "Profile Completion Status: Dummy profile ready"
+    ];
+    const publicMeta = fullMeta.filter((line) => !line.startsWith("Blood Group") && !line.startsWith("Document") && !line.startsWith("Finance"));
+
+    return {
+      title: profile.member.name,
+      meta: viewerRole === "member" ? publicMeta : fullMeta,
+      action: viewerRole === "member" ? "View public PST profile" : "View linked member profile"
+    };
+  });
 }
 
 function peopleCelebrationCards(title: string): { title: string; meta: string[]; action: string }[] {
@@ -2591,6 +2659,18 @@ function PresidentDashboard({
       </section>
 
       <section className="compactPanel dashboardPanel">
+        <DashboardSectionHeader title="PST Coordination Overview" label="Role-linked member profiles" />
+        <div className="compactDashboardGrid">
+          <CompactDashboardCard
+            label="View PST Profiles"
+            value="3 roles"
+            action="Open"
+            onClick={() => openDashboardDetail("pst-profiles")}
+          />
+        </div>
+      </section>
+
+      <section className="compactPanel dashboardPanel">
         <DashboardSectionHeader title="Quick Actions" label="Common President tasks" />
         <div className="quickActionGrid">
           <button onClick={() => setScreen("members")}>Add Member</button>
@@ -2642,6 +2722,7 @@ function PstOverview({ role, totalOutstanding, openDashboardDetail }: { role: Ro
     { label: role === "secretary" ? "Pending dues summary (view only)" : "Pending dues summary", value: money(totalOutstanding), detail: "pending-dues", action: "Review" },
     { label: "Pending activity/project reports", value: "2", detail: "activity-reports", action: "Update" },
     { label: "Recent announcements/docs", value: "6", detail: "published-items", action: "Open" },
+    { label: "View PST Profiles", value: "3 roles", detail: "pst-profiles", action: "Open" },
     { label: "Celebration reminders", value: "4 this week", detail: "celebration-reminders", action: "Review" },
     { label: "Important club reminders", value: "PST review due", detail: "club-reminders", action: "Review" }
   ];
@@ -2786,6 +2867,7 @@ function DashboardDetailScreen({
       {detail === "month-collection" && <CollectionDetailPanel title="This Month’s Collection">{monthlyCollectionRows()}</CollectionDetailPanel>}
       {detail === "fellowship-pending" && <CollectionDetailPanel title="Fellowship Pending">{fellowshipPendingRows()}</CollectionDetailPanel>}
       {detail === "mode-split" && <CollectionDetailPanel title="Cash / Bank / UPI Split">{modeSplitRows()}</CollectionDetailPanel>}
+      {detail === "pst-profiles" && <PstProfilesDetail role={role} />}
       {detail === "member-dues" && <PendingDuesDetail role={role} member={member} setScreen={setScreen} />}
       {detail === "member-fellowship" && <MemberFellowshipDetail member={member} setScreen={setScreen} />}
       {detail === "member-events" && <UpcomingEventsDetail role={role} />}
@@ -2841,6 +2923,7 @@ function dashboardDetailTitle(detail: DashboardDetail) {
     "month-collection": "This Month’s Collection",
     "fellowship-pending": "Fellowship Pending",
     "mode-split": "Cash / Bank / UPI Split",
+    "pst-profiles": "PST Profiles",
     "member-dues": "My Dues",
     "member-fellowship": "My Fellowship",
     "member-events": "Events & Meetings",
@@ -2856,6 +2939,19 @@ function dashboardDetailLabel(role: Role, detail: DashboardDetail) {
   }
   if (role === "secretary") return "Secretary operational detail";
   return "President/Admin review detail";
+}
+
+function PstProfilesDetail({ role }: { role: Role }) {
+  return (
+    <div className="financeCardList">
+      {pstProfileCards("PST Profiles", role).map((profile) => (
+        <article className="financeStackCard" key={profile.title}>
+          <h3>{profile.title}</h3>
+          {profile.meta.map((line) => <span key={line}>{line}</span>)}
+        </article>
+      ))}
+    </div>
+  );
 }
 
 function PendingMemberUpdatesDetail() {
@@ -4344,6 +4440,19 @@ function Settings({ setScreen }: { setScreen: (screen: Screen) => void }) {
             <span>{summary}</span>
           </div>
         ))}
+      </div>
+      <div className="compactPanel">
+        <Toolbar title="Role Assignment" actionLabel="Dummy linked member profiles" />
+        <p className="prototypeNote">PST roles are attached to normal member records in this prototype. Real role assignment, audit history and profile editing will be implemented in the backend phase.</p>
+        <div className="financeCardList">
+          {pstProfileCards("PST Profiles").map((profile) => (
+            <article className="financeStackCard" key={`settings-${profile.title}`}>
+              <h3>{profile.title}</h3>
+              {profile.meta.filter((line) => line.startsWith("Role:") || line.startsWith("Term") || line.startsWith("Designation") || line.startsWith("Document") || line.startsWith("Finance")).map((line) => <span key={line}>{line}</span>)}
+              <button className="filterButton">View linked member profile</button>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
