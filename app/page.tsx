@@ -31,7 +31,6 @@ type Screen =
   | "outstanding-dues"
   | "collection-summary"
   | "fellowship-payments"
-  | "finance-reports"
   | "events-meetings"
   | "announcements"
   | "announcement-detail"
@@ -68,7 +67,7 @@ type AnnouncementDetail = "Published" | "Draft / Pending" | "High Priority";
 type FellowshipPaymentView = "Current Month" | "Pending Sponsors" | "Paid Sponsors";
 type PeopleSection = "Members" | "Board & Committees" | "Celebrations";
 type OperationsSection = "Events & Meetings" | "Announcements" | "Documents" | "Projects / Activities" | "Fellowship";
-type FinanceSection = "Club Account Statement" | "Member Ledger / Dues" | "Payments / Receipts" | "Outstanding Dues" | "Collection Summary" | "Fellowship Payments" | "Finance Reports";
+type FinanceSection = "Club Account Statement" | "Member Ledger / Dues" | "Payments / Receipts" | "Outstanding Dues" | "Collection Summary" | "Fellowship Payments";
 type ClubStatementSection =
   | "Account Overview"
   | "Fund-wise Opening Balance"
@@ -527,10 +526,10 @@ const reportMenuItems: NavItem[] = [
   {
     label: "Finance / Ledger Reports",
     children: [
-      { label: "Member-wise Outstanding", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Member-wise Outstanding" },
-      { label: "Payment Collection Report", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Payment Collection Report" },
-      { label: "Fellowship Payment Report", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Fellowship Payment Report" },
-      { label: "Monthly Finance Summary", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Monthly Finance Summary" }
+      { label: "Monthly Summary", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Monthly Finance Summary" },
+      { label: "Collection Report", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Payment Collection Report" },
+      { label: "Outstanding Report", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Member-wise Outstanding" },
+      { label: "Fellowship Payment Report", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Fellowship Payment Report" }
     ]
   },
   {
@@ -720,14 +719,6 @@ const financeMenuItems: NavItem[] = [
       { label: "Current Month", screen: "fellowship-payments", fellowshipPaymentView: "Current Month" },
       { label: "Pending Sponsors", screen: "fellowship-payments", fellowshipPaymentView: "Pending Sponsors" },
       { label: "Paid Sponsors", screen: "fellowship-payments", fellowshipPaymentView: "Paid Sponsors" }
-    ]
-  },
-  {
-    label: "Finance Reports",
-    children: [
-      { label: "Monthly Summary", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Monthly Finance Summary" },
-      { label: "Collection Report", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Payment Collection Report" },
-      { label: "Outstanding Report", screen: "report-detail", reportSection: "Finance / Ledger Reports", reportDetail: "Member-wise Outstanding" }
     ]
   }
 ];
@@ -1136,7 +1127,6 @@ export default function Prototype() {
         {screen === "outstanding-dues" && <OutstandingDues setScreen={setScreen} />}
         {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
         {screen === "fellowship-payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={setScreen} />}
-        {screen === "finance-reports" && <FinanceReports />}
         {screen === "events-meetings" && <EventsMeetings role={role} member={activeMember} selectedSponsors={selectedSponsors} setScreen={setScreen} selectedSection={eventMeetingSection} />}
         {screen === "announcements" && <Announcements role={role} member={activeMember} selectedSponsors={selectedSponsors} />}
         {screen === "documents" && <Documents role={role} />}
@@ -1193,7 +1183,6 @@ function screenTitle(screen: Screen) {
     "outstanding-dues": "Outstanding Dues",
     "collection-summary": "Collection Summary",
     "fellowship-payments": "Fellowship Payments",
-    "finance-reports": "Finance Reports",
     "events-meetings": "Events & Meetings",
     announcements: "Announcements",
     "announcement-detail": "Announcements",
@@ -1355,7 +1344,6 @@ function FinanceModule({
       {section === "Outstanding Dues" && <OutstandingDues setScreen={setScreen} />}
       {section === "Collection Summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
       {section === "Fellowship Payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={setScreen} />}
-      {section === "Finance Reports" && <FinanceReports />}
     </section>
   );
 }
@@ -3790,28 +3778,6 @@ function FellowshipPayments({ view = "Current Month", setScreen }: { view?: Fell
               {record.status === "Paid" ? "View Receipt" : "Record Payment"}
             </button>
           </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function FinanceReports() {
-  const reports = [
-    "Member-wise outstanding report",
-    "Payment collection report",
-    "Fellowship payment report",
-    "Monthly finance summary"
-  ];
-  return (
-    <section className="stack">
-      <Toolbar title="Finance Reports" actionLabel="Treasurer + President/Admin" />
-      <div className="reportGrid">
-        {reports.map((report) => (
-          <button className="reportCard" key={report}>
-            <span>Finance report</span>
-            <strong>{report}</strong>
-          </button>
         ))}
       </div>
     </section>
