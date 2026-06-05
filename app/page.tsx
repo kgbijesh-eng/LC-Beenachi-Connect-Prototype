@@ -3492,6 +3492,26 @@ function ConfirmSponsors({ selectedSponsors, setScreen }: { selectedSponsors: st
   );
 }
 
+function ledgerEntryType(row: (typeof ledgerRows)[number]) {
+  if (row.type === "Fellowship sponsor ledger entry") return "Fellowship sponsor contribution";
+  return row.type;
+}
+
+function ledgerBalanceImpact(row: (typeof ledgerRows)[number]) {
+  if (row.credit) return `${money(row.credit)} reduced from dues`;
+  return `+${money(row.debit)} due`;
+}
+
+function ledgerExtraFields(row: (typeof ledgerRows)[number]) {
+  if (row.credit) {
+    return ["Payment Mode: UPI", "Receipt No: RCP-001"];
+  }
+  if (row.type === "Fellowship sponsor ledger entry") {
+    return ["Linked Module: Fellowship Sponsorship - June 2026"];
+  }
+  return [];
+}
+
 function Ledger({ role, member, setScreen }: { role: Role; member: Member; setScreen: (screen: Screen) => void }) {
   const visibleRows = role === "member" ? ledgerRows.filter((row) => row.member === member.name) : ledgerRows;
   const memberPendingDues = outstandingDues.filter((due) => due.member === member.name && due.status === "Pending");
@@ -3562,15 +3582,19 @@ function Ledger({ role, member, setScreen }: { role: Role; member: Member; setSc
   return (
     <section className="stack">
       <Toolbar title="Member Ledger / Dues" actionLabel={role === "secretary" ? "Finance summary view" : "Finance workflow"} />
-      <div className="tableLike">
+      <div className="financeCardList">
         {visibleRows.map((row) => (
-          <div key={`${row.date}-${row.member}-${row.type}`} className="staticRow ledgerRow">
-            <span>{row.date}</span>
-            <strong>{row.member}</strong>
-            <span>{row.type}</span>
-            <span>{row.debit ? money(row.debit) : "-"}</span>
-            <span>{row.credit ? money(row.credit) : "-"}</span>
-          </div>
+          <article key={row.id} className="financeStackCard">
+            <h3>{ledgerEntryType(row)}</h3>
+            <span>Date: {row.date} 2026</span>
+            <span>Member: {row.member}</span>
+            <span>Entry Type: {ledgerEntryType(row)}</span>
+            <span>Debit: {row.debit ? money(row.debit) : "-"}</span>
+            <span>Credit: {row.credit ? money(row.credit) : "-"}</span>
+            <span>Balance Impact: {ledgerBalanceImpact(row)}</span>
+            <span>Status: {row.credit ? "Payment recorded" : "Pending"}</span>
+            {ledgerExtraFields(row).map((line) => <span key={line}>{line}</span>)}
+          </article>
         ))}
       </div>
       {(role === "president" || role === "treasurer") && (
