@@ -1874,6 +1874,9 @@ function ReportDetailScreen({ section, detail, setScreen }: { section: ReportsSe
   if (section === "Finance / Ledger Reports") {
     return <FinanceLedgerReportDetail detail={detail} setScreen={setScreen} />;
   }
+  if (section === "Fellowship Reports" && detail === "Current Month Sponsorship") {
+    return <CurrentMonthSponsorshipReport setScreen={setScreen} />;
+  }
 
   const cards = reportDetailCards(section, detail);
   return (
@@ -1888,6 +1891,47 @@ function ReportDetailScreen({ section, detail, setScreen }: { section: ReportsSe
           <article className="financeStackCard" key={`${section}-${detail}-${card.title}-${index}`}>
             <h3>{card.title}</h3>
             {card.meta.map((line) => <span key={line}>{line}</span>)}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CurrentMonthSponsorshipReport({ setScreen }: { setScreen: (screen: Screen) => void }) {
+  const sponsors = [
+    { month: "June 2026", sponsor: "Lion Bijesh", amount: 2500, paymentStatus: "Paid" },
+    { month: "June 2026", sponsor: "Lion Secretary User", amount: 2500, paymentStatus: "Pending" },
+    { month: "June 2026", sponsor: "Lion Treasurer User", amount: 2500, paymentStatus: "Pending" }
+  ];
+  const paidSponsors = sponsors.filter((sponsor) => sponsor.paymentStatus === "Paid").length;
+  const pendingSponsors = sponsors.length - paidSponsors;
+  const totalAmount = sponsors.reduce((sum, sponsor) => sum + sponsor.amount, 0);
+  const collectedAmount = sponsors.filter((sponsor) => sponsor.paymentStatus === "Paid").reduce((sum, sponsor) => sum + sponsor.amount, 0);
+
+  return (
+    <section className="stack">
+      <div className="compactPanel">
+        <Toolbar title="Current Month Sponsorship" actionLabel="Fellowship Reports" />
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button>
+        <div className="notice">Dummy data only. Real report generation, filters, export, and approval logic will be implemented in backend phase.</div>
+      </div>
+      <div className="metricsGrid">
+        <Metric label="Required Sponsors" value="3" />
+        <Metric label="Total Sponsors Selected" value={`${sponsors.length}`} />
+        <Metric label="Paid Sponsors" value={`${paidSponsors}`} />
+        <Metric label="Pending Sponsors" value={`${pendingSponsors}`} />
+        <Metric label="Total Sponsorship Amount" value={money(totalAmount)} />
+        <Metric label="Collected" value={money(collectedAmount)} />
+        <Metric label="Pending Collection" value={money(totalAmount - collectedAmount)} />
+      </div>
+      <div className="financeCardList">
+        {sponsors.map((sponsor) => (
+          <article className="financeStackCard" key={`${sponsor.month}-${sponsor.sponsor}`}>
+            <h3>Month: {sponsor.month}</h3>
+            <span>Sponsor: {sponsor.sponsor}</span>
+            <span>Amount: {money(sponsor.amount)}</span>
+            <span>Payment Status: {sponsor.paymentStatus}</span>
           </article>
         ))}
       </div>
