@@ -1868,21 +1868,20 @@ function ReportDetailScreen({ section, detail, setScreen }: { section: ReportsSe
     return <FinanceLedgerReportDetail detail={detail} setScreen={setScreen} />;
   }
 
-  const rows = reportDetailRows(section, detail);
+  const cards = reportDetailCards(section, detail);
   return (
     <section className="stack">
       <div className="compactPanel">
         <Toolbar title={detail} actionLabel={section} />
-        <div className="buttonRow">
-          <button onClick={() => setScreen("dashboard")}>Back to Dashboard</button>
-          <button className="secondaryButton" onClick={() => setScreen("reports-tools-module")}>Back to Reports & Tools</button>
-        </div>
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button>
+        <div className="notice">Dummy data only. Real report generation, filters, export, and approval logic will be implemented in backend phase.</div>
       </div>
-      <div className="tableLike">
-        {rows.map((row) => (
-          <div className="staticRow dashboardDetailRow" key={row.join("-")}>
-            {row.map((item, index) => index === 0 ? <strong key={`${row[0]}-${index}`}>{item}</strong> : <span key={`${row[0]}-${index}`}>{item}</span>)}
-          </div>
+      <div className="financeCardList">
+        {cards.map((card, index) => (
+          <article className="financeStackCard" key={`${section}-${detail}-${card.title}-${index}`}>
+            <h3>{card.title}</h3>
+            {card.meta.map((line) => <span key={line}>{line}</span>)}
+          </article>
         ))}
       </div>
     </section>
@@ -2186,40 +2185,76 @@ function navDetailRows(parent: string, title: string) {
   ];
 }
 
-function reportDetailRows(section: ReportsSection, detail: string) {
+function reportDetailCards(section: ReportsSection, detail: string) {
   if (section === "Member Reports") {
     return [
-      ["Lion Bijesh", "President/Admin", "Active", detail, "Review"],
-      ["Lion Secretary User", "Secretary", "Active", detail, "Review"],
-      ["Lion Ajith Kumar - Member", "Member", "Active", detail, "Review"]
-    ];
-  }
-  if (section === "Finance / Ledger Reports") {
-    return [
-      ["Lion Ajith Kumar - Member", "Monthly dues", money(500), "Pending", detail],
-      ["Lion Treasurer User", "Fellowship contribution", money(2500), "Pending", detail],
-      ["Lion Bijesh", "Project share", money(500), "Overdue", detail]
+      { title: "Member: Lion Bijesh", meta: ["Role: President/Admin", "Status: Active", `Report: ${detail}`, "Action: Review"] },
+      { title: "Member: Lion Secretary User", meta: ["Role: Secretary", "Status: Active", `Report: ${detail}`, "Action: Review"] },
+      { title: "Member: Lion Ajith Kumar - Member", meta: ["Role: Member", "Status: Active", `Report: ${detail}`, "Action: Review"] }
     ];
   }
   if (section === "Club Activity / Service Reports") {
-    return activities.map((activity) => [activity.name, activity.date, activity.lead, `${activity.peopleServed} served`, detail]);
+    return activities.map((activity) => ({
+      title: activity.name,
+      meta: [
+        `Date: ${activity.date}`,
+        `Lead: ${activity.lead}`,
+        `People Served: ${activity.peopleServed}`,
+        `Report Document: ${activity.reportDocument}`,
+        `Report: ${detail}`
+      ]
+    }));
   }
   if (section === "Celebration Reports") {
-    return celebrationsForRole("president").slice(0, 4).map((item) => [item.name, item.type, item.date, item.contact, item.wishStatus]);
+    return celebrationsForRole("president").slice(0, 4).map((item) => ({
+      title: item.name,
+      meta: [
+        `Celebration Type: ${item.type}`,
+        `Date: ${item.date}`,
+        `Contact: ${item.contact}`,
+        `Greeting Status: ${item.wishStatus}`,
+        `Report: ${detail}`
+      ]
+    }));
   }
   if (section === "Blood Donor Consent Report") {
-    return members.filter((member) => member.donorConsent).map((member) => [member.name, member.bloodGroup, member.consentContact ? member.phone : "Contact hidden", "Consented", detail]);
+    return members.filter((member) => member.donorConsent).map((member) => ({
+      title: `Donor: ${member.name}`,
+      meta: [
+        `Blood Group: ${member.bloodGroup}`,
+        `Contact: ${member.consentContact ? member.phone : "Contact hidden"}`,
+        "Consent Status: Consented",
+        `Report: ${detail}`
+      ]
+    }));
   }
   if (section === "Document Reports") {
-    return documents.map((item) => [item.title, item.category, item.visibility, "Published", detail]);
+    return documents.map((item) => ({
+      title: item.title,
+      meta: [
+        `Category: ${item.category}`,
+        `Visibility: ${item.visibility}`,
+        "Status: Published",
+        `Report: ${detail}`
+      ]
+    }));
   }
   if (section === "Events & Meetings Reports") {
-    return eventsMeetings.map((item) => [item.title, item.date, item.venue, item.status, detail]);
+    return eventsMeetings.map((item) => ({
+      title: item.title,
+      meta: [
+        `Date: ${item.date}${item.time ? ` · ${item.time}` : ""}`,
+        `Venue: ${item.venue}`,
+        `Audience: ${item.visibility}`,
+        `Status: ${item.status}`,
+        `Report: ${detail}`
+      ]
+    }));
   }
   return [
-    ["June 2026", "Lion Bijesh", money(2500), "Paid", detail],
-    ["June 2026", "Lion Secretary User", money(2500), "Pending", detail],
-    ["June 2026", "Lion Treasurer User", money(2500), "Pending", detail]
+    { title: "Month: June 2026", meta: ["Sponsor: Lion Bijesh", `Amount: ${money(2500)}`, "Status: Paid", `Report: ${detail}`] },
+    { title: "Month: June 2026", meta: ["Sponsor: Lion Secretary User", `Amount: ${money(2500)}`, "Status: Pending", `Report: ${detail}`] },
+    { title: "Month: June 2026", meta: ["Sponsor: Lion Treasurer User", `Amount: ${money(2500)}`, "Status: Pending", `Report: ${detail}`] }
   ];
 }
 
