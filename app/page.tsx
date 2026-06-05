@@ -58,12 +58,14 @@ type NavItem = {
   financeSection?: FinanceSection;
   statementSection?: ClubStatementSection;
   collectionDetail?: Exclude<CollectionDetail, null>;
+  fellowshipPaymentView?: FellowshipPaymentView;
   children?: NavItem[];
 };
 type NavGroup = { title: string; items: NavItem[]; direct?: boolean };
 type CollectionDetail = "today" | "month" | "pending" | "fellowship" | "split" | null;
 type EventMeetingSection = EventMeeting["section"];
 type AnnouncementDetail = "Published" | "Draft / Pending" | "High Priority";
+type FellowshipPaymentView = "Current Month" | "Pending Sponsors" | "Paid Sponsors";
 type PeopleSection = "Members" | "Board & Committees" | "Celebrations";
 type OperationsSection = "Events & Meetings" | "Announcements" | "Documents" | "Projects / Activities" | "Fellowship";
 type FinanceSection = "Club Account Statement" | "Member Ledger / Dues" | "Payments / Receipts" | "Outstanding Dues" | "Collection Summary" | "Fellowship Payments" | "Finance Reports";
@@ -715,9 +717,9 @@ const financeMenuItems: NavItem[] = [
   {
     label: "Fellowship Payments",
     children: [
-      { label: "Current Month", screen: "fellowship-payments" },
-      detailItem("Finance", "Pending Sponsors"),
-      detailItem("Finance", "Paid Sponsors")
+      { label: "Current Month", screen: "fellowship-payments", fellowshipPaymentView: "Current Month" },
+      { label: "Pending Sponsors", screen: "fellowship-payments", fellowshipPaymentView: "Pending Sponsors" },
+      { label: "Paid Sponsors", screen: "fellowship-payments", fellowshipPaymentView: "Paid Sponsors" }
     ]
   },
   {
@@ -828,6 +830,7 @@ export default function Prototype() {
   const [eventMeetingSection, setEventMeetingSection] = useState<EventMeetingSection | null>(null);
   const [announcementDetail, setAnnouncementDetail] = useState<AnnouncementDetail>("Published");
   const [financeSection, setFinanceSection] = useState<FinanceSection>("Club Account Statement");
+  const [fellowshipPaymentView, setFellowshipPaymentView] = useState<FellowshipPaymentView>("Current Month");
   const [clubStatementSection, setClubStatementSection] = useState<ClubStatementSection>("Account Overview");
   const [reportsSection, setReportsSection] = useState<ReportsSection>("Member Reports");
   const [clubVisibilitySection, setClubVisibilitySection] = useState<ClubVisibilitySection>("Members");
@@ -857,6 +860,7 @@ export default function Prototype() {
     if (item.financeSection && item.financeSection !== financeSection) return false;
     if (item.statementSection && item.statementSection !== clubStatementSection) return false;
     if (item.collectionDetail && item.collectionDetail !== collectionDetail) return false;
+    if (item.fellowshipPaymentView && item.fellowshipPaymentView !== fellowshipPaymentView) return false;
     if (item.fellowshipTab && item.fellowshipTab !== fellowshipTab) return false;
     if (item.detailTitle && item.detailTitle !== navDetail.title) return false;
     if (item.eventMeetingSection && item.eventMeetingSection !== eventMeetingSection) return false;
@@ -896,6 +900,7 @@ export default function Prototype() {
     if (item.financeSection) setFinanceSection(item.financeSection);
     if (item.statementSection) setClubStatementSection(item.statementSection);
     if (item.collectionDetail) setCollectionDetail(item.collectionDetail);
+    if (item.fellowshipPaymentView) setFellowshipPaymentView(item.fellowshipPaymentView);
     setScreen(item.screen);
     if (!item.collectionDetail) setCollectionDetail(null);
     if (item.screen !== "events-meetings" || !item.eventMeetingSection) setEventMeetingSection(null);
@@ -1091,6 +1096,7 @@ export default function Prototype() {
             setScreen={setScreen}
             collectionDetail={collectionDetail}
             setCollectionDetail={setCollectionDetail}
+            fellowshipPaymentView={fellowshipPaymentView}
           />
         )}
         {screen === "reports-tools-module" && (
@@ -1129,7 +1135,7 @@ export default function Prototype() {
         {screen === "payment-history" && <PaymentHistory />}
         {screen === "outstanding-dues" && <OutstandingDues setScreen={setScreen} />}
         {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
-        {screen === "fellowship-payments" && <FellowshipPayments setScreen={setScreen} />}
+        {screen === "fellowship-payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={setScreen} />}
         {screen === "finance-reports" && <FinanceReports />}
         {screen === "events-meetings" && <EventsMeetings role={role} member={activeMember} selectedSponsors={selectedSponsors} setScreen={setScreen} selectedSection={eventMeetingSection} />}
         {screen === "announcements" && <Announcements role={role} member={activeMember} selectedSponsors={selectedSponsors} />}
@@ -1329,7 +1335,8 @@ function FinanceModule({
   member,
   setScreen,
   collectionDetail,
-  setCollectionDetail
+  setCollectionDetail,
+  fellowshipPaymentView
 }: {
   section: FinanceSection;
   statementSection: ClubStatementSection;
@@ -1338,6 +1345,7 @@ function FinanceModule({
   setScreen: (screen: Screen) => void;
   collectionDetail: CollectionDetail;
   setCollectionDetail: (detail: CollectionDetail) => void;
+  fellowshipPaymentView: FellowshipPaymentView;
 }) {
   return (
     <section className="stack">
@@ -1346,7 +1354,7 @@ function FinanceModule({
       {section === "Payments / Receipts" && <PaymentsReceiptsHub setScreen={setScreen} />}
       {section === "Outstanding Dues" && <OutstandingDues setScreen={setScreen} />}
       {section === "Collection Summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
-      {section === "Fellowship Payments" && <FellowshipPayments setScreen={setScreen} />}
+      {section === "Fellowship Payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={setScreen} />}
       {section === "Finance Reports" && <FinanceReports />}
     </section>
   );
@@ -2037,9 +2045,12 @@ function navDetailCards(parent: string, title: string): { title: string; meta: s
     ];
   }
   const rows = navDetailRows(parent, title);
+  const labels = parent === "Finance"
+    ? ["Due Type", "Due Date", "Amount", "Status"]
+    : ["Type", "Date", "Audience", "Status"];
   return rows.map((row) => ({
     title: row[0],
-    meta: row.slice(1).map((item, index) => `${["Type", "Date / Owner", "Visibility / Status", "Status / Note"][index] || "Detail"}: ${item}`),
+    meta: row.slice(1).map((item, index) => `${labels[index] || "Detail"}: ${item}`),
     action: "View"
   }));
 }
@@ -3629,20 +3640,35 @@ function modeSplitRows() {
   ));
 }
 
-function FellowshipPayments({ setScreen }: { setScreen: (screen: Screen) => void }) {
+function FellowshipPayments({ view = "Current Month", setScreen }: { view?: FellowshipPaymentView; setScreen: (screen: Screen) => void }) {
+  const records = [
+    { sponsor: "Lion Bijesh", month: "June 2026 Fellowship", amount: 2500, status: "Paid", receipt: "RCP-010" },
+    { sponsor: "Lion Secretary User", month: "June 2026 Fellowship", amount: 2500, status: "Pending", receipt: "Not issued" },
+    { sponsor: "Lion Treasurer User", month: "June 2026 Fellowship", amount: 2500, status: "Pending", receipt: "Not issued" }
+  ];
+  const visibleRecords = records.filter((record) => {
+    if (view === "Paid Sponsors") return record.status === "Paid";
+    if (view === "Pending Sponsors") return record.status === "Pending";
+    return true;
+  });
+  const title = view === "Current Month" ? "Fellowship Payments" : view;
+
   return (
     <section className="stack">
-      <Toolbar title="Fellowship Payments" actionLabel="Sponsor dues preview ready" />
+      <Toolbar title={title} actionLabel="Sponsor payment records" />
       <div className="selectedSponsorGrid">
-        {["Lion Bijesh", "Lion Secretary User", "Lion Treasurer User"].map((sponsor, index) => (
-          <article className="selectedSponsorCard" key={sponsor}>
+        {visibleRecords.map((record) => (
+          <article className="selectedSponsorCard" key={`${record.month}-${record.sponsor}`}>
             <div>
-              <strong>{sponsor}</strong>
-              <span>Amount: {money(2500)}</span>
-              <span>Payment Status: {index === 0 ? "Paid" : "Pending"}</span>
-              <span>Reminder Status: {index === 0 ? "Receipt ready" : "Reminder prepared"}</span>
+              <strong>Sponsor: {record.sponsor}</strong>
+              <span>Fellowship Month: {record.month}</span>
+              <span>Amount: {money(record.amount)}</span>
+              <span>Payment Status: {record.status}</span>
+              <span>Receipt: {record.receipt}</span>
             </div>
-            <button className="filterButton" onClick={() => setScreen("record-member-payment")}>Record Payment</button>
+            <button className="filterButton" onClick={() => record.status === "Paid" ? undefined : setScreen("record-member-payment")}>
+              {record.status === "Paid" ? "View Receipt" : "Record Payment"}
+            </button>
           </article>
         ))}
       </div>
