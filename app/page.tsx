@@ -2302,15 +2302,7 @@ function reportDetailCards(section: ReportsSection, detail: string) {
     }));
   }
   if (section === "Blood Donor Consent Report") {
-    return members.filter((member) => member.donorConsent).map((member) => ({
-      title: `Donor: ${member.name}`,
-      meta: [
-        `Blood Group: ${member.bloodGroup}`,
-        `Contact: ${member.consentContact ? member.phone : "Contact hidden"}`,
-        "Consent Status: Consented",
-        `Report: ${detail}`
-      ]
-    }));
+    return bloodDonorReportCards(detail);
   }
   if (section === "Document Reports") {
     return documents.map((item) => ({
@@ -2340,6 +2332,51 @@ function reportDetailCards(section: ReportsSection, detail: string) {
     { title: "Month: June 2026", meta: ["Sponsor: Lion Secretary User", `Amount: ${money(2500)}`, "Status: Pending", `Report: ${detail}`] },
     { title: "Month: June 2026", meta: ["Sponsor: Lion Treasurer User", `Amount: ${money(2500)}`, "Status: Pending", `Report: ${detail}`] }
   ];
+}
+
+function bloodDonorReportCards(detail: string): { title: string; meta: string[] }[] {
+  if (detail === "Blood Group Summary") {
+    const groups = [...new Set(members.map((member) => member.bloodGroup))];
+    return groups.map((group) => {
+      const groupMembers = members.filter((member) => member.bloodGroup === group);
+      const consented = groupMembers.filter((member) => member.donorConsent);
+      const contactVisible = consented.filter((member) => member.consentContact).length;
+      const contactHidden = consented.length - contactVisible;
+      return {
+        title: `Blood Group: ${group}`,
+        meta: [
+          `Total Members: ${groupMembers.length}`,
+          `Consented Donors: ${consented.length}`,
+          `Contact Visible: ${contactVisible}`,
+          `Contact Hidden: ${contactHidden}`
+        ]
+      };
+    });
+  }
+
+  if (detail === "Contact Visibility Report") {
+    const consented = members.filter((member) => member.donorConsent);
+    return [
+      {
+        title: "Contact Visibility Summary",
+        meta: [
+          `Contact Visible: ${consented.filter((member) => member.consentContact).length}`,
+          `Contact Hidden: ${consented.filter((member) => !member.consentContact).length}`,
+          `Consent Pending: ${members.filter((member) => !member.donorConsent).length}`,
+          "Consent Denied: 0"
+        ]
+      }
+    ];
+  }
+
+  return members.filter((member) => member.donorConsent).map((member) => ({
+    title: `Donor Name: ${member.name}`,
+    meta: [
+      `Blood Group: ${member.bloodGroup}`,
+      `Contact: ${member.consentContact ? member.phone : "Contact hidden"}`,
+      "Consent Status: Consented"
+    ]
+  }));
 }
 
 function Dashboard({
