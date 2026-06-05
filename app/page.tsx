@@ -3581,7 +3581,7 @@ function Ledger({ role, member, setScreen }: { role: Role; member: Member; setSc
 
   return (
     <section className="stack">
-      <Toolbar title="Member Ledger / Dues" actionLabel={role === "secretary" ? "Finance summary view" : "Finance workflow"} />
+      <Toolbar title="Member Ledger" actionLabel={role === "secretary" ? "Finance summary view" : "Finance workflow"} />
       <div className="financeCardList">
         {visibleRows.map((row) => (
           <article key={row.id} className="financeStackCard">
