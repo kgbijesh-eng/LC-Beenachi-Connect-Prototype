@@ -4253,7 +4253,15 @@ function EventsMeetings({
     "Past Events": "No past events available at the moment.",
     "Meeting Notices": "No meeting notices created yet. Meeting reminder sending will be available after a notice is created."
   };
-  const title = selectedSection ? selectedSection : "Events & Meetings";
+  const memberEmptyMessages: Record<EventMeeting["section"], string> = {
+    ...emptyMessages,
+    "Meeting Notices": "No meeting notices available yet."
+  };
+  const displaySectionTitle = (section: EventMeetingSection) => {
+    if (role === "member" && section === "Upcoming Events") return "Upcoming Club Events";
+    return section;
+  };
+  const title = selectedSection ? displaySectionTitle(selectedSection) : "Events & Meetings";
   const selectedSectionItems = selectedSection ? visible.filter((item) => item.section === selectedSection) : [];
   const badge = role === "member"
     ? "Available to you"
@@ -4275,7 +4283,8 @@ function EventsMeetings({
       )}
       {sections.map((section) => {
         const sectionItems = visible.filter((item) => item.section === section);
-        const sectionTitle = role === "member" && section === "Upcoming Meetings" ? "Upcoming Meetings & Events" : section;
+        const sectionTitle = displaySectionTitle(section);
+        const emptyMessage = role === "member" ? memberEmptyMessages[section] : emptyMessages[section];
         return (
           <div className="compactPanel" key={section}>
             <h2>{sectionTitle}</h2>
@@ -4305,7 +4314,7 @@ function EventsMeetings({
                   <button className="filterButton">View details</button>
                 </article>
               ))}
-              {sectionItems.length === 0 && <div className="memberEmptyState">{role === "member" || section === "Meeting Notices" ? emptyMessages[section] : "No items in this section."}</div>}
+              {sectionItems.length === 0 && <div className="memberEmptyState">{role === "member" || section === "Meeting Notices" ? emptyMessage : "No items in this section."}</div>}
             </div>
           </div>
         );
