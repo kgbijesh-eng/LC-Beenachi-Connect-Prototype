@@ -165,7 +165,7 @@ const members: Member[] = [
     id: "MEM-001",
     name: "Lion Bijesh",
     dashboardName: "Lion Bijesh",
-    clubRole: "President/Admin",
+    clubRole: "President",
     status: "Active",
     bloodGroup: "O+",
     phone: "+91 98765 10001",
@@ -406,7 +406,7 @@ const voluntaryContribution = {
   accountHead: "Voluntary Member Contribution",
   description: "Collection box amount for recreational activity",
   countedBy: "Lion Treasurer User",
-  verifiedBy: "Lion Bijesh - President/Admin",
+  verifiedBy: "Lion Bijesh - President",
   depositStatus: "Cash counted, pending bank deposit",
   notes: "No member dues or receivable is created for this entry."
 };
@@ -480,16 +480,16 @@ const pendingMemberUpdates = [
 ];
 
 const clubReminders = [
-  { title: "PST review due", role: "President/Admin", due: "14 Jun 2026", priority: "High", status: "Open" },
+  { title: "PST review due", role: "President", due: "14 Jun 2026", priority: "High", status: "Open" },
   { title: "Close May activity reports", role: "Secretary", due: "07 Jun 2026", priority: "Medium", status: "Pending" },
   { title: "Verify fellowship collection", role: "Treasurer", due: "28 Jun 2026", priority: "High", status: "Open" }
 ];
 
 const roleLabels: Record<Role, string> = {
-  president: "President/Admin",
+  president: "President",
   secretary: "Secretary",
   treasurer: "Treasurer",
-  member: "Normal Member"
+  member: "Member"
 };
 
 const reminderSections: ReminderSection[] = [
@@ -1171,7 +1171,7 @@ export default function Prototype() {
 }
 
 function Header({ role, user, screen, reportDetail, navTitle }: { role: string; user: string; screen: Screen; reportDetail: string; navTitle: string }) {
-  const title = role === "Normal Member" && screen === "ledger" ? "My Dues" : screen === "report-detail" ? reportDetail : screen === "nav-detail" ? navTitle : screenTitle(screen);
+  const title = role === "Member" && screen === "ledger" ? "My Dues" : screen === "report-detail" ? reportDetail : screen === "nav-detail" ? navTitle : screenTitle(screen);
   return (
     <header className="topbar">
       <div>
@@ -1244,7 +1244,7 @@ function LoginScreen({ switchRole }: { switchRole: (role: Role) => void }) {
           </label>
         </div>
         <div className="buttonRow">
-          <button onClick={() => switchRole("president")}>Enter as President/Admin</button>
+          <button onClick={() => switchRole("president")}>Enter as President</button>
           <button onClick={() => switchRole("member")} className="secondaryButton">Enter as Member</button>
         </div>
       </div>
@@ -1612,7 +1612,7 @@ function NotificationsReminders({ role, setScreen }: { role: Role; setScreen: (s
     return (
       <section className="stack">
         <Toolbar title="Notifications & Reminders" actionLabel="No control access" />
-        <div className="notice">Normal Members only receive reminders. They do not have access to this control screen.</div>
+        <div className="notice">Members only receive reminders. They do not have access to this control screen.</div>
         <button className="secondaryButton" onClick={() => setScreen("dashboard")}>Back to Home</button>
       </section>
     );
@@ -1718,7 +1718,7 @@ function NotificationsReminders({ role, setScreen }: { role: Role; setScreen: (s
       {section === "Celebration Reminders" && (
         <section className="compactPanel">
           <Toolbar title="Celebration Reminders" actionLabel="Official greeting tracking" />
-          <div className="notice">Normal Members see only today's celebrations and recently completed celebrations. Secretary/Admin manage official greeting status here.</div>
+          <div className="notice">Members see only today's celebrations and recently completed celebrations. Secretary and President manage official greeting status here.</div>
           <div className="tableLike">
             {["Lion Ajith - Birthday today", "Lion Pradeep - Anniversary recently completed", "Lion Rajesh - Birthday today"].map((item, index) => (
               <div className="staticRow reminderSimpleRow" key={item}>
@@ -2212,7 +2212,7 @@ function AnnouncementDetailScreen({ detail, setScreen }: { detail: AnnouncementD
       action: "Review",
       rows: [
         { title: "Board Meeting Notice", meta: ["Type: Meeting Notice", "Owner: Secretary", "Status: Draft"] },
-        { title: "Medical Camp Announcement", meta: ["Type: Event / Activity", "Owner: President/Admin", "Status: Pending Approval"] },
+        { title: "Medical Camp Announcement", meta: ["Type: Event / Activity", "Owner: President", "Status: Pending Approval"] },
         { title: "Fellowship Reminder", meta: ["Type: Announcement", "Owner: Secretary", "Status: Draft"] }
       ]
     },
@@ -2461,7 +2461,7 @@ function navDetailRows(parent: string, title: string) {
 function reportDetailCards(section: ReportsSection, detail: string) {
   if (section === "Member Reports") {
     return [
-      { title: "Member: Lion Bijesh", meta: ["Role: President/Admin", "Status: Active", `Report: ${detail}`, "Action: Review"] },
+      { title: "Member: Lion Bijesh", meta: ["Role: President", "Status: Active", `Report: ${detail}`, "Action: Review"] },
       { title: "Member: Lion Secretary User", meta: ["Role: Secretary", "Status: Active", `Report: ${detail}`, "Action: Review"] },
       { title: "Member: Lion Ajith Kumar - Member", meta: ["Role: Member", "Status: Active", `Report: ${detail}`, "Action: Review"] }
     ];
@@ -2880,7 +2880,7 @@ function PstOverview({ role, totalOutstanding, openDashboardDetail }: { role: Ro
     <section className="pstPanel">
       <div className="toolbar">
         <h2>PST Coordination Overview</h2>
-        <span className="statusPill">President/Admin + Secretary + Treasurer</span>
+        <span className="statusPill">President + Secretary + Treasurer</span>
       </div>
       <div className="pstGrid">
         {items.map((item) => (
@@ -2996,7 +2996,7 @@ function DashboardDetailScreen({
     return (
       <section className="stack">
         <DetailHeader title="Privacy-safe member view" label="Restricted dashboard detail" setScreen={setScreen} />
-        <div className="notice">This dashboard detail is not visible for Normal Member role in the final app flow.</div>
+        <div className="notice">This dashboard detail is not visible for Member role in the final app flow.</div>
       </section>
     );
   }
@@ -3088,7 +3088,7 @@ function dashboardDetailLabel(role: Role, detail: DashboardDetail) {
     return "Treasurer working detail";
   }
   if (role === "secretary") return "Secretary operational detail";
-  return "President/Admin review detail";
+  return "President review detail";
 }
 
 function PstProfilesDetail({ role }: { role: Role }) {
@@ -3148,7 +3148,7 @@ function FellowshipStatusDetail({ setScreen }: { setScreen: (screen: Screen) => 
     ["Required sponsors", "3 sponsors"],
     ["Suggested queue", "Lion Bijesh, Lion Secretary User, Lion Treasurer User"],
     ["Selected sponsors", "3 selected"],
-    ["Confirmation status", "Pending President/Admin approval"],
+    ["Confirmation status", "Pending President approval"],
     ["Ledger status", "Sponsor rows prepared"],
     ["Payment status", "2 pending / 1 paid"]
   ];
@@ -3307,7 +3307,7 @@ function Committees() {
     <section className="stack">
       <Toolbar title="Board & Committees" actionLabel="Year-wise structure" />
       <div className="actionGrid">
-        <Action title="Board 2026" body="President/Admin, Secretary, Treasurer and board members." onClick={() => undefined} />
+        <Action title="Board 2026" body="President, Secretary, Treasurer and board members." onClick={() => undefined} />
         <Action title="Education Committee" body="Lead: Lion Secretary User. 4 members." onClick={() => undefined} />
         <Action title="Health Committee" body="Lead: Lion Treasurer User. 5 members." onClick={() => undefined} />
         <Action title="Service Committee" body="Lead: Lion Bijesh. 6 members." onClick={() => undefined} />
@@ -4549,7 +4549,7 @@ function DonorConsent({ member }: { member: Member }) {
 function DonorSearch({ bloodGroup, setBloodGroup, allowedDonors }: { bloodGroup: string; setBloodGroup: (group: string) => void; allowedDonors: Member[] }) {
   return (
     <section className="stack">
-      <div className="notice">Authorized donor search is for President/Admin and Secretary in V1. Results include consented donors only.</div>
+      <div className="notice">Authorized donor search is for President and Secretary in V1. Results include consented donors only.</div>
       <label className="compactControl">Required blood group<select value={bloodGroup} onChange={(event) => setBloodGroup(event.target.value)}>{["O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"].map((group) => <option key={group}>{group}</option>)}</select></label>
       <div className="tableLike">
         {allowedDonors.length === 0 && <div className="staticRow">No consented donors for this group.</div>}
@@ -4591,18 +4591,18 @@ function Reports() {
 
 function Settings({ setScreen }: { setScreen: (screen: Screen) => void }) {
   const roles = [
-    ["President/Admin", "Full club-level visibility; user and role management; approval rights; fellowship and reports oversight; finance visibility."],
+    ["President", "Full club-level visibility; user and role management; approval rights; fellowship and reports oversight; finance visibility."],
     ["Secretary", "Meetings/events, announcements, documents, projects/activities, reports view; no payment editing by default."],
     ["Treasurer", "Ledger, dues, payments, receipts, fellowship payment status, finance reports, member records visibility."],
     ["Board Member", "View assigned records and reports where allowed; no finance editing."],
     ["Committee Chair", "Manage assigned projects/activities and view assigned documents/events."],
-    ["Normal Member", "Own profile, own dues, my fellowship, events/announcements/documents, digital card, consent settings."],
+    ["Member", "Own profile, own dues, my fellowship, events/announcements/documents, digital card, consent settings."],
     ["Auditor / Read-only", "Read-only reports and audit visibility where approved; no edit permissions."],
     ["Platform Super Admin - future SaaS internal only", "Future platform role for multi-tenant operations; not a normal LC Beenachi dashboard role."]
   ];
   return (
     <section className="stack">
-      <Toolbar title="Settings / Roles" actionLabel="President/Admin" />
+      <Toolbar title="Settings / Roles" actionLabel="President" />
       <div className="buttonRow">
         <button onClick={() => setScreen("dashboard")}>Back to Dashboard</button>
         <button className="secondaryButton" onClick={() => setScreen("members")}>Back to Menu Area</button>
