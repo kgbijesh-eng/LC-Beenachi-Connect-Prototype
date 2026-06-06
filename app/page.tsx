@@ -594,6 +594,16 @@ function detailItem(parent: string, label: string): NavItem {
   return { label, screen: "nav-detail", detailParent: parent, detailTitle: label };
 }
 
+const myMemberAreaItems: NavItem[] = [
+  { label: "My Profile", screen: "member-profile" },
+  { label: "My Digital Card", screen: "digital-card" },
+  { label: "My Dues", screen: "ledger" },
+  { label: "My Fellowship", screen: "fellowship" },
+  { label: "My Documents", screen: "documents" },
+  { label: "My Celebrations", screen: "celebrations" },
+  { label: "Blood Donor Consent", screen: "donor-consent" }
+];
+
 const peopleMenuItems: NavItem[] = [
   {
     label: "Members",
@@ -731,6 +741,7 @@ const financeMenuItems: NavItem[] = [
 const navByRole: Record<Role, NavGroup[]> = {
   president: [
     { title: "Direct", direct: true, items: [{ label: "Dashboard", screen: "dashboard" }] },
+    { title: "My Member Area", items: myMemberAreaItems },
     { title: "People", items: peopleMenuItems },
     { title: "Operations", items: operationsMenuItems },
     { title: "Finance", items: financeMenuItems },
@@ -743,6 +754,7 @@ const navByRole: Record<Role, NavGroup[]> = {
   ],
   secretary: [
     { title: "Direct", direct: true, items: [{ label: "Dashboard", screen: "dashboard" }] },
+    { title: "My Member Area", items: myMemberAreaItems },
     { title: "People", items: peopleMenuItems },
     { title: "Operations", items: operationsMenuItems },
     { title: "Reports & Tools", items: [
@@ -753,6 +765,7 @@ const navByRole: Record<Role, NavGroup[]> = {
   ],
   treasurer: [
     { title: "Direct", direct: true, items: [{ label: "Dashboard", screen: "dashboard" }] },
+    { title: "My Member Area", items: myMemberAreaItems },
     { title: "Finance", items: financeMenuItems },
     { title: "Club Visibility", items: [
       ...peopleMenuItems,
@@ -794,6 +807,16 @@ const memberQuickAccess = [
   { label: "Documents", short: "DO", screen: "documents" as Screen },
   { label: "Blood Donor", short: "BD", screen: "donor-consent" as Screen },
   { label: "Directory", short: "DR", screen: "members" as Screen }
+];
+
+const pstMemberAreaCards = [
+  { label: "My Profile", value: "Member record", action: "Open", screen: "member-profile" as Screen },
+  { label: "My Digital Card", value: "In-app card", action: "View", screen: "digital-card" as Screen },
+  { label: "My Dues", value: "Own account", action: "Review", screen: "ledger" as Screen },
+  { label: "My Fellowship", value: "Own status", action: "Open", screen: "fellowship" as Screen },
+  { label: "My Documents", value: "My access", action: "View", screen: "documents" as Screen },
+  { label: "My Celebrations", value: "My wishes", action: "Open", screen: "celebrations" as Screen },
+  { label: "Blood Donor Consent", value: "My consent", action: "Update", screen: "donor-consent" as Screen }
 ];
 
 function parentGroupForScreen(role: Role, screen: Screen) {
@@ -2650,6 +2673,7 @@ function Dashboard({
   return (
     <section className="stack">
       <PstOverview role={role} totalOutstanding={totalOutstanding} openDashboardDetail={openDashboardDetail} />
+      <MyMemberAreaPanel setScreen={setScreen} />
       <section className="compactPanel">
         <div className="toolbar">
           <h2>What needs my attention today?</h2>
@@ -2775,6 +2799,8 @@ function PresidentDashboard({
         </div>
       </section>
 
+      <MyMemberAreaPanel setScreen={setScreen} />
+
       <section className="compactPanel dashboardPanel">
         <DashboardSectionHeader title="Quick Actions" label="Common President tasks" />
         <div className="quickActionGrid">
@@ -2796,6 +2822,25 @@ function PresidentDashboard({
           <button onClick={() => openDashboardDetail("upcoming-events")}><strong>Upcoming meeting</strong><span>Board Meeting - 10 Jun 2026</span><small>View details</small></button>
         </div>
       </section>
+    </section>
+  );
+}
+
+function MyMemberAreaPanel({ setScreen }: { setScreen: (screen: Screen) => void }) {
+  return (
+    <section className="compactPanel dashboardPanel">
+      <DashboardSectionHeader title="My Member Area" label="Personal member access" />
+      <div className="compactDashboardGrid">
+        {pstMemberAreaCards.map((item) => (
+          <CompactDashboardCard
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            action={item.action}
+            onClick={() => setScreen(item.screen)}
+          />
+        ))}
+      </div>
     </section>
   );
 }
