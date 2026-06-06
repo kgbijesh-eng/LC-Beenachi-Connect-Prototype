@@ -410,14 +410,18 @@ Milestone 2 may start only after:
 
 ## Milestone 1B Status
 
+Status: APPROVED
+
 Current status:
 
 ```text
-Milestone 1B — OPEN / DOCS ONLY / BACKEND READINESS
+Milestone 1B — APPROVED / DOCS ONLY / BACKEND READINESS
 ```
 
 Next action:
 
 ```text
-Prepare ERD, role matrix, API draft, ledger rules, and migration checklist.
+Proceed to Milestone 1C — Laravel Backend Foundation Setup.
 ```
+
+Backend code has not started in Milestone 1B.
