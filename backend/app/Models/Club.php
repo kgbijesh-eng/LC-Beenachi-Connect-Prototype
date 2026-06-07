@@ -47,4 +47,8 @@ class Club extends Model
     {
         return $this->hasMany(AuditLog::class);
     }
-}
+
+    public function memberLedgerEntries(): HasMany
+    {
+        return $this->hasMany(MemberLedgerEntry::class);
+    }}
