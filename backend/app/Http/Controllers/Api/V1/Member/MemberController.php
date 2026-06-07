@@ -69,6 +69,41 @@ class MemberController extends Controller
         ], 201);
     }
 
+    public function update(Request $request, Club $club, Member $member): JsonResponse
+    {
+        if ($member->club_id !== $club->id) {
+            return response()->json([
+                'message' => 'Member does not belong to this club.',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+            'member_code' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('members', 'member_code')
+                    ->where('club_id', $club->id)
+                    ->ignore($member->id),
+            ],
+            'full_name' => ['sometimes', 'required', 'string', 'max:255'],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'email' => ['sometimes', 'nullable', 'email', 'max:255'],
+            'status' => ['sometimes', 'required', 'string', Rule::in(['active', 'inactive'])],
+            'joined_at' => ['sometimes', 'nullable', 'date'],
+            'blood_group' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'blood_donor_consent' => ['sometimes', 'boolean'],
+        ]);
+
+        $member->update($validated);
+
+        return response()->json([
+            'member' => $this->memberPayload($member->refresh()),
+        ]);
+    }
+
     private function memberPayload(Member $member): array
     {
         return [
