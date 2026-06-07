@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             DefaultRolesAndPermissionsSeeder::class,
+            LocalClubAdminBootstrapSeeder::class,
         ]);
     }
 }
