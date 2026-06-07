@@ -32,6 +32,11 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
+    public function members(): HasMany
+    {
+        return $this->hasMany(Member::class);
+    }
+
     public function auditLogs(): HasMany
     {
         return $this->hasMany(AuditLog::class);
