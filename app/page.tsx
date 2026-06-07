@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 type Screen =
@@ -608,7 +608,7 @@ const peopleMenuItems: NavItem[] = [
   {
     label: "Members",
     children: [
-      detailItem("People", "Active Members"),
+      { label: "Active Members", screen: "members" },
       detailItem("People", "Inactive Members"),
       detailItem("People", "Profile Update Pending")
     ]
@@ -3281,22 +3281,317 @@ function MemberFellowshipDetail({ member, setScreen }: { member: Member; setScre
 }
 
 function MembersList({ setScreen, role }: { setScreen: (screen: Screen) => void; role: Role }) {
+  type ApiMember = {
+    id: number;
+    club_id: number;
+    user_id: number | null;
+    member_code: string;
+    full_name: string;
+    phone: string | null;
+    email: string | null;
+    status: "active" | "inactive";
+    joined_at: string | null;
+    blood_group: string | null;
+    blood_donor_consent: boolean;
+  };
+
+  type ApiMeResponse = {
+    club_memberships: {
+      club: { id: number; name: string; code: string };
+      role: { name: string; slug: string };
+      permissions: { slug: string }[];
+    }[];
+  };
+
+  const apiBaseUrl = "http://127.0.0.1:8000/api/v1";
+  const emptyForm = {
+    member_code: "",
+    full_name: "",
+    phone: "",
+    email: "",
+    status: "active",
+    joined_at: "",
+    blood_group: "",
+    blood_donor_consent: false
+  };
+
+  const [apiToken, setApiToken] = useState("");
+  const [apiClubId, setApiClubId] = useState<number | null>(null);
+  const [apiPermissions, setApiPermissions] = useState<string[]>([]);
+  const [apiMembers, setApiMembers] = useState<ApiMember[]>([]);
+  const [memberForm, setMemberForm] = useState(emptyForm);
+  const [editingMemberId, setEditingMemberId] = useState<number | null>(null);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiSubmitting, setApiSubmitting] = useState(false);
+  const [apiStatus, setApiStatus] = useState("Backend member API not loaded yet.");
+  const [apiError, setApiError] = useState("");
+
+  const canManageMembers = role !== "member" && apiPermissions.includes("members.manage");
+
+  useEffect(() => {
+    void loadMembersFromApi();
+  }, []);
+
+  async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        Accept: "application/json",
+        ...(options.headers || {})
+      }
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as { message?: string };
+
+    if (!response.ok) {
+      throw new Error(payload.message || `API request failed with status ${response.status}`);
+    }
+
+    return payload as T;
+  }
+
+  async function loadMembersFromApi() {
+    setApiLoading(true);
+    setApiError("");
+    setApiStatus("Connecting to backend member API...");
+
+    try {
+      const loginResponse = await requestJson<{ token: string }>(`${apiBaseUrl}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "president@lcbeenachi.test",
+          password: "password"
+        })
+      });
+
+      const meResponse = await requestJson<ApiMeResponse>(`${apiBaseUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${loginResponse.token}` }
+      });
+
+      const membership = meResponse.club_memberships[0];
+
+      if (!membership) {
+        throw new Error("No active club membership returned by API.");
+      }
+
+      const permissions = membership.permissions.map((permission) => permission.slug);
+
+      setApiToken(loginResponse.token);
+      setApiClubId(membership.club.id);
+      setApiPermissions(permissions);
+
+      const count = await fetchMembers(loginResponse.token, membership.club.id);
+      setApiStatus(`Connected to ${membership.club.name}. ${count} member record(s) loaded from backend.`);
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "Unable to connect to backend API.");
+      setApiStatus("Backend member API connection failed.");
+    } finally {
+      setApiLoading(false);
+    }
+  }
+
+  async function fetchMembers(token = apiToken, clubId = apiClubId) {
+    if (!token || !clubId) return 0;
+
+    const payload = await requestJson<{ members: ApiMember[] }>(`${apiBaseUrl}/clubs/${clubId}/members`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    setApiMembers(payload.members);
+    return payload.members.length;
+  }
+
+  function updateForm(field: keyof typeof memberForm, value: string | boolean) {
+    setMemberForm((current) => ({
+      ...current,
+      [field]: value
+    }));
+  }
+
+  function startEdit(member: ApiMember) {
+    setEditingMemberId(member.id);
+    setMemberForm({
+      member_code: member.member_code,
+      full_name: member.full_name,
+      phone: member.phone || "",
+      email: member.email || "",
+      status: member.status,
+      joined_at: member.joined_at || "",
+      blood_group: member.blood_group || "",
+      blood_donor_consent: member.blood_donor_consent
+    });
+    setApiStatus(`Editing ${member.full_name}.`);
+  }
+
+  function resetForm() {
+    setEditingMemberId(null);
+    setMemberForm(emptyForm);
+  }
+
+  async function submitMemberForm(event: { preventDefault: () => void }) {
+    event.preventDefault();
+
+    if (!apiToken || !apiClubId) {
+      setApiError("Backend session is not ready. Reload member API first.");
+      return;
+    }
+
+    if (!canManageMembers) {
+      setApiError("This role does not have member create/edit permission.");
+      return;
+    }
+
+    if (!memberForm.member_code.trim() || !memberForm.full_name.trim()) {
+      setApiError("Member code and full name are required.");
+      return;
+    }
+
+    setApiSubmitting(true);
+    setApiError("");
+
+    const payload = {
+      member_code: memberForm.member_code.trim(),
+      full_name: memberForm.full_name.trim(),
+      phone: memberForm.phone.trim() || null,
+      email: memberForm.email.trim() || null,
+      status: memberForm.status,
+      joined_at: memberForm.joined_at || null,
+      blood_group: memberForm.blood_group.trim() || null,
+      blood_donor_consent: memberForm.blood_donor_consent
+    };
+
+    try {
+      const endpoint = editingMemberId
+        ? `${apiBaseUrl}/clubs/${apiClubId}/members/${editingMemberId}`
+        : `${apiBaseUrl}/clubs/${apiClubId}/members`;
+
+      await requestJson<{ member: ApiMember }>(endpoint, {
+        method: editingMemberId ? "PATCH" : "POST",
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      await fetchMembers();
+      setApiStatus(editingMemberId ? "Member updated from frontend." : "Member created from frontend.");
+      resetForm();
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "Unable to save member.");
+    } finally {
+      setApiSubmitting(false);
+    }
+  }
+
   return (
     <section className="stack">
-      <Toolbar title="Member Directory" actionLabel={role === "member" ? "Consent-approved fields only" : "Role-based management"} />
+      <Toolbar title="Member Directory" actionLabel={role === "member" ? "Backend view, member-safe actions" : "Live backend member API"} />
+
+      <div className="notice">
+        Milestone 2C: this screen is now connected to the Laravel member master API. Local test login uses president@lcbeenachi.test.
+      </div>
+
+      <div className="metricsGrid">
+        <Metric label="Backend status" value={apiLoading ? "Loading" : apiError ? "Check needed" : "Connected"} />
+        <Metric label="Backend members" value={String(apiMembers.length)} />
+        <Metric label="Create/Edit access" value={canManageMembers ? "Enabled" : "View only"} />
+        <Metric label="Club ID" value={apiClubId ? String(apiClubId) : "Not loaded"} />
+      </div>
+
+      {apiError && <div className="notice">API error: {apiError}</div>}
+
+      <div className="buttonRow">
+        <button className="secondaryButton" onClick={() => void loadMembersFromApi()} disabled={apiLoading}>
+          Reload Backend Members
+        </button>
+        {canManageMembers && (
+          <button className="secondaryButton" onClick={resetForm}>
+            New Member
+          </button>
+        )}
+      </div>
+
+      {canManageMembers && (
+        <form className="formPanel" onSubmit={submitMemberForm}>
+          <Toolbar title={editingMemberId ? "Edit Member" : "Create Member"} actionLabel="Backend save" />
+          <div className="fieldGrid">
+            <label>
+              Member Code
+              <input value={memberForm.member_code} onChange={(event) => updateForm("member_code", event.target.value)} />
+            </label>
+            <label>
+              Full Name
+              <input value={memberForm.full_name} onChange={(event) => updateForm("full_name", event.target.value)} />
+            </label>
+            <label>
+              Phone
+              <input value={memberForm.phone} onChange={(event) => updateForm("phone", event.target.value)} />
+            </label>
+            <label>
+              Email
+              <input value={memberForm.email} onChange={(event) => updateForm("email", event.target.value)} />
+            </label>
+            <label>
+              Status
+              <select value={memberForm.status} onChange={(event) => updateForm("status", event.target.value)}>
+                <option value="active">active</option>
+                <option value="inactive">inactive</option>
+              </select>
+            </label>
+            <label>
+              Joined At
+              <input type="date" value={memberForm.joined_at} onChange={(event) => updateForm("joined_at", event.target.value)} />
+            </label>
+            <label>
+              Blood Group
+              <input value={memberForm.blood_group} onChange={(event) => updateForm("blood_group", event.target.value)} />
+            </label>
+            <label className="checkboxLine">
+              <input
+                type="checkbox"
+                checked={memberForm.blood_donor_consent}
+                onChange={(event) => updateForm("blood_donor_consent", event.target.checked)}
+              />
+              Blood donor consent
+            </label>
+          </div>
+          <div className="buttonRow">
+            <button disabled={apiSubmitting}>{apiSubmitting ? "Saving..." : editingMemberId ? "Update Member" : "Create Member"}</button>
+            {editingMemberId && <button type="button" className="secondaryButton" onClick={resetForm}>Cancel Edit</button>}
+          </div>
+        </form>
+      )}
+
+      {!canManageMembers && (
+        <div className="notice">
+          This role has view-only member access in the frontend. Create/edit buttons are hidden.
+        </div>
+      )}
+
+      <div className="notice">{apiStatus}</div>
+
       <div className="tableLike">
-        {members.map((member) => (
-          <button key={member.id} className="rowButton" onClick={() => setScreen(role === "member" ? "member-profile" : "member-profile")}>
-            <Avatar name={member.name} />
+        {apiMembers.map((member) => (
+          <button
+            key={member.id}
+            className="rowButton"
+            onClick={() => canManageMembers ? startEdit(member) : setScreen("member-profile")}
+          >
+            <Avatar name={member.full_name} />
             <span>
-              <strong>{member.name}</strong>
-              <small>{member.id} - {member.clubRole}</small>
+              <strong>{member.full_name}</strong>
+              <small>{member.member_code} - {member.status}</small>
             </span>
-            <span>{member.bloodGroup}</span>
-            <span>{member.consentContact || role !== "member" ? member.phone : "Hidden"}</span>
-            <span className="tag">{member.status}</span>
+            <span>{member.blood_group || "-"}</span>
+            <span>{role === "member" ? "Contact visibility pending" : member.phone || "-"}</span>
+            <span className="tag">{canManageMembers ? "Click to edit" : "View only"}</span>
           </button>
         ))}
+        {!apiLoading && apiMembers.length === 0 && (
+          <div className="memberEmptyState">No backend members found. Create one using the form above.</div>
+        )}
       </div>
     </section>
   );
