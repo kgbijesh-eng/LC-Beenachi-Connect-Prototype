@@ -28,5 +28,9 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/members', [MemberController::class, 'index']);
             Route::get('/clubs/{club}/members/{member}', [MemberController::class, 'show']);
         });
+
+        Route::middleware('club.permission:members.manage,club')->group(function (): void {
+            Route::post('/clubs/{club}/members', [MemberController::class, 'store']);
+        });
     });
 });

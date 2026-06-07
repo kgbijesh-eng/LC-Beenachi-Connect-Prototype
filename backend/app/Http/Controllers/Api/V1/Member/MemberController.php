@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Club;
 use App\Models\Member;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class MemberController extends Controller
 {
@@ -34,6 +36,37 @@ class MemberController extends Controller
         return response()->json([
             'member' => $this->memberPayload($member),
         ]);
+    }
+
+    public function store(Request $request, Club $club): JsonResponse
+    {
+        $validated = $request->validate([
+            'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'member_code' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('members', 'member_code')
+                    ->where('club_id', $club->id),
+            ],
+            'full_name' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'status' => ['nullable', 'string', Rule::in(['active', 'inactive'])],
+            'joined_at' => ['nullable', 'date'],
+            'blood_group' => ['nullable', 'string', 'max:255'],
+            'blood_donor_consent' => ['nullable', 'boolean'],
+        ]);
+
+        $validated['club_id'] = $club->id;
+        $validated['status'] = $validated['status'] ?? 'active';
+        $validated['blood_donor_consent'] = $validated['blood_donor_consent'] ?? false;
+
+        $member = Member::create($validated);
+
+        return response()->json([
+            'member' => $this->memberPayload($member),
+        ], 201);
     }
 
     private function memberPayload(Member $member): array
