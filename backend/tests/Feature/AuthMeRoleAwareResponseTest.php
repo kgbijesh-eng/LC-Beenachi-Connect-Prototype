@@ -44,9 +44,15 @@ class AuthMeRoleAwareResponseTest extends TestCase
                 'slug' => 'users.manage',
             ])
             ->assertJsonFragment([
+                'slug' => 'members.view',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'members.manage',
+            ])
+            ->assertJsonFragment([
                 'slug' => 'audit_logs.view',
             ]);
 
-        $this->assertCount(10, $response->json('club_memberships.0.permissions'));
+        $this->assertCount(12, $response->json('club_memberships.0.permissions'));
     }
 }

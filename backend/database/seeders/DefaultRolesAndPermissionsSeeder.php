@@ -48,6 +48,18 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                 'description' => 'Manage user membership links within clubs.',
             ],
             [
+                'name' => 'View Members',
+                'slug' => 'members.view',
+                'group' => 'members',
+                'description' => 'View member master records.',
+            ],
+            [
+                'name' => 'Manage Members',
+                'slug' => 'members.manage',
+                'group' => 'members',
+                'description' => 'Create and update member master records.',
+            ],
+            [
                 'name' => 'View Roles',
                 'slug' => 'roles.view',
                 'group' => 'roles',
@@ -91,6 +103,8 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'users.manage',
                     'memberships.view',
                     'memberships.manage',
+                    'members.view',
+                    'members.manage',
                     'roles.view',
                     'roles.manage',
                     'permissions.view',
@@ -104,6 +118,8 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'club.view',
                     'users.view',
                     'memberships.view',
+                    'members.view',
+                    'members.manage',
                     'audit_logs.view',
                 ],
             ],
@@ -114,6 +130,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'club.view',
                     'users.view',
                     'memberships.view',
+                    'members.view',
                     'audit_logs.view',
                 ],
             ],
@@ -122,6 +139,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                 'description' => 'Normal club member with limited foundation visibility.',
                 'permissions' => [
                     'club.view',
+                    'members.view',
                 ],
             ],
         ];

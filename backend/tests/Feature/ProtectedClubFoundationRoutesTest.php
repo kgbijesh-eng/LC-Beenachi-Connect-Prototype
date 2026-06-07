@@ -57,9 +57,15 @@ class ProtectedClubFoundationRoutesTest extends TestCase
             ])
             ->assertJsonFragment([
                 'users.manage',
+            ])
+            ->assertJsonFragment([
+                'members.view',
+            ])
+            ->assertJsonFragment([
+                'members.manage',
             ]);
 
-        $this->assertCount(10, $response->json('permissions'));
+        $this->assertCount(12, $response->json('permissions'));
     }
 
     public function test_normal_member_can_view_club_foundation_but_only_gets_limited_permissions(): void
@@ -97,7 +103,7 @@ class ProtectedClubFoundationRoutesTest extends TestCase
         $meResponse->assertOk()
             ->assertJsonPath('membership.role.slug', 'member');
 
-        $this->assertSame(['club.view'], $meResponse->json('permissions'));
+        $this->assertSame(['club.view', 'members.view'], $meResponse->json('permissions'));
     }
 
     public function test_user_without_club_membership_cannot_view_club_foundation_details(): void
