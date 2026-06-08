@@ -218,8 +218,21 @@ class Milestone3hPaymentRecordingDatabaseFoundationAuthorizationTest extends Tes
         }
     }
 
-    public function test_3h_does_not_create_payment_or_receipt_database_implementation_files(): void
+    public function test_3h_does_not_create_payment_or_receipt_database_implementation_files_before_3i(): void
     {
+        $threeIImplementationDocument = base_path('docs/milestone_3i_payment_recording_database_foundation_implementation.md');
+
+        if (file_exists($threeIImplementationDocument)) {
+            $content = file_get_contents($threeIImplementationDocument);
+
+            $this->assertStringContainsString('Milestone 3I implements only the narrow database foundation for future payment recording.', $content);
+            $this->assertStringContainsString('This milestone prepares the database layer only.', $content);
+            $this->assertStringContainsString('payment recording API', $content);
+            $this->assertStringContainsString('ledger posting workflow', $content);
+
+            return;
+        }
+
         $migrationFiles = array_merge(
             glob(base_path('database/migrations/*payment*')) ?: [],
             glob(base_path('database/migrations/*payments*')) ?: [],
@@ -227,7 +240,7 @@ class Milestone3hPaymentRecordingDatabaseFoundationAuthorizationTest extends Tes
             glob(base_path('database/migrations/*receipts*')) ?: [],
         );
 
-        $this->assertSame([], $migrationFiles, 'Milestone 3H must not create payment or receipt migrations.');
+        $this->assertSame([], $migrationFiles, 'Milestone 3H must not create payment or receipt migrations before 3I.');
 
         foreach ([
             'app/Models/Payment.php',
@@ -237,7 +250,7 @@ class Milestone3hPaymentRecordingDatabaseFoundationAuthorizationTest extends Tes
             'app/Services/Payments/PaymentRecordingService.php',
             'app/Services/Payments/ReceiptGenerationService.php',
         ] as $forbiddenPath) {
-            $this->assertFileDoesNotExist(base_path($forbiddenPath), "Milestone 3H must not create [{$forbiddenPath}].");
+            $this->assertFileDoesNotExist(base_path($forbiddenPath), "Milestone 3H must not create [{$forbiddenPath}] before 3I.");
         }
     }
 }
