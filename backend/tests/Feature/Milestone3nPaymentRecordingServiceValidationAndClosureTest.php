@@ -165,6 +165,7 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCas
                 return $isFinanceMutationUri && ! empty(array_intersect($forbiddenMethods, $methods));
             })
             ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->reject(fn (string $route): bool => $route === 'POST api/v1/clubs/{club}/members/{member}/payments') // authorized 3Q payment route
             ->values()
             ->all();
 

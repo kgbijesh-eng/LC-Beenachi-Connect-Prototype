@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Club\ClubController;
 use App\Http\Controllers\Api\V1\Finance\MemberLedgerBalanceController;
+use App\Http\Controllers\Api\V1\Finance\PaymentController;
 use App\Http\Controllers\Api\V1\Member\MemberController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,6 +36,10 @@ Route::prefix('v1')->group(function (): void {
         Route::middleware('club.permission:members.manage,club')->group(function (): void {
             Route::post('/clubs/{club}/members', [MemberController::class, 'store']);
             Route::patch('/clubs/{club}/members/{member}', [MemberController::class, 'update']);
+        });
+
+        Route::middleware('club.permission:payments.record,club')->group(function (): void {
+            Route::post('/clubs/{club}/members/{member}/payments', [PaymentController::class, 'store']);
         });
     });
 });

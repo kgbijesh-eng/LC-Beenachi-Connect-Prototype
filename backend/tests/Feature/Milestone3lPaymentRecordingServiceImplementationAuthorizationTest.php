@@ -245,6 +245,7 @@ class Milestone3lPaymentRecordingServiceImplementationAuthorizationTest extends 
 
         $registeredUris = collect(Route::getRoutes())
             ->map(fn ($route) => $route->uri())
+            ->reject(fn (string $uri): bool => $uri === 'api/v1/clubs/{club}/members/{member}/payments') // authorized 3Q payment route
             ->values();
 
         foreach ($blockedRouteFragments as $fragment) {

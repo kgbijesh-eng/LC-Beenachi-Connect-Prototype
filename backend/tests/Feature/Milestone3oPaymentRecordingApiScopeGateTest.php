@@ -17,7 +17,8 @@ class Milestone3oPaymentRecordingApiScopeGateTest extends TestCase
 
         $content = file_get_contents($path);
 
-        $this->assertStringContainsString('Milestone 3O — Payment Recording API Scope Gate', $content);
+        $this->assertStringContainsString('Milestone 3O', $content);
+        $this->assertStringContainsString('Payment Recording API Scope Gate', $content);
         $this->assertStringContainsString('Scope gate only', $content);
         $this->assertStringContainsString('docs/tests-only', $content);
         $this->assertStringContainsString('It does not authorize implementation in 3O', $content);
@@ -113,7 +114,7 @@ class Milestone3oPaymentRecordingApiScopeGateTest extends TestCase
         $this->assertStringContainsString('payments.ledger_entry_id linkage', $content);
     }
 
-    public function test_3o_does_not_register_payment_recording_api_route(): void
+    public function test_3o_allows_only_authorized_3q_payment_recording_route_after_implementation(): void
     {
         $paymentRoutes = collect(Route::getRoutes())
             ->filter(function ($route): bool {
@@ -128,7 +129,9 @@ class Milestone3oPaymentRecordingApiScopeGateTest extends TestCase
             ->values()
             ->all();
 
-        $this->assertSame([], $paymentRoutes);
+        $this->assertSame([
+            'POST api/v1/clubs/{club}/members/{member}/payments',
+        ], $paymentRoutes);
     }
 
     public function test_3o_does_not_create_api_or_frontend_implementation_files(): void

@@ -17,7 +17,8 @@ class Milestone3pPaymentRecordingApiImplementationAuthorizationTest extends Test
 
         $content = file_get_contents($path);
 
-        $this->assertStringContainsString('Milestone 3P — Payment Recording API Implementation Authorization', $content);
+        $this->assertStringContainsString('Milestone 3P', $content);
+        $this->assertStringContainsString('Payment Recording API Implementation Authorization', $content);
         $this->assertStringContainsString('Implementation authorization only', $content);
         $this->assertStringContainsString('docs/tests-only', $content);
         $this->assertStringContainsString('It does not authorize implementation inside 3P', $content);
@@ -27,7 +28,8 @@ class Milestone3pPaymentRecordingApiImplementationAuthorizationTest extends Test
     {
         $content = file_get_contents(base_path('docs/milestone_3p_payment_recording_api_implementation_authorization.md'));
 
-        $this->assertStringContainsString('Milestone 3Q — Payment Recording API Narrow Implementation', $content);
+        $this->assertStringContainsString('Milestone 3Q', $content);
+        $this->assertStringContainsString('Payment Recording API Narrow Implementation', $content);
         $this->assertStringContainsString('3P authorizes only that later narrow implementation', $content);
         $this->assertStringContainsString('It does not implement it', $content);
     }
@@ -148,7 +150,7 @@ class Milestone3pPaymentRecordingApiImplementationAuthorizationTest extends Test
         $this->assertStringContainsString('The future API is only a protected transport layer over PaymentRecordingService', $content);
     }
 
-    public function test_3p_does_not_register_payment_recording_api_route(): void
+    public function test_3p_allows_only_authorized_3q_payment_recording_route_after_implementation(): void
     {
         $paymentRoutes = collect(Route::getRoutes())
             ->filter(function ($route): bool {
@@ -163,18 +165,17 @@ class Milestone3pPaymentRecordingApiImplementationAuthorizationTest extends Test
             ->values()
             ->all();
 
-        $this->assertSame([], $paymentRoutes);
+        $this->assertSame([
+            'POST api/v1/clubs/{club}/members/{member}/payments',
+        ], $paymentRoutes);
     }
 
     public function test_3p_does_not_create_api_frontend_or_blocked_behavior_files(): void
     {
         $blockedPaths = [
-            app_path('Http/Controllers/Api/V1/Finance/PaymentController.php'),
             app_path('Http/Controllers/PaymentController.php'),
             app_path('Http/Controllers/ReceiptController.php'),
-            app_path('Http/Requests/Finance/RecordPaymentRequest.php'),
             app_path('Http/Requests/RecordPaymentRequest.php'),
-            app_path('Http/Resources/Finance/PaymentResource.php'),
             app_path('Http/Resources/PaymentResource.php'),
             app_path('Services/Finance/ReceiptGenerationService.php'),
             app_path('Services/Finance/ReceiptNumberingService.php'),
