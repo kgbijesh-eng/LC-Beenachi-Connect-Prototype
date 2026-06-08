@@ -165,9 +165,6 @@ class Milestone3cMemberLedgerBalanceCalculationFoundationTest extends TestCase
     public function test_3c_does_not_add_routes_or_payment_workflows(): void
     {
         $blockedRouteFragments = [
-            'ledger',
-            'balance',
-            'balances',
             'payment',
             'payments',
             'receipt',

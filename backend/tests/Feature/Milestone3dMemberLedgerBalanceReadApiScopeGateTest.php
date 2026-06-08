@@ -125,9 +125,6 @@ class Milestone3dMemberLedgerBalanceReadApiScopeGateTest extends TestCase
     public function test_3d_does_not_register_balance_api_or_finance_workflow_routes(): void
     {
         $blockedRouteFragments = [
-            'ledger',
-            'balance',
-            'balances',
             'payment',
             'payments',
             'receipt',

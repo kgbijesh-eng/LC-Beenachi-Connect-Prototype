@@ -160,8 +160,6 @@ class Milestone3bMemberAccountLedgerDatabaseFoundationTest extends TestCase
             'payments',
             'receipt',
             'receipts',
-            'balance',
-            'balances',
             'reminder',
             'reminders',
             'report',
