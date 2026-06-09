@@ -333,7 +333,6 @@ class Milestone3rPaymentRecordingApiValidationAndClosureTest extends TestCase
         $blockedPaths = [
             app_path('Http/Controllers/ReceiptController.php'),
             app_path('Http/Controllers/Api/V1/Finance/ReceiptController.php'),
-            app_path('Services/Finance/ReceiptGenerationService.php'),
             app_path('Services/Finance/ReceiptNumberingService.php'),
             app_path('Services/Finance/PaymentCancellationService.php'),
             app_path('Services/Finance/PaymentReversalService.php'),

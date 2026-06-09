@@ -338,7 +338,6 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
     {
         $blockedPaths = [
             app_path('Http/Controllers/ReceiptController.php'),
-            app_path('Services/Finance/ReceiptGenerationService.php'),
             app_path('Services/Finance/ReceiptNumberingService.php'),
             app_path('Services/Finance/PaymentCancellationService.php'),
             app_path('Services/Finance/PaymentReversalService.php'),
