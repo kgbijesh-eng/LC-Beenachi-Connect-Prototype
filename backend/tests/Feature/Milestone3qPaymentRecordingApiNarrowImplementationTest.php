@@ -28,7 +28,7 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
 
         $content = file_get_contents($path);
 
-        $this->assertStringContainsString('Milestone 3Q — Payment Recording API Narrow Implementation', $content);
+        $this->assertStringContainsString('Payment Recording API Narrow Implementation', $content);
         $this->assertStringContainsString('PaymentRecordingService', $content);
         $this->assertStringContainsString('POST /api/v1/clubs/{club}/members/{member}/payments', $content);
         $this->assertStringContainsString('No receipt generation', $content);
@@ -48,7 +48,9 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
             ->all();
 
         $this->assertSame([
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
             'POST api/v1/clubs/{club}/members/{member}/payments',
+            'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
         ], $paymentRoutes);
     }
 
@@ -330,7 +332,9 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
             ->all();
 
         $this->assertSame([
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
             'POST api/v1/clubs/{club}/members/{member}/payments',
+            'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
         ], $routes);
     }
 

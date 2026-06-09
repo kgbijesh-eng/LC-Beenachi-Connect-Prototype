@@ -31,7 +31,7 @@ class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends TestCa
 
         $content = file_get_contents($path);
 
-        $this->assertStringContainsString('Milestone 3V — Payment Receipt Generation Validation and Closure', $content);
+        $this->assertStringContainsString('Payment Receipt Generation Validation and Closure', $content);
         $this->assertStringContainsString('VALIDATION AND CLOSURE', $content);
         $this->assertStringContainsString('DOCS AND TESTS ONLY', $content);
         $this->assertStringContainsString('NO NEW IMPLEMENTATION IN 3V', $content);
@@ -208,13 +208,13 @@ class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends TestCa
             ->values()
             ->all();
 
-        $this->assertSame([], $routes);
+        $this->assertSame([
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+            'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+        ], $routes);
 
         $blockedPaths = [
             app_path('Services/Finance/ReceiptNumberingService.php'),
-            app_path('Http/Controllers/Api/V1/Finance/ReceiptController.php'),
-            app_path('Http/Requests/Finance/GenerateReceiptRequest.php'),
-            app_path('Http/Resources/Finance/ReceiptResource.php'),
             app_path('Services/Finance/ReceiptPdfService.php'),
             app_path('Services/Finance/PaymentCancellationService.php'),
             app_path('Services/Finance/PaymentReversalService.php'),

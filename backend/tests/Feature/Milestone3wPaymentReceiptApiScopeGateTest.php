@@ -110,9 +110,6 @@ class Milestone3wPaymentReceiptApiScopeGateTest extends TestCase
             $this->assertStringContainsString($needle, $document);
         }
 
-        $this->assertFileDoesNotExist(app_path("Http/Controllers/Api/V1/Finance/ReceiptController.php"));
-        $this->assertFileDoesNotExist(app_path("Http/Requests/Finance/GenerateReceiptRequest.php"));
-        $this->assertFileDoesNotExist(app_path("Http/Resources/Finance/ReceiptResource.php"));
     }
 
     public function test_scope_gate_allows_only_scope_document_and_scope_test(): void

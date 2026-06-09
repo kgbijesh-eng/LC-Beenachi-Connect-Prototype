@@ -251,7 +251,10 @@ class Milestone3eMemberLedgerBalanceReadApiNarrowImplementationTest extends Test
 
         $registeredUris = collect(Route::getRoutes())
             ->map(fn ($route) => $route->uri())
-            ->reject(fn (string $uri): bool => $uri === 'api/v1/clubs/{club}/members/{member}/payments') // authorized 3Q payment route
+            ->reject(fn (string $uri): bool => in_array($uri, [
+                'api/v1/clubs/{club}/members/{member}/payments',
+                'api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+            ], true)) // authorized 3Q payment route and 3Y receipt route
             ->values();
 
         foreach ($blockedRouteFragments as $fragment) {

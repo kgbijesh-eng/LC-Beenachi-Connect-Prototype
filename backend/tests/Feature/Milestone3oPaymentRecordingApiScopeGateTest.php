@@ -130,7 +130,9 @@ class Milestone3oPaymentRecordingApiScopeGateTest extends TestCase
             ->all();
 
         $this->assertSame([
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
             'POST api/v1/clubs/{club}/members/{member}/payments',
+            'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
         ], $paymentRoutes);
     }
 

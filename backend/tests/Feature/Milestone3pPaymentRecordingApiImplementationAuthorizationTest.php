@@ -166,7 +166,9 @@ class Milestone3pPaymentRecordingApiImplementationAuthorizationTest extends Test
             ->all();
 
         $this->assertSame([
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
             'POST api/v1/clubs/{club}/members/{member}/payments',
+            'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
         ], $paymentRoutes);
     }
 

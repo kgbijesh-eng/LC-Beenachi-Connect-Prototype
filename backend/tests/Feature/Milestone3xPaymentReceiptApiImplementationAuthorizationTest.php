@@ -124,9 +124,6 @@ class Milestone3xPaymentReceiptApiImplementationAuthorizationTest extends TestCa
             $this->assertStringContainsString($needle, $document);
         }
 
-        $this->assertFileDoesNotExist(app_path("Http/Controllers/Api/V1/Finance/ReceiptController.php"));
-        $this->assertFileDoesNotExist(app_path("Http/Requests/Finance/GenerateReceiptRequest.php"));
-        $this->assertFileDoesNotExist(app_path("Http/Resources/Finance/ReceiptResource.php"));
     }
 
     public function test_authorization_allows_only_3x_doc_and_test_files(): void
