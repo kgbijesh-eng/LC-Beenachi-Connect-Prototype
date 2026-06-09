@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Club\ClubController;
+use App\Http\Controllers\Api\V1\Finance\MemberFinanceSummaryController;
 use App\Http\Controllers\Api\V1\Finance\MemberLedgerBalanceController;
 use App\Http\Controllers\Api\V1\Finance\PaymentController;
 use App\Http\Controllers\Api\V1\Finance\PaymentReceiptPdfController;
@@ -28,10 +29,12 @@ Route::prefix('v1')->group(function (): void {
         Route::middleware('club.permission:club.view,club')->group(function (): void {
             Route::get('/clubs/{club}', [ClubController::class, 'show']);
             Route::get('/clubs/{club}/me', [ClubController::class, 'me']);
+            Route::get('/clubs/{club}/finance/member-summary', [MemberFinanceSummaryController::class, 'own']);
 
             Route::get('/clubs/{club}/members', [MemberController::class, 'index']);
             Route::get('/clubs/{club}/members/me/balance', [MemberLedgerBalanceController::class, 'own']);
             Route::get('/clubs/{club}/members/{member}/balance', [MemberLedgerBalanceController::class, 'show']);
+            Route::get('/clubs/{club}/members/{member}/finance-summary', [MemberFinanceSummaryController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/payments/{payment}/receipt', [ReceiptController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf', [PaymentReceiptPdfController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}', [MemberController::class, 'show']);

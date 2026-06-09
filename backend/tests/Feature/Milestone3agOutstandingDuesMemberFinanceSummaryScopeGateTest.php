@@ -154,7 +154,7 @@ class Milestone3agOutstandingDuesMemberFinanceSummaryScopeGateTest extends TestC
         }
     }
 
-    public function test_milestone_3ag_does_not_register_outstanding_dues_or_finance_summary_routes(): void
+    public function test_milestone_3ag_allows_3ai_finance_summary_routes_but_blocks_other_future_routes(): void
     {
         $routeUris = collect(Route::getRoutes())
             ->map(fn ($route) => $route->uri())
@@ -162,8 +162,6 @@ class Milestone3agOutstandingDuesMemberFinanceSummaryScopeGateTest extends TestC
 
         $blockedRouteFragments = [
             'outstanding-dues',
-            'finance-summary',
-            'member-finance-summary',
             'treasurer-finance',
             'secretary-finance',
             'president-finance',
@@ -182,12 +180,12 @@ class Milestone3agOutstandingDuesMemberFinanceSummaryScopeGateTest extends TestC
             $this->assertStringNotContainsString(
                 $fragment,
                 $routeUris,
-                "3AG must not register route fragment: {$fragment}"
+                "3AG must not register non-3AI route fragment: {$fragment}"
             );
         }
     }
 
-    public function test_milestone_3ag_does_not_add_future_finance_implementation_files(): void
+    public function test_milestone_3ag_allows_3ai_finance_summary_files_but_blocks_other_future_files(): void
     {
         $appFilenames = collect(File::allFiles(base_path('app')))
             ->map(fn ($file) => $file->getFilename())
@@ -196,13 +194,11 @@ class Milestone3agOutstandingDuesMemberFinanceSummaryScopeGateTest extends TestC
         $blockedFilenames = [
             'OutstandingDuesController.php',
             'FinanceSummaryController.php',
-            'MemberFinanceSummaryController.php',
             'TreasurerFinanceController.php',
             'SecretaryFinanceController.php',
             'PresidentFinanceController.php',
             'OutstandingDuesService.php',
             'FinanceSummaryService.php',
-            'MemberFinanceSummaryService.php',
             'SpecialCollectionController.php',
             'SpecialCollectionService.php',
             'FellowshipPaymentAllocationController.php',
@@ -225,7 +221,7 @@ class Milestone3agOutstandingDuesMemberFinanceSummaryScopeGateTest extends TestC
             $this->assertNotContains(
                 $filename,
                 $appFilenames,
-                "3AG must not add implementation file: {$filename}"
+                "3AG must not add non-3AI implementation file: {$filename}"
             );
         }
     }

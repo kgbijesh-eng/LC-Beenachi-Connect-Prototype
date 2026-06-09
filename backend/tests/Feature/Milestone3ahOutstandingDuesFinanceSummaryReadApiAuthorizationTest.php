@@ -130,31 +130,28 @@ class Milestone3ahOutstandingDuesFinanceSummaryReadApiAuthorizationTest extends 
         }
     }
 
-    public function test_milestone_3ah_does_not_register_future_finance_summary_routes_yet(): void
+    public function test_milestone_3ah_allows_only_exact_3ai_finance_summary_routes_after_implementation(): void
     {
         $routeUris = collect(Route::getRoutes())
             ->map(fn ($route) => $route->uri())
             ->implode("\n");
 
-        foreach (['finance/member-summary', 'finance-summary', 'member-finance-summary', 'outstanding-dues'] as $fragment) {
+        foreach (['member-finance-summary', 'outstanding-dues'] as $fragment) {
             $this->assertStringNotContainsString(
                 $fragment,
                 $routeUris,
-                "3AH must not register future route fragment yet: {$fragment}"
+                "3AH must not register non-3AI future route fragment: {$fragment}"
             );
         }
     }
 
-    public function test_milestone_3ah_does_not_add_future_api_implementation_files(): void
+    public function test_milestone_3ah_allows_exact_3ai_api_implementation_files_and_blocks_other_future_files(): void
     {
         $appFilenames = collect(File::allFiles(base_path('app')))
             ->map(fn ($file) => $file->getFilename())
             ->all();
 
         foreach ([
-            'MemberFinanceSummaryController.php',
-            'MemberFinanceSummaryService.php',
-            'MemberFinanceSummaryResource.php',
             'MemberFinanceSummaryRequest.php',
             'OutstandingDuesController.php',
             'OutstandingDuesService.php',
@@ -164,7 +161,7 @@ class Milestone3ahOutstandingDuesFinanceSummaryReadApiAuthorizationTest extends 
             $this->assertNotContains(
                 $filename,
                 $appFilenames,
-                "3AH must not add implementation file yet: {$filename}"
+                "3AH must not add non-3AI implementation file: {$filename}"
             );
         }
     }

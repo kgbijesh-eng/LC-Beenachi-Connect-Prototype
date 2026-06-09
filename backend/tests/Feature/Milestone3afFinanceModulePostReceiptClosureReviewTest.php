@@ -105,7 +105,7 @@ class Milestone3afFinanceModulePostReceiptClosureReviewTest extends TestCase
         $this->assertStringContainsString('what remains blocked', $contents);
     }
 
-    public function test_milestone_3af_does_not_register_future_finance_feature_routes(): void
+    public function test_milestone_3af_allows_3ai_finance_summary_route_but_blocks_other_future_finance_feature_routes(): void
     {
         $routeUris = collect(Route::getRoutes())
             ->map(fn ($route) => $route->uri())
@@ -113,7 +113,6 @@ class Milestone3afFinanceModulePostReceiptClosureReviewTest extends TestCase
 
         $blockedRouteFragments = [
             'outstanding-dues',
-            'finance-summary',
             'payment-corrections',
             'payment-reversals',
             'payment-cancellations',
@@ -129,12 +128,12 @@ class Milestone3afFinanceModulePostReceiptClosureReviewTest extends TestCase
             $this->assertStringNotContainsString(
                 $fragment,
                 $routeUris,
-                "3AF must not register future finance route fragment: {$fragment}"
+                "3AF must not register non-3AI future finance route fragment: {$fragment}"
             );
         }
     }
 
-    public function test_milestone_3af_does_not_add_future_feature_implementation_files(): void
+    public function test_milestone_3af_allows_3ai_finance_summary_files_but_blocks_other_future_feature_implementation_files(): void
     {
         $appFilenames = collect(File::allFiles(base_path('app')))
             ->map(fn ($file) => $file->getFilename())
@@ -143,7 +142,6 @@ class Milestone3afFinanceModulePostReceiptClosureReviewTest extends TestCase
         $blockedFilenames = [
             'OutstandingDuesController.php',
             'FinanceSummaryController.php',
-            'MemberFinanceSummaryController.php',
             'TreasurerFinanceViewController.php',
             'SpecialCollectionController.php',
             'FellowshipPaymentAllocationController.php',
@@ -165,7 +163,7 @@ class Milestone3afFinanceModulePostReceiptClosureReviewTest extends TestCase
             $this->assertNotContains(
                 $filename,
                 $appFilenames,
-                "3AF must not add future finance implementation file: {$filename}"
+                "3AF must not add non-3AI future finance implementation file: {$filename}"
             );
         }
     }
