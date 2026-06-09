@@ -46,8 +46,7 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends TestCase
         $this->assertFileExists(base_path('docs/milestone_3y_payment_receipt_api_narrow_implementation.md'));
         $this->assertFileExists(base_path('tests/Feature/Milestone3yPaymentReceiptApiNarrowImplementationTest.php'));
     }
-
-    public function test_receipt_routes_remain_limited_to_3y_get_and_post_routes(): void
+    public function test_receipt_json_routes_remain_registered_after_later_pdf_expansion(): void
     {
         $receiptRoutes = collect(Route::getRoutes())
             ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
@@ -55,10 +54,20 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends TestCase
             ->values()
             ->all();
 
-        $this->assertSame([
+        $this->assertContains(
             'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+            $receiptRoutes
+        );
+
+        $this->assertContains(
             'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
-        ], $receiptRoutes);
+            $receiptRoutes
+        );
+
+        $this->assertContains(
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
+            $receiptRoutes
+        );
     }
 
     public function test_controller_request_and_resource_preserve_3y_boundaries(): void

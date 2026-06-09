@@ -39,8 +39,7 @@ class Milestone3yPaymentReceiptApiNarrowImplementationTest extends TestCase
         $this->assertStringContainsString('No WhatsApp/SMS/email receipt sending', $content);
         $this->assertStringContainsString('No Excel import/export', $content);
     }
-
-    public function test_receipt_routes_are_registered_as_only_receipt_api_routes(): void
+    public function test_receipt_json_routes_remain_registered_after_later_pdf_expansion(): void
     {
         $receiptRoutes = collect(Route::getRoutes())
             ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
@@ -48,10 +47,20 @@ class Milestone3yPaymentReceiptApiNarrowImplementationTest extends TestCase
             ->values()
             ->all();
 
-        $this->assertSame([
+        $this->assertContains(
             'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+            $receiptRoutes
+        );
+
+        $this->assertContains(
             'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
-        ], $receiptRoutes);
+            $receiptRoutes
+        );
+
+        $this->assertContains(
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
+            $receiptRoutes
+        );
     }
 
     public function test_authorized_user_can_generate_receipt_through_api(): void

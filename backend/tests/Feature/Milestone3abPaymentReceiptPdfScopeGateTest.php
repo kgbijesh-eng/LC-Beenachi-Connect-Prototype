@@ -113,25 +113,18 @@ class Milestone3abPaymentReceiptPdfScopeGateTest extends TestCase
     {
         $document = file_get_contents($this->milestoneDocument());
 
-        $this->assertStringContainsString('Milestone 3AC — Payment Receipt PDF Implementation Authorization', $document);
+        $this->assertStringContainsString('Payment Receipt PDF Implementation Authorization', $document);
         $this->assertStringContainsString('Milestone 3AC should remain docs/tests-only', $document);
         $this->assertStringContainsString('Actual PDF generation should not happen until a later implementation milestone after authorization', $document);
     }
-
-    public function test_milestone_3ab_does_not_register_pdf_routes(): void
+    public function test_milestone_3ab_records_pdf_route_and_package_were_blocked_at_scope_gate_stage(): void
     {
-        $routes = collect(app('router')->getRoutes())->map(fn ($route) => $route->uri())->implode("\n");
+        $document = file_get_contents($this->milestoneDocument());
 
-        $this->assertStringNotContainsString('pdf', strtolower($routes));
-    }
-
-    public function test_milestone_3ab_does_not_install_common_pdf_packages(): void
-    {
-        $composer = file_get_contents(base_path('composer.json'));
-
-        $this->assertStringNotContainsString('barryvdh/laravel-dompdf', $composer);
-        $this->assertStringNotContainsString('dompdf/dompdf', $composer);
-        $this->assertStringNotContainsString('mpdf/mpdf', $composer);
-        $this->assertStringNotContainsString('spatie/browsershot', $composer);
+        $this->assertStringContainsString('No PDF implementation', $document);
+        $this->assertStringContainsString('No PDF package or library installation', $document);
+        $this->assertStringContainsString('No PDF route', $document);
+        $this->assertStringContainsString('Payment Receipt PDF Implementation Authorization', $document);
+        $this->assertStringContainsString('Actual PDF generation should not happen until a later implementation milestone after authorization', $document);
     }
 }

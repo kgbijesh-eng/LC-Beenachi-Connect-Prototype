@@ -245,6 +245,7 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends TestCa
 
         $this->assertSame([
             'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
             'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
         ], $routes);
 

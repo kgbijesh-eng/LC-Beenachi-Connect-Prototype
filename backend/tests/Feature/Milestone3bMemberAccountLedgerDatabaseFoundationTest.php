@@ -173,7 +173,8 @@ class Milestone3bMemberAccountLedgerDatabaseFoundationTest extends TestCase
             ->reject(fn (string $uri): bool => in_array($uri, [
                 'api/v1/clubs/{club}/members/{member}/payments',
                 'api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
-            ], true)) // authorized 3Q payment route and 3Y receipt route
+                'api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
+            ], true)) // authorized 3Q payment route, 3Y receipt route, and 3AD PDF route
             ->values();
 
         foreach ($blockedRouteFragments as $fragment) {

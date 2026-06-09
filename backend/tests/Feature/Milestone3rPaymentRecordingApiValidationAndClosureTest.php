@@ -56,6 +56,7 @@ class Milestone3rPaymentRecordingApiValidationAndClosureTest extends TestCase
 
         $this->assertSame([
             'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
             'POST api/v1/clubs/{club}/members/{member}/payments',
             'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
         ], $paymentRoutes);
@@ -372,6 +373,7 @@ class Milestone3rPaymentRecordingApiValidationAndClosureTest extends TestCase
 
         $this->assertSame([
             'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
             'POST api/v1/clubs/{club}/members/{member}/payments',
             'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
         ], $routes);

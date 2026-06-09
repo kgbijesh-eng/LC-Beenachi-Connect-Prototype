@@ -30,19 +30,17 @@ class Milestone3acPaymentReceiptPdfImplementationAuthorizationTest extends TestC
     {
         $document = file_get_contents($this->milestoneDocument());
 
-        $this->assertStringContainsString('Milestone 3AD — Payment Receipt PDF Narrow Implementation', $document);
+        $this->assertStringContainsString('Payment Receipt PDF Narrow Implementation', $document);
         $this->assertStringContainsString('may implement backend-only receipt PDF generation and download behavior', $document);
         $this->assertStringContainsString('Milestone 3AC itself remains docs/tests-only', $document);
     }
-
-    public function test_milestone_3ac_defines_package_authorization_without_installing_it(): void
+    public function test_milestone_3ac_defines_package_authorization_without_installing_it_in_3ac(): void
     {
         $document = file_get_contents($this->milestoneDocument());
-        $composer = file_get_contents(base_path('composer.json'));
 
         $this->assertStringContainsString('Install and use `barryvdh/laravel-dompdf`', $document);
         $this->assertStringContainsString('Milestone 3AC does not install the package', $document);
-        $this->assertStringNotContainsString('barryvdh/laravel-dompdf', $composer);
+        $this->assertStringContainsString('Milestone 3AD may choose one approved PDF rendering approach', $document);
     }
 
     public function test_milestone_3ac_defines_future_file_boundary(): void
@@ -125,18 +123,22 @@ class Milestone3acPaymentReceiptPdfImplementationAuthorizationTest extends TestC
         $this->assertStringContainsString('No reports', $document);
         $this->assertStringContainsString('No Excel import', $document);
     }
-
-    public function test_milestone_3ac_does_not_register_pdf_routes_now(): void
+    public function test_milestone_3ac_records_route_authorization_without_implementing_route_in_3ac(): void
     {
-        $routes = collect(app('router')->getRoutes())->map(fn ($route) => $route->uri())->implode("\n");
+        $document = file_get_contents($this->milestoneDocument());
 
-        $this->assertStringNotContainsString('receipt/pdf', strtolower($routes));
+        $this->assertStringContainsString('GET /api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf', $document);
+        $this->assertStringContainsString('Milestone 3AC itself remains docs/tests-only', $document);
+        $this->assertStringContainsString('No PDF route', $document);
     }
-
-    public function test_milestone_3ac_does_not_add_pdf_files_now(): void
+    public function test_milestone_3ac_records_future_pdf_files_without_adding_them_in_3ac(): void
     {
-        $this->assertFileDoesNotExist(base_path('resources/views/pdf/receipt.blade.php'));
-        $this->assertFileDoesNotExist(base_path('app/Services/Finance/PaymentReceiptPdfService.php'));
-        $this->assertFileDoesNotExist(base_path('app/Http/Controllers/Api/V1/Finance/PaymentReceiptPdfController.php'));
+        $document = file_get_contents($this->milestoneDocument());
+
+        $this->assertStringContainsString('receipt PDF controller', $document);
+        $this->assertStringContainsString('receipt PDF service', $document);
+        $this->assertStringContainsString('receipt PDF Blade template', $document);
+        $this->assertStringContainsString('No PDF implementation', $document);
+        $this->assertStringContainsString('No PDF template', $document);
     }
 }
