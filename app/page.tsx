@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 type FinanceSummaryStatus = "loading" | "ready" | "error";
+type ReceiptLookupStatus = "initializing" | "ready" | "loading" | "success" | "error";
 
 type MemberFinancePendingItem = {
   source_type: string;
@@ -73,6 +74,21 @@ type PaymentRecordingApiPayment = {
   notes: string | null;
   status: string;
   ledger_entry_id: number | null;
+};
+
+type ReceiptApiReceipt = {
+  receipt_id: number;
+  receipt_number: string;
+  club_id: number;
+  member_id: number | null;
+  member_name: string | null;
+  payment_id: number;
+  amount: string | null;
+  payment_date: string | null;
+  payment_method: string | null;
+  receipt_status: string;
+  generated_at: string | null;
+  generated_by: number | null;
 };
 
 type ApiErrorPayload = {
@@ -1261,7 +1277,7 @@ export default function Prototype() {
         {screen === "special-collection" && <SpecialCollection setScreen={setScreen} />}
         {screen === "record-member-payment" && <RecordMemberPayment role={role} />}
         {screen === "collection-box" && <CollectionBoxReceipt role={role} />}
-        {screen === "receipt-list" && <ReceiptList />}
+        {screen === "receipt-list" && <ReceiptList role={role} />}
         {screen === "payment-history" && <PaymentHistory />}
         {screen === "outstanding-dues" && <OutstandingDues setScreen={setScreen} />}
         {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
@@ -4187,12 +4203,12 @@ function PaymentsReceiptsHub({ setScreen }: { setScreen: (screen: Screen) => voi
   return (
     <section className="stack">
       <Toolbar title="Payments / Receipts" actionLabel="Choose finance workflow" />
-      <div className="notice">Record Member Payment uses the backend payment API. Receipt list, club income receipt, and transaction history remain prototype-only in this milestone.</div>
+      <div className="notice">Record Member Payment uses the backend payment API. Receipt List now reads already issued member payment receipts and downloads receipt PDFs through existing backend APIs only.</div>
       <div className="actionGrid">
         <Action title="Record Member Payment" body="Record a member payment through the existing backend API without generating a receipt." onClick={() => setScreen("record-member-payment")} />
         <Action title="Record Club Income / Donation" body="Record collection box, donation, or other club income without changing member dues." onClick={() => setScreen("collection-box")} />
-        <Action title="Receipt List" body="View dummy receipt rows." onClick={() => setScreen("receipt-list")} />
-        <Action title="Transaction History" body="View member payments, club income receipts, and finance movement history." onClick={() => setScreen("payment-history")} />
+        <Action title="Receipt List" body="View an already issued member payment receipt and download its PDF using existing backend APIs." onClick={() => setScreen("receipt-list")} />
+        <Action title="Transaction History" body="Prototype-only finance movement history. Full payment history remains out of this milestone." onClick={() => setScreen("payment-history")} />
       </div>
     </section>
   );
@@ -4646,28 +4662,319 @@ function CollectionBoxReceipt({ role }: { role: Role }) {
   );
 }
 
-function ReceiptList() {
-  const receipts = [
-    { receiptNo: "RCP-001", partyLabel: "Name", party: "Lion Ajith Kumar", type: "Member dues", amount: money(1000), mode: "UPI" },
-    { receiptNo: voluntaryContribution.voucher, partyLabel: "Source", party: "Collection Box", type: "Club income / donation", amount: money(voluntaryContribution.amount), mode: voluntaryContribution.mode },
-    { receiptNo: "RCP-044", partyLabel: "Name", party: "Lion Bijesh", type: "Monthly dues", amount: money(500), mode: "Bank" }
-  ];
+function ReceiptList({ role }: { role: Role }) {
+  const canUsePstReceiptAccess = role === "president" || role === "secretary" || role === "treasurer";
+  const [status, setStatus] = useState<ReceiptLookupStatus>("initializing");
+  const [message, setMessage] = useState("Loading receipt access context...");
+  const [receiptToken, setReceiptToken] = useState<string | null>(null);
+  const [receiptClubId, setReceiptClubId] = useState<number | null>(null);
+  const [receiptMembers, setReceiptMembers] = useState<BackendMemberRecord[]>([]);
+  const [selectedReceiptMemberId, setSelectedReceiptMemberId] = useState<number | null>(null);
+  const [receiptPaymentId, setReceiptPaymentId] = useState("");
+  const [receipt, setReceipt] = useState<ReceiptApiReceipt | null>(null);
+
+  const selectedReceiptMember = receiptMembers.find((member) => member.id === selectedReceiptMemberId) ?? null;
+  const canLookupReceipt = Boolean(receiptToken && receiptClubId && selectedReceiptMemberId && receiptPaymentId.trim()) && status !== "initializing" && status !== "loading";
+
+  async function receiptResponseMessage(response: Response, fallback: string) {
+    try {
+      const payload = await response.json() as ApiErrorPayload;
+      return payload.message ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadReceiptContext() {
+      setStatus("initializing");
+      setMessage("Loading receipt access context...");
+      setReceipt(null);
+
+      try {
+        const login = canUsePstReceiptAccess
+          ? LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">]
+          : LOCAL_MEMBER_FINANCE_LOGIN;
+
+        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(login)
+        });
+
+        if (!loginResponse.ok) {
+          throw new Error("Receipt role login failed");
+        }
+
+        const loginPayload = await loginResponse.json();
+        const token = loginPayload.token as string | undefined;
+
+        if (!token) {
+          throw new Error("Receipt token missing");
+        }
+
+        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!meResponse.ok) {
+          throw new Error("Receipt club lookup failed");
+        }
+
+        const mePayload = await meResponse.json();
+        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
+        const loadedClubId = memberships?.[0]?.club?.id;
+
+        if (typeof loadedClubId !== "number") {
+          throw new Error("Receipt club missing");
+        }
+
+        if (canUsePstReceiptAccess) {
+          const membersResponse = await fetch(API_BASE_URL + "/clubs/" + loadedClubId + "/members", {
+            headers: {
+              Accept: "application/json",
+              Authorization: "Bearer " + token
+            }
+          });
+
+          if (!membersResponse.ok) {
+            throw new Error("Member list unavailable for receipt lookup");
+          }
+
+          const membersPayload = await membersResponse.json();
+          const activeMembers = ((membersPayload.members as BackendMemberRecord[] | undefined) ?? [])
+            .filter((member) => member.status === "active");
+
+          if (!activeMembers.length) {
+            throw new Error("No active members available for receipt lookup");
+          }
+
+          if (!cancelled) {
+            setReceiptToken(token);
+            setReceiptClubId(loadedClubId);
+            setReceiptMembers(activeMembers);
+            setSelectedReceiptMemberId(activeMembers[0].id);
+            setStatus("ready");
+            setMessage("Select a member and enter an issued payment ID to view receipt details.");
+          }
+
+          return;
+        }
+
+        const summaryResponse = await fetch(
+          API_BASE_URL + "/clubs/" + loadedClubId + "/finance/member-summary?include_pending_items=false&include_last_payment=true&include_receipt_status=true",
+          {
+            headers: {
+              Accept: "application/json",
+              Authorization: "Bearer " + token
+            }
+          }
+        );
+
+        if (!summaryResponse.ok) {
+          throw new Error("Own finance summary unavailable for receipt lookup");
+        }
+
+        const summaryPayload = await summaryResponse.json();
+        const financeSummary = summaryPayload.finance_summary as MemberFinanceSummary | undefined;
+
+        if (!financeSummary) {
+          throw new Error("Own finance summary missing for receipt lookup");
+        }
+
+        if (!cancelled) {
+          setReceiptToken(token);
+          setReceiptClubId(loadedClubId);
+          setReceiptMembers([{
+            id: financeSummary.member_id,
+            club_id: loadedClubId,
+            member_code: financeSummary.member_code,
+            full_name: financeSummary.member_name,
+            status: "active"
+          }]);
+          setSelectedReceiptMemberId(financeSummary.member_id);
+          setStatus("ready");
+          setMessage("Enter your issued payment ID to view your receipt. Other members' receipts are not shown.");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setReceiptToken(null);
+          setReceiptClubId(null);
+          setReceiptMembers([]);
+          setSelectedReceiptMemberId(null);
+          setReceipt(null);
+          setStatus("error");
+          setMessage(error instanceof Error ? error.message : "Receipt access context unavailable.");
+        }
+      }
+    }
+
+    loadReceiptContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canUsePstReceiptAccess, role]);
+
+  async function loadIssuedReceipt() {
+    if (!receiptToken || !receiptClubId || !selectedReceiptMemberId || !receiptPaymentId.trim()) {
+      return;
+    }
+
+    setStatus("loading");
+    setReceipt(null);
+    setMessage("Loading issued receipt...");
+
+    const response = await fetch(
+      API_BASE_URL + "/clubs/" + receiptClubId + "/members/" + selectedReceiptMemberId + "/payments/" + receiptPaymentId.trim() + "/receipt",
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer " + receiptToken
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const failureMessage = await receiptResponseMessage(response, "Issued receipt unavailable.");
+      setStatus("error");
+      setMessage(failureMessage);
+      return;
+    }
+
+    const payload = await response.json();
+    const loadedReceipt = payload.receipt as ReceiptApiReceipt | undefined;
+
+    if (!loadedReceipt) {
+      setStatus("error");
+      setMessage("Receipt response missing.");
+      return;
+    }
+
+    setReceipt(loadedReceipt);
+    setStatus("success");
+    setMessage("Issued receipt loaded from existing backend receipt API.");
+  }
+
+  async function downloadIssuedReceiptPdf() {
+    if (!receiptToken || !receiptClubId || !selectedReceiptMemberId || !receipt) {
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("Preparing receipt PDF download...");
+
+    const response = await fetch(
+      API_BASE_URL + "/clubs/" + receiptClubId + "/members/" + selectedReceiptMemberId + "/payments/" + receipt.payment_id + "/receipt/pdf",
+      {
+        headers: {
+          Accept: "application/pdf",
+          Authorization: "Bearer " + receiptToken
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const failureMessage = await receiptResponseMessage(response, "Receipt PDF unavailable.");
+      setStatus("error");
+      setMessage(failureMessage);
+      return;
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+
+    anchor.href = downloadUrl;
+    anchor.download = receipt.receipt_number + ".pdf";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(downloadUrl);
+
+    setStatus("success");
+    setMessage("Receipt PDF download started.");
+  }
 
   return (
     <section className="stack">
-      <Toolbar title="Receipt List" actionLabel="Dummy receipts" />
-      <div className="notice">Record Member Payment uses the backend payment API. Receipt list, club income receipt, and transaction history remain prototype-only in this milestone.</div>
-      <div className="financeCardList">
-        {receipts.map((receipt) => (
-          <article className="financeStackCard" key={receipt.receiptNo}>
-            <h3>Receipt No: {receipt.receiptNo}</h3>
-            <span>{receipt.partyLabel}: {receipt.party}</span>
-            <span>Receipt Type: {receipt.type}</span>
-            <span>Amount: {receipt.amount}</span>
-            <span>Mode: {receipt.mode}</span>
-          </article>
-        ))}
-      </div>
+      <Toolbar title="Receipt List" actionLabel="Existing issued receipts" />
+      <div className="notice">This screen uses only existing receipt view and PDF download APIs. It does not generate receipts, change payments, or show payment history.</div>
+
+      {status === "initializing" && (
+        <div className="notice memberHelperText">Loading receipt access context...</div>
+      )}
+
+      {status !== "initializing" && (
+        <div className="formPanel">
+          <div className="fieldGrid">
+            {canUsePstReceiptAccess ? (
+              <label>
+                Member
+                <select
+                  value={selectedReceiptMemberId ?? ""}
+                  onChange={(event) => {
+                    setSelectedReceiptMemberId(Number(event.target.value));
+                    setReceipt(null);
+                    setStatus("ready");
+                    setMessage("Enter an issued payment ID to view receipt details.");
+                  }}
+                >
+                  {receiptMembers.map((member) => (
+                    <option key={member.id} value={member.id}>{member.full_name} ({member.member_code})</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <label>
+                Member
+                <input value={selectedReceiptMember ? selectedReceiptMember.full_name : "Own member record"} readOnly />
+              </label>
+            )}
+
+            <label>
+              Issued Payment ID
+              <input
+                value={receiptPaymentId}
+                onChange={(event) => {
+                  setReceiptPaymentId(event.target.value);
+                  setReceipt(null);
+                  setStatus("ready");
+                  setMessage(canUsePstReceiptAccess ? "Enter an issued payment ID to view receipt details." : "Enter your issued payment ID to view your receipt.");
+                }}
+                placeholder="Example: 1"
+              />
+            </label>
+          </div>
+
+          <div className="buttonRow">
+            <button disabled={!canLookupReceipt} onClick={loadIssuedReceipt}>View Issued Receipt</button>
+          </div>
+        </div>
+      )}
+
+      {message && <div className="notice memberHelperText">{message}</div>}
+
+      {receipt && (
+        <article className="financeStackCard">
+          <h3>Receipt No: {receipt.receipt_number}</h3>
+          <span>Member: {receipt.member_name ?? selectedReceiptMember?.full_name ?? "Member"}</span>
+          <span>Payment ID: {receipt.payment_id}</span>
+          <span>Amount: {financeApiAmountText(receipt.amount) ?? "Amount unavailable"}</span>
+          <span>Payment Date: {receipt.payment_date ?? "Date unavailable"}</span>
+          <span>Payment Mode: {receipt.payment_method ?? "Mode unavailable"}</span>
+          <span>Status: {receipt.receipt_status}</span>
+          <button className="filterButton compactActionButton" onClick={downloadIssuedReceiptPdf} disabled={status === "loading"}>Download Receipt PDF</button>
+        </article>
+      )}
     </section>
   );
 }
