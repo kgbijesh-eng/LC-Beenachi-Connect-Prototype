@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 type FinanceSummaryStatus = "loading" | "ready" | "error";
@@ -32,6 +32,85 @@ const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
 const LOCAL_MEMBER_FINANCE_LOGIN = {
   email: "local.member@lcbeenachi.test",
   password: "password"
+};
+
+type PaymentRecordingStatus = "initializing" | "ready" | "submitting" | "success" | "error";
+type PaymentRecordingMode = "cash" | "bank_transfer" | "upi" | "cheque" | "card" | "adjustment";
+
+type PaymentRecordingLogin = {
+  email: string;
+  password: string;
+};
+
+type BackendClubMembership = {
+  club?: {
+    id?: number;
+  };
+};
+
+type BackendMemberRecord = {
+  id: number;
+  club_id: number;
+  member_code: string;
+  full_name: string;
+  status: string;
+};
+
+type PaymentRecordingFormState = {
+  amount: string;
+  payment_date: string;
+  payment_mode: PaymentRecordingMode;
+  reference_number: string;
+  notes: string;
+};
+
+type PaymentRecordingApiPayment = {
+  id: number;
+  amount: string;
+  payment_date: string | null;
+  payment_mode: string;
+  reference_number: string | null;
+  notes: string | null;
+  status: string;
+  ledger_entry_id: number | null;
+};
+
+type ApiErrorPayload = {
+  message?: string;
+  errors?: Record<string, string[]>;
+};
+
+const LOCAL_PAYMENT_RECORDING_LOGINS: Record<Exclude<Role, "member">, PaymentRecordingLogin> = {
+  president: {
+    email: "president@lcbeenachi.test",
+    password: "password"
+  },
+  secretary: {
+    email: "secretary@lcbeenachi.test",
+    password: "password"
+  },
+  treasurer: {
+    email: "treasurer@lcbeenachi.test",
+    password: "password"
+  }
+};
+
+const PAYMENT_RECORDING_MODES: PaymentRecordingMode[] = [
+  "cash",
+  "bank_transfer",
+  "upi",
+  "cheque",
+  "card",
+  "adjustment"
+];
+
+const PAYMENT_RECORDING_MODE_LABELS: Record<PaymentRecordingMode, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank transfer",
+  upi: "UPI",
+  cheque: "Cheque",
+  card: "Card",
+  adjustment: "Adjustment"
 };
 type Screen =
   | "login"
@@ -787,6 +866,7 @@ const navByRole: Record<Role, NavGroup[]> = {
     { title: "My Member Area", items: myMemberAreaItems },
     { title: "People", items: peopleMenuItems },
     { title: "Operations", items: operationsMenuItems },
+    { title: "Finance", items: financeMenuItems },
     { title: "Reports & Tools", items: [
       ...reportMenuItems,
       { label: "Notifications & Reminders", screen: "notifications-reminders" },
@@ -4107,9 +4187,9 @@ function PaymentsReceiptsHub({ setScreen }: { setScreen: (screen: Screen) => voi
   return (
     <section className="stack">
       <Toolbar title="Payments / Receipts" actionLabel="Choose finance workflow" />
-      <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
+      <div className="notice">Record Member Payment uses the backend payment API. Receipt list, club income receipt, and transaction history remain prototype-only in this milestone.</div>
       <div className="actionGrid">
-        <Action title="Record Member Payment" body="Clear member dues and preview a dummy receipt." onClick={() => setScreen("record-member-payment")} />
+        <Action title="Record Member Payment" body="Record a member payment through the existing backend API without generating a receipt." onClick={() => setScreen("record-member-payment")} />
         <Action title="Record Club Income / Donation" body="Record collection box, donation, or other club income without changing member dues." onClick={() => setScreen("collection-box")} />
         <Action title="Receipt List" body="View dummy receipt rows." onClick={() => setScreen("receipt-list")} />
         <Action title="Transaction History" body="View member payments, club income receipts, and finance movement history." onClick={() => setScreen("payment-history")} />
@@ -4119,58 +4199,408 @@ function PaymentsReceiptsHub({ setScreen }: { setScreen: (screen: Screen) => voi
 }
 
 function RecordMemberPayment({ role }: { role: Role }) {
-  const canEdit = role === "president" || role === "treasurer";
-  const selectedMember = members[3];
-  const selectedDues = outstandingDues.filter((due) => due.member === selectedMember.name);
-  const outstandingBefore = selectedDues.reduce((sum, due) => sum + due.amount, 0);
-  const paymentAmount = selectedDues.filter((due) => due.selected).reduce((sum, due) => sum + due.amount, 0);
-  const outstandingAfter = outstandingBefore - paymentAmount;
-  const selectedDueItems = selectedDues.filter((due) => due.selected);
+  const canRecordPayment = role === "president" || role === "secretary" || role === "treasurer";
+  const [paymentStatus, setPaymentStatus] = useState<PaymentRecordingStatus>(canRecordPayment ? "initializing" : "ready");
+  const [apiMessage, setApiMessage] = useState(
+    canRecordPayment
+      ? "Loading authorized payment context..."
+      : "Payment recording is restricted to authorized PST finance roles."
+  );
+  const [paymentToken, setPaymentToken] = useState<string | null>(null);
+  const [paymentClubId, setPaymentClubId] = useState<number | null>(null);
+  const [backendMembers, setBackendMembers] = useState<BackendMemberRecord[]>([]);
+  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
+  const [summaryStatus, setSummaryStatus] = useState<FinanceSummaryStatus>("loading");
+  const [selectedSummary, setSelectedSummary] = useState<MemberFinanceSummary | null>(null);
+  const [recordedPayment, setRecordedPayment] = useState<PaymentRecordingApiPayment | null>(null);
+  const [paymentForm, setPaymentForm] = useState<PaymentRecordingFormState>({
+    amount: "1000",
+    payment_date: new Date().toISOString().slice(0, 10),
+    payment_mode: "upi",
+    reference_number: "",
+    notes: "Payment recorded from LC Beenachi Connect frontend."
+  });
+
+  const selectedMember = backendMembers.find((member) => member.id === selectedMemberId) ?? null;
+  const isBusy = paymentStatus === "initializing" || paymentStatus === "submitting";
+
+  function apiErrorMessage(payload: ApiErrorPayload | null, fallback: string) {
+    if (!payload) return fallback;
+
+    if (payload.message) {
+      return payload.message;
+    }
+
+    if (payload.errors) {
+      const messages = Object.values(payload.errors).flat();
+      if (messages.length) {
+        return messages.join(" ");
+      }
+    }
+
+    return fallback;
+  }
+
+  async function fetchSelectedMemberFinanceSummary(currentToken: string, currentClubId: number, memberId: number) {
+    const response = await fetch(
+      API_BASE_URL + "/clubs/" + currentClubId + "/members/" + memberId + "/finance-summary?include_pending_items=true&include_last_payment=true&include_receipt_status=true",
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer " + currentToken
+        }
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Selected member finance summary unavailable");
+    }
+
+    const payload = await response.json();
+    const financeSummary = payload.finance_summary as MemberFinanceSummary | undefined;
+
+    if (!financeSummary) {
+      throw new Error("Selected member finance summary missing");
+    }
+
+    return financeSummary;
+  }
+
+  async function loadSelectedMemberSummary(memberId: number) {
+    if (!paymentToken || !paymentClubId) {
+      return;
+    }
+
+    setSummaryStatus("loading");
+
+    try {
+      const financeSummary = await fetchSelectedMemberFinanceSummary(paymentToken, paymentClubId, memberId);
+      setSelectedSummary(financeSummary);
+      setSummaryStatus("ready");
+    } catch {
+      setSelectedSummary(null);
+      setSummaryStatus("error");
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPaymentContext() {
+      if (!canRecordPayment) {
+        setPaymentStatus("ready");
+        setApiMessage("Payment recording is restricted to authorized PST finance roles.");
+        return;
+      }
+
+      setPaymentStatus("initializing");
+      setApiMessage("Loading authorized payment context...");
+      setRecordedPayment(null);
+
+      try {
+        const login = LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
+
+        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(login)
+        });
+
+        if (!loginResponse.ok) {
+          throw new Error("Payment role login failed");
+        }
+
+        const loginPayload = await loginResponse.json();
+        const token = loginPayload.token as string | undefined;
+
+        if (!token) {
+          throw new Error("Payment token missing");
+        }
+
+        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!meResponse.ok) {
+          throw new Error("Payment club lookup failed");
+        }
+
+        const mePayload = await meResponse.json();
+        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
+        const loadedClubId = memberships?.[0]?.club?.id;
+
+        if (typeof loadedClubId !== "number") {
+          throw new Error("Payment club missing");
+        }
+
+        const membersResponse = await fetch(API_BASE_URL + "/clubs/" + loadedClubId + "/members", {
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!membersResponse.ok) {
+          throw new Error("Member list unavailable");
+        }
+
+        const membersPayload = await membersResponse.json();
+        const activeMembers = ((membersPayload.members as BackendMemberRecord[] | undefined) ?? [])
+          .filter((member) => member.status === "active");
+
+        if (!activeMembers.length) {
+          throw new Error("No active members available for payment recording");
+        }
+
+        const defaultMemberId = activeMembers[0].id;
+        const financeSummary = await fetchSelectedMemberFinanceSummary(token, loadedClubId, defaultMemberId);
+
+        if (!cancelled) {
+          setPaymentToken(token);
+          setPaymentClubId(loadedClubId);
+          setBackendMembers(activeMembers);
+          setSelectedMemberId(defaultMemberId);
+          setSelectedSummary(financeSummary);
+          setSummaryStatus("ready");
+          setPaymentStatus("ready");
+          setApiMessage("Ready to record payment through existing backend payment API.");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPaymentToken(null);
+          setPaymentClubId(null);
+          setBackendMembers([]);
+          setSelectedMemberId(null);
+          setSelectedSummary(null);
+          setSummaryStatus("error");
+          setPaymentStatus("error");
+          setApiMessage(error instanceof Error ? error.message : "Payment recording context unavailable.");
+        }
+      }
+    }
+
+    loadPaymentContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [role, canRecordPayment]);
+
+  async function submitPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canRecordPayment || !paymentToken || !paymentClubId || !selectedMemberId) {
+      setPaymentStatus("error");
+      setApiMessage("Payment cannot be submitted without an authorized role, club, and selected member.");
+      return;
+    }
+
+    setPaymentStatus("submitting");
+    setApiMessage("Submitting payment to backend...");
+    setRecordedPayment(null);
+
+    try {
+      const response = await fetch(API_BASE_URL + "/clubs/" + paymentClubId + "/members/" + selectedMemberId + "/payments", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + paymentToken
+        },
+        body: JSON.stringify({
+          amount: paymentForm.amount,
+          payment_date: paymentForm.payment_date,
+          payment_mode: paymentForm.payment_mode,
+          reference_number: paymentForm.reference_number,
+          notes: paymentForm.notes
+        })
+      });
+
+      const payload = await response.json().catch(() => null) as { payment?: PaymentRecordingApiPayment } & ApiErrorPayload | null;
+
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(payload, "Payment recording failed."));
+      }
+
+      if (!payload?.payment) {
+        throw new Error("Payment response missing.");
+      }
+
+      const financeSummary = await fetchSelectedMemberFinanceSummary(paymentToken, paymentClubId, selectedMemberId);
+
+      setRecordedPayment(payload.payment);
+      setSelectedSummary(financeSummary);
+      setSummaryStatus("ready");
+      setPaymentStatus("success");
+      setApiMessage("Payment recorded. Member finance summary refreshed from backend.");
+    } catch (error) {
+      setPaymentStatus("error");
+      setApiMessage(error instanceof Error ? error.message : "Payment recording failed.");
+    }
+  }
+
+  function updateSelectedMember(memberId: number) {
+    setSelectedMemberId(memberId);
+    setRecordedPayment(null);
+    setApiMessage("Selected member changed. Loading finance summary...");
+    void loadSelectedMemberSummary(memberId);
+  }
+
+  if (!canRecordPayment) {
+    return (
+      <section className="stack">
+        <Toolbar title="Record Member Payment" actionLabel="Restricted" />
+        <div className="notice">Payment recording is available only to President, Secretary, and Treasurer roles with backend payment permission.</div>
+        <div className="notice">Members can view their own dues, but cannot see or use payment recording controls.</div>
+      </section>
+    );
+  }
 
   return (
     <section className="stack">
-      <Toolbar title="Record Member Payment" actionLabel="Member dues payment" />
-      <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
-      {!canEdit && <div className="notice">Secretary and non-finance roles can view summaries, but payment editing is disabled by default.</div>}
-      <div className="formPanel">
+      <Toolbar title="Record Member Payment" actionLabel="Backend payment API" />
+      <div className="notice">
+        Milestone 3AR narrow implementation. This form records member payments through the existing backend payment API. Receipt generation and receipt download remain separate workflows.
+      </div>
+      <div className="notice">{apiMessage}</div>
+
+      <form className="formPanel" onSubmit={submitPayment}>
         <div className="fieldGrid">
-          <label>Member<select defaultValue={selectedMember.id} disabled={!canEdit}>{members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label>
-          <label>Payment mode<select defaultValue="upi" disabled={!canEdit}><option value="cash">Cash</option><option value="bank">Bank transfer</option><option value="upi">UPI</option></select></label>
-          <label>Reference number<input value="UPI-REF-20260603-001" readOnly /></label>
-          <label>Payment amount<input value={money(paymentAmount)} readOnly /></label>
+          <label>
+            Member
+            <select
+              value={selectedMemberId ?? ""}
+              disabled={isBusy || !backendMembers.length}
+              onChange={(event) => updateSelectedMember(Number(event.target.value))}
+            >
+              {backendMembers.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.full_name} ({member.member_code})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Amount
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={paymentForm.amount}
+              disabled={isBusy}
+              onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Payment date
+            <input
+              type="date"
+              value={paymentForm.payment_date}
+              disabled={isBusy}
+              onChange={(event) => setPaymentForm({ ...paymentForm, payment_date: event.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Payment mode
+            <select
+              value={paymentForm.payment_mode}
+              disabled={isBusy}
+              onChange={(event) => setPaymentForm({ ...paymentForm, payment_mode: event.target.value as PaymentRecordingMode })}
+            >
+              {PAYMENT_RECORDING_MODES.map((mode) => (
+                <option key={mode} value={mode}>{PAYMENT_RECORDING_MODE_LABELS[mode]}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Reference number
+            <input
+              value={paymentForm.reference_number}
+              disabled={isBusy}
+              maxLength={100}
+              onChange={(event) => setPaymentForm({ ...paymentForm, reference_number: event.target.value })}
+              placeholder="Optional bank / UPI / cheque reference"
+            />
+          </label>
+          <label>
+            Notes
+            <input
+              value={paymentForm.notes}
+              disabled={isBusy}
+              maxLength={1000}
+              onChange={(event) => setPaymentForm({ ...paymentForm, notes: event.target.value })}
+              placeholder="Optional note"
+            />
+          </label>
         </div>
-      </div>
-      <div className="compactPanel">
-        <Toolbar title="Outstanding Dues" actionLabel="Compact dummy list" />
-        <div className="financeCardList">
-          {selectedDues.map((due) => (
-            <article className="financeStackCard" key={due.id}>
-              <h3>{due.selected ? `✓ ${due.label}` : due.label}</h3>
-              <span>Amount: {money(due.amount)}</span>
-              <span>Status: {due.selected ? "Selected due" : "Available"}</span>
-            </article>
-          ))}
+        <div className="buttonRow">
+          <button type="submit" disabled={isBusy || !selectedMemberId}>
+            {paymentStatus === "submitting" ? "Recording payment..." : "Record Payment"}
+          </button>
+          <button
+            type="button"
+            className="secondaryButton"
+            disabled={isBusy}
+            onClick={() => {
+              setRecordedPayment(null);
+              setPaymentStatus("ready");
+              setApiMessage("Payment form ready. No backend change made by clearing this status.");
+            }}
+          >
+            Clear status
+          </button>
         </div>
-      </div>
+      </form>
+
       <div className="metricsGrid">
-        <Metric label="Outstanding before payment" value={money(outstandingBefore)} />
-        <Metric label="Selected due items" value={`${selectedDueItems.length} selected`} />
-        <Metric label="Payment amount" value={money(paymentAmount)} />
-        <Metric label="Outstanding after payment" value={money(outstandingAfter)} />
+        <Metric label="Selected Member" value={selectedMember ? selectedMember.full_name : "Loading..."} />
+        <Metric label="Current Dues" value={selectedSummary ? financeCurrentDuesText(selectedSummary) : summaryStatus === "loading" ? "Loading..." : "Unavailable"} />
+        <Metric label="Payment Status" value={selectedSummary ? selectedSummary.payment_status : summaryStatus === "loading" ? "Loading..." : "Unavailable"} />
+        <Metric label="Last Payment" value={selectedSummary ? financeLastPaymentText(selectedSummary) : summaryStatus === "loading" ? "Loading..." : "Unavailable"} />
       </div>
-      <ReceiptPreview
-        title="Dummy Receipt Preview"
-        rows={[
-          ["Receipt No", "RCP-001"],
-          ["Member", "Lion Ajith Kumar"],
-          ["Amount", money(paymentAmount)],
-          ["Mode", "UPI"],
-          ["Allocated to", "Monthly dues - June: ₹500"],
-          ["Allocated to", "Special Collection: ₹500"],
-          ["Ledger Impact", "Credit member account ₹1,000"]
-        ]}
-      />
-      <button disabled={!canEdit}>Create Payment + Credit Ledger Entry</button>
+
+      {selectedSummary && (
+        <div className="compactPanel">
+          <Toolbar title="Pending Items" actionLabel={selectedSummary.pending_items.length ? "Backend summary" : "Clear"} />
+          {selectedSummary.pending_items.length ? (
+            <div className="financeCardList">
+              {selectedSummary.pending_items.map((item, index) => (
+                <article className="financeStackCard" key={item.source_type + "-" + (item.due_date ?? "no-date") + "-" + index}>
+                  <h3>{item.source_label}</h3>
+                  <span>Amount: {financeApiAmountText(item.amount) ?? item.amount}</span>
+                  <span>Due Date: {item.due_date ?? "Not set"}</span>
+                  <span>Status: {item.status}</span>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="notice">No current dues for selected member.</div>
+          )}
+        </div>
+      )}
+
+      {recordedPayment && (
+        <div className="compactPanel">
+          <Toolbar title="Payment Accepted" actionLabel="Backend confirmed" />
+          <div className="fieldGrid">
+            <Field label="Payment ID" value={String(recordedPayment.id)} />
+            <Field label="Amount" value={financeApiAmountText(recordedPayment.amount) ?? recordedPayment.amount} />
+            <Field label="Payment Date" value={recordedPayment.payment_date ?? "Not set"} />
+            <Field label="Payment Mode" value={recordedPayment.payment_mode} />
+            <Field label="Status" value={recordedPayment.status} />
+            <Field label="Ledger Entry" value={recordedPayment.ledger_entry_id ? String(recordedPayment.ledger_entry_id) : "Linked by backend"} />
+          </div>
+          <div className="notice">Ledger credit is posted by the backend payment service. Receipt generation is not part of Milestone 3AR.</div>
+        </div>
+      )}
     </section>
   );
 }
@@ -4181,7 +4611,7 @@ function CollectionBoxReceipt({ role }: { role: Role }) {
   return (
     <section className="stack">
       <Toolbar title="Record Club Income / Donation" actionLabel="Club income receipt" />
-      <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
+      <div className="notice">Record Member Payment uses the backend payment API. Receipt list, club income receipt, and transaction history remain prototype-only in this milestone.</div>
       <div className="notice">
         Collection box money is recorded only after the cash is opened, counted, and verified. It does not create member dues, receivables, or individual member account entries.
       </div>
@@ -4226,7 +4656,7 @@ function ReceiptList() {
   return (
     <section className="stack">
       <Toolbar title="Receipt List" actionLabel="Dummy receipts" />
-      <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
+      <div className="notice">Record Member Payment uses the backend payment API. Receipt list, club income receipt, and transaction history remain prototype-only in this milestone.</div>
       <div className="financeCardList">
         {receipts.map((receipt) => (
           <article className="financeStackCard" key={receipt.receiptNo}>
@@ -4252,7 +4682,7 @@ function PaymentHistory() {
   return (
     <section className="stack">
       <Toolbar title="Transaction History" actionLabel="Dummy audit trail" />
-      <div className="notice">Dummy data only. Real ledger, receipt, voucher, and payment posting will be implemented in backend phase.</div>
+      <div className="notice">Record Member Payment uses the backend payment API. Receipt list, club income receipt, and transaction history remain prototype-only in this milestone.</div>
       <div className="financeCardList">
         {rows.map((row) => (
           <article className="financeStackCard" key={`${row.date}-${row.party}-${row.type}`}>
@@ -4888,3 +5318,4 @@ function Avatar({ name, large = false }: { name: string; large?: boolean }) {
   const initials = name.split(" ").filter((part) => part !== "Lion" && part !== "-" && part !== "Member").slice(0, 2).map((part) => part[0]).join("");
   return <span className={large ? "avatar large" : "avatar"}>{initials}</span>;
 }
+
