@@ -1,8 +1,38 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
+type FinanceSummaryStatus = "loading" | "ready" | "error";
+
+type MemberFinancePendingItem = {
+  source_type: string;
+  source_label: string;
+  amount: string;
+  due_date: string | null;
+  status: string;
+};
+
+type MemberFinanceSummary = {
+  member_id: number;
+  member_code: string;
+  member_name: string;
+  current_dues_amount: string;
+  current_dues_label: string;
+  payment_status: string;
+  last_payment_amount: string | null;
+  last_payment_date: string | null;
+  receipt_available: boolean | null;
+  receipt_status: string | null;
+  pending_items: MemberFinancePendingItem[];
+  generated_at: string;
+};
+
+const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+const LOCAL_MEMBER_FINANCE_LOGIN = {
+  email: "local.member@lcbeenachi.test",
+  password: "password"
+};
 type Screen =
   | "login"
   | "dashboard"
@@ -2596,6 +2626,190 @@ function documentReportCards(detail: string): { title: string; meta: string[] }[
   }));
 }
 
+function financeApiAmountText(amount: string | null): string | null {
+  if (!amount) return null;
+
+  const parsed = Number(amount);
+
+  return Number.isFinite(parsed) ? money(parsed) : amount;
+}
+
+function financeCurrentDuesText(summary: MemberFinanceSummary): string {
+  const parsed = Number(summary.current_dues_amount);
+
+  if (Number.isFinite(parsed) && parsed <= 0) {
+    return "No current dues";
+  }
+
+  return financeApiAmountText(summary.current_dues_amount) ?? "No current dues";
+}
+
+function financeLastPaymentText(summary: MemberFinanceSummary): string {
+  const amount = financeApiAmountText(summary.last_payment_amount);
+
+  if (!amount) {
+    return "No payment recorded yet";
+  }
+
+  return summary.last_payment_date ? amount + " on " + summary.last_payment_date : amount;
+}
+
+function financeReceiptText(summary: MemberFinanceSummary): string {
+  if (summary.receipt_available === true) {
+    return summary.receipt_status ? "Receipt Available (" + summary.receipt_status + ")" : "Receipt Available";
+  }
+
+  return "Receipt not available";
+}
+
+function MemberFinanceSummaryPanel({
+  compact = false,
+  showPendingItems = false
+}: {
+  compact?: boolean;
+  showPendingItems?: boolean;
+}) {
+  const [status, setStatus] = useState<FinanceSummaryStatus>("loading");
+  const [summary, setSummary] = useState<MemberFinanceSummary | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFinanceSummary() {
+      setStatus("loading");
+
+      try {
+        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(LOCAL_MEMBER_FINANCE_LOGIN)
+        });
+
+        if (!loginResponse.ok) {
+          throw new Error("Member login failed");
+        }
+
+        const loginPayload = await loginResponse.json();
+        const token = loginPayload.token as string | undefined;
+
+        if (!token) {
+          throw new Error("Member token missing");
+        }
+
+        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!meResponse.ok) {
+          throw new Error("Club lookup failed");
+        }
+
+        const mePayload = await meResponse.json();
+        const clubId = mePayload.club_memberships?.[0]?.club?.id;
+
+        if (!clubId) {
+          throw new Error("Club missing");
+        }
+
+        const summaryResponse = await fetch(
+          API_BASE_URL + "/clubs/" + clubId + "/finance/member-summary?include_pending_items=true&include_last_payment=true&include_receipt_status=true",
+          {
+            headers: {
+              Accept: "application/json",
+              Authorization: "Bearer " + token
+            }
+          }
+        );
+
+        if (!summaryResponse.ok) {
+          throw new Error("Finance summary unavailable");
+        }
+
+        const summaryPayload = await summaryResponse.json();
+        const financeSummary = summaryPayload.finance_summary as MemberFinanceSummary | undefined;
+
+        if (!financeSummary) {
+          throw new Error("Finance summary missing");
+        }
+
+        if (!cancelled) {
+          setSummary(financeSummary);
+          setStatus("ready");
+        }
+      } catch {
+        if (!cancelled) {
+          setSummary(null);
+          setStatus("error");
+        }
+      }
+    }
+
+    loadFinanceSummary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (status === "loading") {
+    return (
+      <section className="memberPanel">
+        <Toolbar title="Member Finance Summary" actionLabel="Read-only API" />
+        <div className="notice memberHelperText">Loading finance summary...</div>
+      </section>
+    );
+  }
+
+  if (status === "error" || !summary) {
+    return (
+      <section className="memberPanel">
+        <Toolbar title="Member Finance Summary" actionLabel="Read-only API" />
+        <div className="notice memberHelperText">Finance summary unavailable.</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="memberPanel">
+      <Toolbar title="Member Finance Summary" actionLabel="Read-only API" />
+      <div className="memberDuesSummary">
+        <Metric label="Current Dues" value={financeCurrentDuesText(summary)} />
+        <Metric label="Payment Status" value={summary.payment_status} />
+        {!compact && <Metric label="Last Payment" value={financeLastPaymentText(summary)} />}
+        {!compact && <Metric label="Receipt Status" value={financeReceiptText(summary)} />}
+      </div>
+
+      {showPendingItems && (
+        <section className="memberPanel">
+          <Toolbar title="Pending Items" actionLabel={summary.pending_items.length ? "Payment needed" : "Clear"} />
+          {summary.pending_items.length ? (
+            <div className="memberLedgerList">
+              {summary.pending_items.map((item, index) => (
+                <div className="memberLedgerCard" key={item.source_type + "-" + (item.due_date ?? "no-date") + "-" + index}>
+                  <div className="memberLedgerDate">{item.due_date ?? "Due"}</div>
+                  <div>
+                    <strong>{item.source_label}</strong>
+                    <span>{financeApiAmountText(item.amount) ?? item.amount}</span>
+                    <small>Status: {item.status}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="notice memberHelperText">No current dues.</div>
+          )}
+        </section>
+      )}
+    </section>
+  );
+}
+
 function Dashboard({
   role,
   member,
@@ -2637,6 +2851,7 @@ function Dashboard({
             <button onClick={() => setScreen("fellowship")}><span>Fellowship</span><strong>June</strong><small>{advanceBalance ? `${money(advanceBalance)} advance available` : "Sponsorship pending"}</small></button>
           </div>
         </section>
+        <MemberFinanceSummaryPanel compact />
         <section className="memberPanel">
           <Toolbar title="Quick Access" actionLabel="Member tools" />
           <div className="memberQuickGrid">
@@ -3677,6 +3892,7 @@ function Ledger({ role, member, setScreen }: { role: Role; member: Member; setSc
     return (
       <section className="stack">
         <Toolbar title="My Dues" actionLabel="Own records only" />
+        <MemberFinanceSummaryPanel showPendingItems />
         <section className="memberPanel">
           <Toolbar title="Current Status" actionLabel="Private view" />
           <div className="memberDuesSummary">
@@ -3774,6 +3990,7 @@ function MemberDuesDetail({ member, setScreen }: { member: Member; setScreen: (s
         <button className="secondaryButton" onClick={() => setScreen("ledger")}>Back to My Dues</button>
         <button className="secondaryButton" onClick={() => setScreen("dashboard")}>Back to Dashboard</button>
       </div>
+      <MemberFinanceSummaryPanel showPendingItems />
       <section className="memberPanel">
         <Toolbar title="Current Dues Details" actionLabel="Member view" />
         <div className="memberDuesSummary">
