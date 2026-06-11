@@ -5,6 +5,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 type Role = "president" | "secretary" | "treasurer" | "member";
 type FinanceSummaryStatus = "loading" | "ready" | "error";
 type ReceiptLookupStatus = "initializing" | "ready" | "loading" | "success" | "error";
+type ClubFinanceReportStatus = "loading" | "ready" | "empty" | "missing-club" | "unauthenticated" | "forbidden" | "error";
 
 type MemberFinancePendingItem = {
   source_type: string;
@@ -27,6 +28,60 @@ type MemberFinanceSummary = {
   receipt_status: string | null;
   pending_items: MemberFinancePendingItem[];
   generated_at: string;
+};
+
+type ClubFinanceReportMemberSummary = {
+  member_id?: number;
+  member_code?: string;
+  member_name?: string;
+  total_debit_amount?: string | null;
+  total_credit_amount?: string | null;
+  current_dues_amount?: string | null;
+  current_dues_label?: string | null;
+};
+
+type ClubFinanceReports = {
+  club_id?: number;
+  club_name?: string | null;
+  club_finance_overview?: {
+    total_debit_amount?: string | null;
+    total_credit_amount?: string | null;
+    current_dues_amount?: string | null;
+    current_dues_label?: string | null;
+    posted_payment_count?: number | null;
+    issued_receipt_count?: number | null;
+  };
+  outstanding_dues_summary?: {
+    members_with_dues_count?: number | null;
+    total_outstanding_amount?: string | null;
+  };
+  member_wise_dues_summary?: ClubFinanceReportMemberSummary[];
+  payment_collection_summary?: {
+    posted_payment_total?: string | null;
+    posted_payment_count?: number | null;
+  };
+  receipt_summary?: {
+    issued_receipt_count?: number | null;
+  };
+  generated_at?: string | null;
+};
+
+type ClubBalanceSheet = {
+  club_id?: number;
+  club_name?: string | null;
+  assets?: {
+    member_receivables?: string | null;
+    cash_collected?: string | null;
+  };
+  liabilities?: {
+    member_advances?: string | null;
+  };
+  net_position?: {
+    amount?: string | null;
+    label?: string | null;
+  };
+  source?: string | null;
+  generated_at?: string | null;
 };
 
 const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
@@ -192,7 +247,7 @@ type AnnouncementDetail = "Published" | "Draft / Pending" | "High Priority";
 type FellowshipPaymentView = "Current Month" | "Pending Sponsors" | "Paid Sponsors";
 type PeopleSection = "Members" | "Board & Committees" | "Celebrations";
 type OperationsSection = "Events & Meetings" | "Announcements" | "Documents" | "Projects / Activities" | "Fellowship";
-type FinanceSection = "Club Account Statement" | "Member Ledger / Dues" | "Payments / Receipts" | "Outstanding Dues" | "Collection Summary" | "Fellowship Payments";
+type FinanceSection = "Club Account Statement" | "Member Ledger / Dues" | "Payments / Receipts" | "Club Finance Reports" | "Balance Sheet Summary" | "Outstanding Dues" | "Collection Summary" | "Fellowship Payments";
 type ClubStatementSection =
   | "Account Overview"
   | "Fund-wise Opening Balance"
@@ -836,6 +891,13 @@ const financeMenuItems: NavItem[] = [
       { label: "Record Club Income / Donation", screen: "collection-box" },
       { label: "Receipt List", screen: "receipt-list" },
       { label: "Transaction History", screen: "payment-history" }
+    ]
+  },
+  {
+    label: "Club Finance Reports",
+    children: [
+      { label: "Club Finance Reports", screen: "finance-module", financeSection: "Club Finance Reports" },
+      { label: "Balance Sheet Summary", screen: "finance-module", financeSection: "Balance Sheet Summary" }
     ]
   },
   {
@@ -1496,10 +1558,266 @@ function FinanceModule({
       {section === "Club Account Statement" && <ClubAccountStatement section={statementSection} />}
       {section === "Member Ledger / Dues" && <Ledger role={role} member={member} setScreen={setScreen} />}
       {section === "Payments / Receipts" && <PaymentsReceiptsHub setScreen={setScreen} />}
+      {section === "Club Finance Reports" && <ClubFinanceReportsPanel role={role} displayMode="reports" />}
+      {section === "Balance Sheet Summary" && <ClubFinanceReportsPanel role={role} displayMode="balance-sheet" />}
       {section === "Outstanding Dues" && <OutstandingDues setScreen={setScreen} />}
       {section === "Collection Summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
       {section === "Fellowship Payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={setScreen} />}
     </section>
+  );
+}
+
+function ClubFinanceReportsPanel({
+  role,
+  displayMode
+}: {
+  role: Role;
+  displayMode: "reports" | "balance-sheet";
+}) {
+  const canViewClubFinanceReports = role === "president" || role === "secretary" || role === "treasurer";
+  const [status, setStatus] = useState<ClubFinanceReportStatus>(canViewClubFinanceReports ? "loading" : "forbidden");
+  const [report, setReport] = useState<ClubFinanceReports | null>(null);
+  const [balanceSheet, setBalanceSheet] = useState<ClubBalanceSheet | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadClubFinanceReports() {
+      if (!canViewClubFinanceReports) {
+        setStatus("forbidden");
+        setReport(null);
+        setBalanceSheet(null);
+        return;
+      }
+
+      setStatus("loading");
+      setReport(null);
+      setBalanceSheet(null);
+
+      try {
+        const login = LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
+
+        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(login)
+        });
+
+        if (loginResponse.status === 401) {
+          throw new Error("unauthenticated");
+        }
+
+        if (!loginResponse.ok) {
+          throw new Error("error");
+        }
+
+        const loginPayload = await loginResponse.json();
+        const token = loginPayload.token as string | undefined;
+
+        if (!token) {
+          throw new Error("unauthenticated");
+        }
+
+        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (meResponse.status === 401) {
+          throw new Error("unauthenticated");
+        }
+
+        if (!meResponse.ok) {
+          throw new Error("error");
+        }
+
+        const mePayload = await meResponse.json();
+        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
+        const loadedClubId = memberships?.[0]?.club?.id;
+
+        if (typeof loadedClubId !== "number") {
+          throw new Error("missing-club");
+        }
+
+        const [reportResponse, balanceSheetResponse] = await Promise.all([
+          fetch(API_BASE_URL + "/clubs/" + loadedClubId + "/finance/reports", {
+            headers: {
+              Accept: "application/json",
+              Authorization: "Bearer " + token
+            }
+          }),
+          fetch(API_BASE_URL + "/clubs/" + loadedClubId + "/finance/balance-sheet", {
+            headers: {
+              Accept: "application/json",
+              Authorization: "Bearer " + token
+            }
+          })
+        ]);
+
+        if (reportResponse.status === 401 || balanceSheetResponse.status === 401) {
+          throw new Error("unauthenticated");
+        }
+
+        if (reportResponse.status === 403 || balanceSheetResponse.status === 403) {
+          throw new Error("forbidden");
+        }
+
+        if (!reportResponse.ok || !balanceSheetResponse.ok) {
+          throw new Error("error");
+        }
+
+        const reportPayload = await reportResponse.json();
+        const balanceSheetPayload = await balanceSheetResponse.json();
+        const loadedReport = reportPayload.finance_reports as ClubFinanceReports | undefined;
+        const loadedBalanceSheet = balanceSheetPayload.balance_sheet as ClubBalanceSheet | undefined;
+
+        if (!cancelled) {
+          setReport(loadedReport ?? null);
+          setBalanceSheet(loadedBalanceSheet ?? null);
+          setStatus(hasClubFinanceReportValues(loadedReport ?? null) || hasClubBalanceSheetValues(loadedBalanceSheet ?? null) ? "ready" : "empty");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setReport(null);
+          setBalanceSheet(null);
+
+          if (error instanceof Error && error.message === "unauthenticated") {
+            setStatus("unauthenticated");
+          } else if (error instanceof Error && error.message === "forbidden") {
+            setStatus("forbidden");
+          } else if (error instanceof Error && error.message === "missing-club") {
+            setStatus("missing-club");
+          } else {
+            setStatus("error");
+          }
+        }
+      }
+    }
+
+    loadClubFinanceReports();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewClubFinanceReports, role]);
+
+  const title = displayMode === "reports" ? "Club Finance Reports" : "Balance Sheet Summary";
+
+  if (!canViewClubFinanceReports) {
+    return (
+      <section className="stack">
+        <Toolbar title={title} actionLabel="Restricted" />
+        <div className="notice">Club-level finance reports and balance sheet are visible only to President, Secretary, and Treasurer roles.</div>
+        <div className="notice">Members continue to see only member-safe finance information.</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="stack">
+      <Toolbar title={title} actionLabel="Read-only backend reports" />
+      <div className="notice">This display uses only the existing club finance reports and balance sheet APIs. Backend values remain the source of truth.</div>
+
+      {status === "loading" && <div className="notice memberHelperText">Loading club finance report context...</div>}
+      {status === "missing-club" && <div className="notice">No active club context is available for this finance report.</div>}
+      {status === "unauthenticated" && <div className="notice">Please sign in again to view club finance reports.</div>}
+      {status === "forbidden" && <div className="notice">This role is not authorized to view club-level finance reports.</div>}
+      {status === "error" && <div className="notice">Club finance reports are unavailable right now. Please try again later.</div>}
+      {status === "empty" && <div className="notice">No finance report values are available yet.</div>}
+
+      {status === "ready" && displayMode === "reports" && <ClubFinanceReportDisplay report={report} />}
+      {status === "ready" && displayMode === "balance-sheet" && <ClubBalanceSheetDisplay balanceSheet={balanceSheet} />}
+    </section>
+  );
+}
+
+function ClubFinanceReportDisplay({ report }: { report: ClubFinanceReports | null }) {
+  const overview = report?.club_finance_overview;
+  const outstanding = report?.outstanding_dues_summary;
+  const collection = report?.payment_collection_summary;
+  const receipts = report?.receipt_summary;
+  const members = report?.member_wise_dues_summary ?? [];
+
+  if (!report) {
+    return <div className="notice">Club finance report response is empty.</div>;
+  }
+
+  return (
+    <>
+      <section className="compactPanel">
+        <Toolbar title={financeDisplayValue(report.club_name) + " Reports"} actionLabel="Existing API response" />
+        <div className="metricsGrid">
+          <Metric label="Total Dues" value={financeDisplayAmount(overview?.total_debit_amount)} />
+          <Metric label="Amount Collected" value={financeDisplayAmount(overview?.total_credit_amount)} />
+          <Metric label="Current Dues" value={financeDisplayAmount(overview?.current_dues_amount)} />
+          <Metric label="Current Dues Label" value={financeDisplayValue(overview?.current_dues_label)} />
+        </div>
+      </section>
+
+      <section className="compactPanel">
+        <Toolbar title="Outstanding Dues Summary" actionLabel="Backend calculated" />
+        <div className="metricsGrid">
+          <Metric label="Members with Dues" value={financeDisplayValue(outstanding?.members_with_dues_count)} />
+          <Metric label="Total Outstanding" value={financeDisplayAmount(outstanding?.total_outstanding_amount)} />
+          <Metric label="Posted Payment Total" value={financeDisplayAmount(collection?.posted_payment_total)} />
+          <Metric label="Posted Payment Count" value={financeDisplayValue(collection?.posted_payment_count ?? overview?.posted_payment_count)} />
+          <Metric label="Issued Receipt Count" value={financeDisplayValue(receipts?.issued_receipt_count ?? overview?.issued_receipt_count)} />
+        </div>
+      </section>
+
+      <section className="compactPanel">
+        <Toolbar title="Member-wise Dues Summary" actionLabel={`${members.length} rows`} />
+        {members.length === 0 && <div className="memberEmptyState">No member-wise dues rows are available.</div>}
+        {members.length > 0 && (
+          <div className="financeCardList">
+            {members.map((member, index) => (
+              <article className="financeStackCard" key={`${member.member_id ?? "member"}-${index}`}>
+                <h3>{financeDisplayValue(member.member_name)}</h3>
+                <span>Member Code: {financeDisplayValue(member.member_code)}</span>
+                <span>Total Dues: {financeDisplayAmount(member.total_debit_amount)}</span>
+                <span>Amount Collected: {financeDisplayAmount(member.total_credit_amount)}</span>
+                <span>Current Dues: {financeDisplayAmount(member.current_dues_amount)}</span>
+                <span>Status: {financeDisplayValue(member.current_dues_label)}</span>
+              </article>
+            ))}
+          </div>
+        )}
+        <div className="notice">Generated at: {financeDisplayValue(report.generated_at)}</div>
+      </section>
+    </>
+  );
+}
+
+function ClubBalanceSheetDisplay({ balanceSheet }: { balanceSheet: ClubBalanceSheet | null }) {
+  if (!balanceSheet) {
+    return <div className="notice">Balance sheet response is empty.</div>;
+  }
+
+  return (
+    <>
+      <section className="compactPanel">
+        <Toolbar title={financeDisplayValue(balanceSheet.club_name) + " Balance Sheet Summary"} actionLabel="Existing API response" />
+        <div className="metricsGrid">
+          <Metric label="Member Receivables" value={financeDisplayAmount(balanceSheet.assets?.member_receivables)} />
+          <Metric label="Cash Collected" value={financeDisplayAmount(balanceSheet.assets?.cash_collected)} />
+          <Metric label="Member Advances" value={financeDisplayAmount(balanceSheet.liabilities?.member_advances)} />
+          <Metric label="Net Position" value={financeDisplayAmount(balanceSheet.net_position?.amount)} />
+          <Metric label="Net Position Label" value={financeDisplayValue(balanceSheet.net_position?.label)} />
+        </div>
+      </section>
+      <section className="compactPanel">
+        <Toolbar title="Balance Sheet Source" actionLabel="Read-only" />
+        <div className="fieldGrid">
+          <Field label="Source" value={financeDisplayValue(balanceSheet.source)} />
+          <Field label="Generated At" value={financeDisplayValue(balanceSheet.generated_at)} />
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -2728,6 +3046,39 @@ function financeApiAmountText(amount: string | null): string | null {
   const parsed = Number(amount);
 
   return Number.isFinite(parsed) ? money(parsed) : amount;
+}
+
+function financeDisplayAmount(amount: string | null | undefined): string {
+  return financeApiAmountText(amount ?? null) ?? "Unavailable";
+}
+
+function financeDisplayValue(value: string | number | null | undefined): string {
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string" && value.trim()) return value;
+  return "Unavailable";
+}
+
+function hasClubFinanceReportValues(report: ClubFinanceReports | null): boolean {
+  if (!report) return false;
+
+  return Boolean(
+    report.club_finance_overview ||
+    report.outstanding_dues_summary ||
+    report.member_wise_dues_summary?.length ||
+    report.payment_collection_summary ||
+    report.receipt_summary
+  );
+}
+
+function hasClubBalanceSheetValues(balanceSheet: ClubBalanceSheet | null): boolean {
+  if (!balanceSheet) return false;
+
+  return Boolean(
+    balanceSheet.assets ||
+    balanceSheet.liabilities ||
+    balanceSheet.net_position ||
+    balanceSheet.source
+  );
 }
 
 function financeCurrentDuesText(summary: MemberFinanceSummary): string {
