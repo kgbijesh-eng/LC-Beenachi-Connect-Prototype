@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
@@ -95,6 +95,13 @@ class Milestone3ayFinanceModulePostReceiptFrontendClosureReviewTest extends Test
         $this->assertContains('api/v1/clubs/{club}/members/{member}/finance-summary', $routeUris);
 
         foreach ($routeUris as $uri) {
+            if (in_array($uri, [
+                'api/v1/clubs/{club}/finance/reports',
+                'api/v1/clubs/{club}/finance/balance-sheet',
+            ], true)) {
+                continue;
+            }
+
             $this->assertStringNotContainsString('3ay', $uri);
             $this->assertStringNotContainsString('balance-sheet', $uri);
             $this->assertStringNotContainsString('finance-reports', $uri);

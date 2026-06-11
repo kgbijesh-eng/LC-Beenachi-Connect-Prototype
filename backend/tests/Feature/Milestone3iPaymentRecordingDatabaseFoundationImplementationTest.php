@@ -214,7 +214,10 @@ class Milestone3iPaymentRecordingDatabaseFoundationImplementationTest extends Te
 
         foreach ($blockedRouteFragments as $fragment) {
             $this->assertFalse(
-                $registeredUris->contains(fn (string $uri) => str_contains($uri, $fragment)),
+                $registeredUris->contains(fn (string $uri) => ! in_array($uri, [
+                    'api/v1/clubs/{club}/finance/reports',
+                    'api/v1/clubs/{club}/finance/balance-sheet',
+                ], true) && str_contains($uri, $fragment)),
                 "Milestone 3I must not register route containing [{$fragment}]."
             );
         }

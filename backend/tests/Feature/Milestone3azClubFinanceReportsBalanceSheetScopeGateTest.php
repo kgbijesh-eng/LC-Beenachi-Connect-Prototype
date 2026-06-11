@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
@@ -151,6 +151,13 @@ class Milestone3azClubFinanceReportsBalanceSheetScopeGateTest extends TestCase
         $routeUris = collect(Route::getRoutes())->map(fn ($route) => $route->uri())->all();
 
         foreach ($routeUris as $uri) {
+            if (in_array($uri, [
+                'api/v1/clubs/{club}/finance/reports',
+                'api/v1/clubs/{club}/finance/balance-sheet',
+            ], true)) {
+                continue;
+            }
+
             $this->assertStringNotContainsString('finance/reports', $uri);
             $this->assertStringNotContainsString('balance-sheet', $uri);
             $this->assertStringNotContainsString('3az', $uri);

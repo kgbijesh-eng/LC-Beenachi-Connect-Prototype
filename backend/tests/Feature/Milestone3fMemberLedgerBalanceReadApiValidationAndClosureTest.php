@@ -127,7 +127,10 @@ class Milestone3fMemberLedgerBalanceReadApiValidationAndClosureTest extends Test
     public function test_balance_routes_remain_read_only_and_limited_to_two_authorized_routes(): void
     {
         $balanceRoutes = collect(Route::getRoutes())
-            ->filter(fn ($route) => str_contains($route->uri(), 'balance'))
+            ->filter(fn ($route) => in_array($route->uri(), [
+                'api/v1/clubs/{club}/members/me/balance',
+                'api/v1/clubs/{club}/members/{member}/balance',
+            ], true))
             ->values();
 
         $this->assertCount(2, $balanceRoutes);
@@ -244,7 +247,10 @@ class Milestone3fMemberLedgerBalanceReadApiValidationAndClosureTest extends Test
 
         foreach ($blockedRouteFragments as $fragment) {
             $this->assertFalse(
-                $registeredUris->contains(fn (string $uri) => str_contains($uri, $fragment)),
+                $registeredUris->contains(fn (string $uri) => ! in_array($uri, [
+                    'api/v1/clubs/{club}/finance/reports',
+                    'api/v1/clubs/{club}/finance/balance-sheet',
+                ], true) && str_contains($uri, $fragment)),
                 "Milestone 3F confirms route containing [{$fragment}] must remain absent."
             );
         }

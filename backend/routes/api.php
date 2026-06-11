@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Club\ClubController;
+use App\Http\Controllers\Api\V1\Finance\ClubFinanceReportController;
 use App\Http\Controllers\Api\V1\Finance\MemberFinanceSummaryController;
 use App\Http\Controllers\Api\V1\Finance\MemberLedgerBalanceController;
 use App\Http\Controllers\Api\V1\Finance\PaymentController;
@@ -30,6 +31,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}', [ClubController::class, 'show']);
             Route::get('/clubs/{club}/me', [ClubController::class, 'me']);
             Route::get('/clubs/{club}/finance/member-summary', [MemberFinanceSummaryController::class, 'own']);
+            Route::get('/clubs/{club}/finance/reports', [ClubFinanceReportController::class, 'reports']);
+            Route::get('/clubs/{club}/finance/balance-sheet', [ClubFinanceReportController::class, 'balanceSheet']);
 
             Route::get('/clubs/{club}/members', [MemberController::class, 'index']);
             Route::get('/clubs/{club}/members/me/balance', [MemberLedgerBalanceController::class, 'own']);

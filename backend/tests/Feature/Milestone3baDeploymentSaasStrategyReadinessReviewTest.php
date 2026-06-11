@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
@@ -259,8 +259,13 @@ class Milestone3baDeploymentSaasStrategyReadinessReviewTest extends TestCase
             $this->assertStringNotContainsString('saas', $uri);
             $this->assertStringNotContainsString('subscription', $uri);
             $this->assertStringNotContainsString('super-admin', $uri);
-            $this->assertStringNotContainsString('finance/reports', $uri);
-            $this->assertStringNotContainsString('balance-sheet', $uri);
+            if (! in_array($uri, [
+                'api/v1/clubs/{club}/finance/reports',
+                'api/v1/clubs/{club}/finance/balance-sheet',
+            ], true)) {
+                $this->assertStringNotContainsString('finance/reports', $uri);
+                $this->assertStringNotContainsString('balance-sheet', $uri);
+            }
         }
     }
 
