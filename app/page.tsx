@@ -6,6 +6,7 @@ type Role = "president" | "secretary" | "treasurer" | "member";
 type FinanceSummaryStatus = "loading" | "ready" | "error";
 type ReceiptLookupStatus = "initializing" | "ready" | "loading" | "success" | "error";
 type ClubFinanceReportStatus = "loading" | "ready" | "empty" | "missing-club" | "unauthenticated" | "forbidden" | "error";
+type PaymentHistoryStatus = "initializing" | "ready" | "loading" | "success" | "empty" | "error";
 
 type MemberFinancePendingItem = {
   source_type: string;
@@ -144,6 +145,41 @@ type ReceiptApiReceipt = {
   receipt_status: string;
   generated_at: string | null;
   generated_by: number | null;
+};
+
+type PaymentHistoryApiRecord = {
+  payment_id?: number | string | null;
+  payment_date?: string | null;
+  amount?: string | null;
+  payment_mode?: string | null;
+  status?: string | null;
+  member?: {
+    id?: number | null;
+    member_code?: string | null;
+    name?: string | null;
+  } | null;
+  receipt?: {
+    available?: boolean | null;
+    receipt_number?: string | null;
+    status?: string | null;
+  } | null;
+  recorded_by?: {
+    id?: number | null;
+    name?: string | null;
+  } | null;
+  created_at?: string | null;
+};
+
+type PaymentHistoryMeta = {
+  current_page?: number | null;
+  per_page?: number | null;
+  total?: number | null;
+  last_page?: number | null;
+};
+
+type PaymentHistoryApiResponse = {
+  payment_history?: PaymentHistoryApiRecord[];
+  meta?: PaymentHistoryMeta;
 };
 
 type ApiErrorPayload = {
@@ -890,7 +926,7 @@ const financeMenuItems: NavItem[] = [
       { label: "Record Member Payment", screen: "record-member-payment" },
       { label: "Record Club Income / Donation", screen: "collection-box" },
       { label: "Receipt List", screen: "receipt-list" },
-      { label: "Transaction History", screen: "payment-history" }
+      { label: "Payment History", screen: "payment-history" }
     ]
   },
   {
@@ -972,6 +1008,7 @@ const navByRole: Record<Role, NavGroup[]> = {
       { label: "Member Directory", screen: "members" },
       { label: "PST Profiles", screen: "nav-detail", detailParent: "People", detailTitle: "PST Profiles" },
       { label: "My Dues", screen: "ledger" },
+      { label: "My Payment History", screen: "payment-history" },
       { label: "My Fellowship", screen: "fellowship" },
       { label: "Events & Meetings", screen: "events-meetings" },
       { label: "Announcements", screen: "announcements" },
@@ -988,6 +1025,7 @@ function money(value: number) {
 
 const memberQuickAccess = [
   { label: "My Dues", short: "DU", screen: "ledger" as Screen },
+  { label: "Payments", short: "PH", screen: "payment-history" as Screen },
   { label: "My Fellowship", short: "FE", screen: "fellowship" as Screen },
   { label: "Digital Card", short: "ID", screen: "digital-card" as Screen },
   { label: "Announcements", short: "AN", screen: "announcements" as Screen },
@@ -1340,7 +1378,7 @@ export default function Prototype() {
         {screen === "record-member-payment" && <RecordMemberPayment role={role} />}
         {screen === "collection-box" && <CollectionBoxReceipt role={role} />}
         {screen === "receipt-list" && <ReceiptList role={role} />}
-        {screen === "payment-history" && <PaymentHistory />}
+        {screen === "payment-history" && <PaymentHistory role={role} />}
         {screen === "outstanding-dues" && <OutstandingDues setScreen={setScreen} />}
         {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
         {screen === "fellowship-payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={setScreen} />}
@@ -4554,12 +4592,12 @@ function PaymentsReceiptsHub({ setScreen }: { setScreen: (screen: Screen) => voi
   return (
     <section className="stack">
       <Toolbar title="Payments / Receipts" actionLabel="Choose finance workflow" />
-      <div className="notice">Record Member Payment uses the backend payment API. Receipt List now reads already issued member payment receipts and downloads receipt PDFs through existing backend APIs only.</div>
+      <div className="notice">Record Member Payment uses the backend payment API. Receipt List reads already issued receipts. Payment History now reads the existing backend payment history APIs only.</div>
       <div className="actionGrid">
         <Action title="Record Member Payment" body="Record a member payment through the existing backend API without generating a receipt." onClick={() => setScreen("record-member-payment")} />
         <Action title="Record Club Income / Donation" body="Record collection box, donation, or other club income without changing member dues." onClick={() => setScreen("collection-box")} />
         <Action title="Receipt List" body="View an already issued member payment receipt and download its PDF using existing backend APIs." onClick={() => setScreen("receipt-list")} />
-        <Action title="Transaction History" body="Prototype-only finance movement history. Full payment history remains out of this milestone." onClick={() => setScreen("payment-history")} />
+        <Action title="Payment History" body="Read payment history through the existing own-history or selected-member API without changing records." onClick={() => setScreen("payment-history")} />
       </div>
     </section>
   );
@@ -5330,28 +5368,313 @@ function ReceiptList({ role }: { role: Role }) {
   );
 }
 
-function PaymentHistory() {
-  const rows = [
-    { date: "03 Jun 2026", partyLabel: "Party", party: "Lion Ajith Kumar", type: "Member payment", amount: money(1000), impact: "Credit member account" },
-    { date: "02 Jun 2026", partyLabel: "Source", party: "Collection Box", type: "Club income receipt", amount: money(voluntaryContribution.amount), impact: "Club income only" },
-    { date: "01 Jun 2026", partyLabel: "Party", party: "Lion Bijesh", type: "Monthly dues", amount: money(500), impact: "Credit member account" }
-  ];
+function PaymentHistory({ role }: { role: Role }) {
+  const canUseSelectedMemberHistory = role === "president" || role === "secretary" || role === "treasurer";
+  const [status, setStatus] = useState<PaymentHistoryStatus>("initializing");
+  const [message, setMessage] = useState("Loading payment history access context...");
+  const [historyToken, setHistoryToken] = useState<string | null>(null);
+  const [historyClubId, setHistoryClubId] = useState<number | null>(null);
+  const [historyMembers, setHistoryMembers] = useState<BackendMemberRecord[]>([]);
+  const [selectedHistoryMemberId, setSelectedHistoryMemberId] = useState<number | null>(null);
+  const [payments, setPayments] = useState<PaymentHistoryApiRecord[]>([]);
+  const [meta, setMeta] = useState<PaymentHistoryMeta | null>(null);
+
+  const selectedHistoryMember = historyMembers.find((member) => member.id === selectedHistoryMemberId) ?? null;
+  const currentPage = meta?.current_page ?? 1;
+  const lastPage = meta?.last_page ?? 1;
+
+  async function paymentHistoryResponseMessage(response: Response, fallback: string) {
+    try {
+      const payload = await response.json() as ApiErrorPayload;
+      return payload.message ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  async function fetchPaymentHistory(
+    currentToken: string,
+    currentClubId: number,
+    memberId: number | null,
+    requestedPage = 1
+  ) {
+    const url = canUseSelectedMemberHistory && memberId
+      ? API_BASE_URL + "/clubs/" + currentClubId + "/members/" + memberId + "/payments/history?per_page=10&page=" + requestedPage
+      : API_BASE_URL + "/clubs/" + currentClubId + "/members/me/payments/history?per_page=10&page=" + requestedPage;
+
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer " + currentToken
+      }
+    });
+
+    if (!response.ok) {
+      const failureMessage = await paymentHistoryResponseMessage(response, "Payment history is unavailable right now.");
+      throw new Error(response.status === 401 ? "Please sign in again to view payment history." : response.status === 403 ? "This role is not authorized to view that payment history." : failureMessage);
+    }
+
+    const payload = await response.json() as PaymentHistoryApiResponse;
+    return {
+      rows: payload.payment_history ?? [],
+      meta: payload.meta ?? null
+    };
+  }
+
+  async function loadPaymentHistory(
+    currentToken = historyToken,
+    currentClubId = historyClubId,
+    memberId = selectedHistoryMemberId,
+    requestedPage = 1
+  ) {
+    if (!currentToken || !currentClubId) {
+      setStatus("error");
+      setMessage("Payment history cannot load without an active club context.");
+      return;
+    }
+
+    if (canUseSelectedMemberHistory && !memberId) {
+      setStatus("empty");
+      setPayments([]);
+      setMeta(null);
+      setMessage("No selected member is available for payment history.");
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("Loading payment history from backend...");
+
+    try {
+      const result = await fetchPaymentHistory(currentToken, currentClubId, memberId, requestedPage);
+      setPayments(result.rows);
+      setMeta(result.meta);
+      setStatus(result.rows.length ? "success" : "empty");
+      setMessage(result.rows.length ? "Payment history loaded from existing backend API." : "No payment history records are available yet.");
+    } catch (error) {
+      setPayments([]);
+      setMeta(null);
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Payment history is unavailable right now.");
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPaymentHistoryContext() {
+      setStatus("initializing");
+      setMessage("Loading payment history access context...");
+      setPayments([]);
+      setMeta(null);
+
+      try {
+        const login = canUseSelectedMemberHistory
+          ? LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">]
+          : LOCAL_MEMBER_FINANCE_LOGIN;
+
+        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(login)
+        });
+
+        if (!loginResponse.ok) {
+          throw new Error("Payment history login failed.");
+        }
+
+        const loginPayload = await loginResponse.json();
+        const token = loginPayload.token as string | undefined;
+
+        if (!token) {
+          throw new Error("Payment history token missing.");
+        }
+
+        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!meResponse.ok) {
+          throw new Error("Payment history club lookup failed.");
+        }
+
+        const mePayload = await meResponse.json();
+        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
+        const loadedClubId = memberships?.[0]?.club?.id;
+
+        if (typeof loadedClubId !== "number") {
+          throw new Error("No active club context is available for payment history.");
+        }
+
+        if (canUseSelectedMemberHistory) {
+          const membersResponse = await fetch(API_BASE_URL + "/clubs/" + loadedClubId + "/members", {
+            headers: {
+              Accept: "application/json",
+              Authorization: "Bearer " + token
+            }
+          });
+
+          if (!membersResponse.ok) {
+            throw new Error("Member list unavailable for payment history.");
+          }
+
+          const membersPayload = await membersResponse.json();
+          const activeMembers = ((membersPayload.members as BackendMemberRecord[] | undefined) ?? [])
+            .filter((member) => member.status === "active");
+          const defaultMemberId = activeMembers[0]?.id ?? null;
+
+          if (!cancelled) {
+            setHistoryToken(token);
+            setHistoryClubId(loadedClubId);
+            setHistoryMembers(activeMembers);
+            setSelectedHistoryMemberId(defaultMemberId);
+          }
+
+          if (!defaultMemberId) {
+            if (!cancelled) {
+              setStatus("empty");
+              setMessage("No active members are available for selected-member payment history.");
+            }
+            return;
+          }
+
+          const result = await fetchPaymentHistory(token, loadedClubId, defaultMemberId);
+
+          if (!cancelled) {
+            setPayments(result.rows);
+            setMeta(result.meta);
+            setStatus(result.rows.length ? "success" : "empty");
+            setMessage(result.rows.length ? "Selected-member payment history loaded from existing backend API." : "No payment history records are available for the selected member.");
+          }
+
+          return;
+        }
+
+        const result = await fetchPaymentHistory(token, loadedClubId, null);
+
+        if (!cancelled) {
+          setHistoryToken(token);
+          setHistoryClubId(loadedClubId);
+          setHistoryMembers([]);
+          setSelectedHistoryMemberId(null);
+          setPayments(result.rows);
+          setMeta(result.meta);
+          setStatus(result.rows.length ? "success" : "empty");
+          setMessage(result.rows.length ? "Your payment history loaded from existing backend API." : "No payment history records are available yet.");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setHistoryToken(null);
+          setHistoryClubId(null);
+          setHistoryMembers([]);
+          setSelectedHistoryMemberId(null);
+          setPayments([]);
+          setMeta(null);
+          setStatus("error");
+          setMessage(error instanceof Error ? error.message : "Payment history context unavailable.");
+        }
+      }
+    }
+
+    loadPaymentHistoryContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canUseSelectedMemberHistory, role]);
+
+  function updateSelectedHistoryMember(memberId: number) {
+    setSelectedHistoryMemberId(memberId);
+    void loadPaymentHistory(historyToken, historyClubId, memberId, 1);
+  }
 
   return (
     <section className="stack">
-      <Toolbar title="Transaction History" actionLabel="Dummy audit trail" />
-      <div className="notice">Record Member Payment uses the backend payment API. Receipt list, club income receipt, and transaction history remain prototype-only in this milestone.</div>
-      <div className="financeCardList">
-        {rows.map((row) => (
-          <article className="financeStackCard" key={`${row.date}-${row.party}-${row.type}`}>
-            <h3>Date: {row.date}</h3>
-            <span>{row.partyLabel}: {row.party}</span>
-            <span>Type: {row.type}</span>
-            <span>Amount: {row.amount}</span>
-            <span>Ledger Impact: {row.impact}</span>
-          </article>
-        ))}
+      <Toolbar title={canUseSelectedMemberHistory ? "Payment History" : "My Payment History"} actionLabel="Read-only backend history" />
+      <div className="notice">
+        This screen uses only the existing payment history GET APIs. It does not create, edit, cancel, reverse, allocate, export, or generate receipts.
       </div>
+
+      {canUseSelectedMemberHistory ? (
+        <div className="formPanel">
+          <div className="fieldGrid">
+            <label>
+              Member
+              <select
+                value={selectedHistoryMemberId ?? ""}
+                disabled={status === "initializing" || status === "loading" || !historyMembers.length}
+                onChange={(event) => updateSelectedHistoryMember(Number(event.target.value))}
+              >
+                {historyMembers.map((member) => (
+                  <option key={member.id} value={member.id}>{member.full_name} ({member.member_code})</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Scope
+              <input value={selectedHistoryMember ? "Selected member in active club" : "No member selected"} readOnly />
+            </label>
+          </div>
+        </div>
+      ) : (
+        <div className="notice memberHelperText">Member view loads only your own payment history. Other members' payment history is not requested.</div>
+      )}
+
+      {message && <div className="notice memberHelperText">{message}</div>}
+      {(status === "initializing" || status === "loading") && <div className="notice memberHelperText">Loading payment history...</div>}
+      {status === "empty" && <div className="memberEmptyState">No payment history records are available yet.</div>}
+
+      {payments.length > 0 && (
+        <div className="financeCardList">
+          {payments.map((payment, index) => (
+            <article className="financeStackCard" key={`${payment.payment_id ?? "payment"}-${index}`}>
+              <h3>Payment Date: {financeDisplayValue(payment.payment_date)}</h3>
+              <span>Payment ID: {financeDisplayValue(payment.payment_id)}</span>
+              <span>Member: {financeDisplayValue(payment.member?.name)}</span>
+              <span>Member Code: {financeDisplayValue(payment.member?.member_code)}</span>
+              <span>Amount: {financeDisplayAmount(payment.amount)}</span>
+              <span>Payment Mode: {financeDisplayValue(payment.payment_mode)}</span>
+              <span>Status: {financeDisplayValue(payment.status)}</span>
+              <span>Receipt: {payment.receipt?.available ? financeDisplayValue(payment.receipt.receipt_number) : "Unavailable"}</span>
+              <span>Receipt Status: {financeDisplayValue(payment.receipt?.status)}</span>
+              <span>Recorded By: {financeDisplayValue(payment.recorded_by?.name)}</span>
+              <span>Created At: {financeDisplayValue(payment.created_at)}</span>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {meta && (
+        <section className="compactPanel">
+          <Toolbar title="Payment History Pages" actionLabel={`Page ${currentPage} of ${lastPage}`} />
+          <div className="metricsGrid">
+            <Metric label="Rows on page" value={String(payments.length)} />
+            <Metric label="Per Page" value={financeDisplayValue(meta.per_page)} />
+            <Metric label="Total Records" value={financeDisplayValue(meta.total)} />
+          </div>
+          <div className="buttonRow">
+            <button
+              className="secondaryButton"
+              disabled={status === "loading" || currentPage <= 1}
+              onClick={() => void loadPaymentHistory(historyToken, historyClubId, selectedHistoryMemberId, currentPage - 1)}
+            >
+              Previous Page
+            </button>
+            <button
+              className="secondaryButton"
+              disabled={status === "loading" || currentPage >= lastPage}
+              onClick={() => void loadPaymentHistory(historyToken, historyClubId, selectedHistoryMemberId, currentPage + 1)}
+            >
+              Next Page
+            </button>
+          </div>
+        </section>
+      )}
     </section>
   );
 }
