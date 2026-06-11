@@ -101,9 +101,16 @@ class Milestone3blPaymentHistoryReadOnlyImplementationAuthorizationTest extends 
         $paymentHistoryRoutes = collect(Route::getRoutes())
             ->filter(fn ($route): bool => str_contains($route->uri(), 'payments/history')
                 || str_contains($route->uri(), 'payment-history')
-                || str_contains($route->uri(), 'payment/history'));
+                || str_contains($route->uri(), 'payment/history'))
+            ->map(fn ($route): string => implode('|', $route->methods()).' '.$route->uri())
+            ->sort()
+            ->values()
+            ->all();
 
-        $this->assertCount(0, $paymentHistoryRoutes);
+        $this->assertSame([
+            'GET|HEAD api/v1/clubs/{club}/members/me/payments/history',
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/history',
+        ], $paymentHistoryRoutes);
     }
 
     public function test_3bl_defines_future_role_visibility_boundary(): void
@@ -239,10 +246,10 @@ class Milestone3blPaymentHistoryReadOnlyImplementationAuthorizationTest extends 
         }
     }
 
-    public function test_3bl_does_not_add_runtime_payment_history_files(): void
+    public function test_3bl_allows_only_later_authorized_3bm_payment_history_runtime_files(): void
     {
-        $this->assertFileDoesNotExist(app_path('Http/Controllers/Api/V1/Finance/PaymentHistoryController.php'));
-        $this->assertFileDoesNotExist(app_path('Http/Resources/Finance/PaymentHistoryResource.php'));
+        $this->assertFileExists(app_path('Http/Controllers/Api/V1/Finance/PaymentHistoryController.php'));
+        $this->assertFileExists(app_path('Http/Resources/Finance/PaymentHistoryResource.php'));
         $this->assertFileDoesNotExist(app_path('Http/Requests/Finance/PaymentHistoryRequest.php'));
         $this->assertFileDoesNotExist(app_path('Services/Finance/PaymentHistoryService.php'));
         $this->assertFileDoesNotExist(app_path('Models/PaymentHistory.php'));

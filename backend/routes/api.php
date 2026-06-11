@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Finance\ClubFinanceReportController;
 use App\Http\Controllers\Api\V1\Finance\MemberFinanceSummaryController;
 use App\Http\Controllers\Api\V1\Finance\MemberLedgerBalanceController;
 use App\Http\Controllers\Api\V1\Finance\PaymentController;
+use App\Http\Controllers\Api\V1\Finance\PaymentHistoryController;
 use App\Http\Controllers\Api\V1\Finance\PaymentReceiptPdfController;
 use App\Http\Controllers\Api\V1\Finance\ReceiptController;
 use App\Http\Controllers\Api\V1\Member\MemberController;
@@ -36,8 +37,10 @@ Route::prefix('v1')->group(function (): void {
 
             Route::get('/clubs/{club}/members', [MemberController::class, 'index']);
             Route::get('/clubs/{club}/members/me/balance', [MemberLedgerBalanceController::class, 'own']);
+            Route::get('/clubs/{club}/members/me/payments/history', [PaymentHistoryController::class, 'own']);
             Route::get('/clubs/{club}/members/{member}/balance', [MemberLedgerBalanceController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/finance-summary', [MemberFinanceSummaryController::class, 'show']);
+            Route::get('/clubs/{club}/members/{member}/payments/history', [PaymentHistoryController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/payments/{payment}/receipt', [ReceiptController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf', [PaymentReceiptPdfController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}', [MemberController::class, 'show']);

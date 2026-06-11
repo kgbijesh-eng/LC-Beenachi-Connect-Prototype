@@ -210,9 +210,11 @@ class Milestone3hPaymentRecordingDatabaseFoundationAuthorizationTest extends Tes
             ->map(fn ($route) => $route->uri())
             ->reject(fn (string $uri): bool => in_array($uri, [
                 'api/v1/clubs/{club}/members/{member}/payments',
+                'api/v1/clubs/{club}/members/me/payments/history',
+                'api/v1/clubs/{club}/members/{member}/payments/history',
                 'api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
                 'api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
-            ], true)) // authorized 3Q payment route, 3Y receipt route, and 3AD PDF route
+            ], true)) // authorized 3Q payment route, 3BM payment history routes, 3Y receipt route, and 3AD PDF route
             ->values();
 
         foreach ($blockedRouteFragments as $fragment) {
