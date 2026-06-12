@@ -7,6 +7,7 @@ type FinanceSummaryStatus = "loading" | "ready" | "error";
 type ReceiptLookupStatus = "initializing" | "ready" | "loading" | "success" | "error";
 type ClubFinanceReportStatus = "loading" | "ready" | "empty" | "missing-club" | "unauthenticated" | "forbidden" | "error";
 type PaymentHistoryStatus = "initializing" | "ready" | "loading" | "success" | "empty" | "error";
+type MemberImportPreviewStatus = "initializing" | "ready" | "loading" | "success" | "empty" | "error";
 
 type MemberFinancePendingItem = {
   source_type: string;
@@ -182,6 +183,46 @@ type PaymentHistoryApiResponse = {
   meta?: PaymentHistoryMeta;
 };
 
+type MemberImportPreviewSummary = {
+  total_rows?: number | null;
+  accepted_rows?: number | null;
+  rejected_rows?: number | null;
+  duplicate_rows?: number | null;
+  possible_existing_match_rows?: number | null;
+};
+
+type MemberImportPreviewDuplicateMatch = {
+  field?: string | null;
+  value?: string | null;
+  matched_rows?: number[] | null;
+  member_id?: number | string | null;
+  member_code?: string | null;
+  member_name?: string | null;
+};
+
+type MemberImportPreviewRow = {
+  row_number?: number | null;
+  valid?: boolean | null;
+  intent?: string | null;
+  normalized?: Record<string, string | number | boolean | null> | null;
+  errors?: string[] | null;
+  duplicate_matches?: {
+    batch?: MemberImportPreviewDuplicateMatch[] | null;
+    existing?: MemberImportPreviewDuplicateMatch[] | null;
+  } | null;
+};
+
+type MemberImportPreviewPayload = {
+  dry_run?: boolean | null;
+  committed?: boolean | null;
+  summary?: MemberImportPreviewSummary | null;
+  rows?: MemberImportPreviewRow[] | null;
+};
+
+type MemberImportPreviewApiResponse = {
+  import_preview?: MemberImportPreviewPayload;
+};
+
 type ApiErrorPayload = {
   message?: string;
   errors?: Record<string, string[]>;
@@ -244,6 +285,7 @@ type Screen =
   | "collection-box"
   | "receipt-list"
   | "payment-history"
+  | "member-import-preview"
   | "outstanding-dues"
   | "collection-summary"
   | "fellowship-payments"
@@ -826,7 +868,8 @@ const peopleMenuItems: NavItem[] = [
     children: [
       detailItem("People", "Active Members"),
       detailItem("People", "Inactive Members"),
-      detailItem("People", "Profile Update Pending")
+      detailItem("People", "Profile Update Pending"),
+      { label: "Member Import Preview", screen: "member-import-preview" }
     ]
   },
   {
@@ -1379,6 +1422,7 @@ export default function Prototype() {
         {screen === "collection-box" && <CollectionBoxReceipt role={role} />}
         {screen === "receipt-list" && <ReceiptList role={role} />}
         {screen === "payment-history" && <PaymentHistory role={role} />}
+        {screen === "member-import-preview" && <MemberImportPreview role={role} />}
         {screen === "outstanding-dues" && <OutstandingDues setScreen={setScreen} />}
         {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
         {screen === "fellowship-payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={setScreen} />}
@@ -1435,6 +1479,7 @@ function screenTitle(screen: Screen) {
     "collection-box": "Record Club Income / Donation",
     "receipt-list": "Receipt List",
     "payment-history": "Transaction History",
+    "member-import-preview": "Member Import Preview",
     "outstanding-dues": "Outstanding Dues",
     "collection-summary": "Collection Summary",
     "fellowship-payments": "Fellowship Payments",
@@ -5674,6 +5719,322 @@ function PaymentHistory({ role }: { role: Role }) {
             </button>
           </div>
         </section>
+      )}
+    </section>
+  );
+}
+
+function parseMemberImportPreviewRows(input: string): Record<string, string>[] {
+  const lines = input
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) {
+    return [];
+  }
+
+  const delimiter = lines[0].includes("\t") ? "\t" : ",";
+  const headers = lines[0].split(delimiter).map((header) => header.trim()).filter(Boolean);
+
+  if (!headers.length) {
+    return [];
+  }
+
+  return lines.slice(1).map((line) => {
+    const cells = line.split(delimiter).map((cell) => cell.trim());
+    return headers.reduce<Record<string, string>>((row, header, index) => {
+      row[header] = cells[index] ?? "";
+      return row;
+    }, {});
+  });
+}
+
+function memberImportPreviewText(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "Unavailable";
+  }
+
+  return String(value);
+}
+
+function memberImportPreviewErrors(errors?: string[] | null): string {
+  if (!errors?.length) {
+    return "None";
+  }
+
+  return errors.join("; ");
+}
+
+function memberImportPreviewMatches(matches?: MemberImportPreviewDuplicateMatch[] | null): string {
+  if (!matches?.length) {
+    return "None";
+  }
+
+  return matches
+    .map((match) => {
+      const field = memberImportPreviewText(match.field);
+      const value = memberImportPreviewText(match.value);
+      const rows = match.matched_rows?.length ? "Rows " + match.matched_rows.join(", ") : null;
+      const member = match.member_name ?? match.member_code ?? match.member_id ?? null;
+      return [field, value, rows, member ? "Member " + member : null].filter(Boolean).join(" - ");
+    })
+    .join("; ");
+}
+
+function memberImportPreviewNormalizedFields(normalized?: Record<string, string | number | boolean | null> | null): [string, string][] {
+  if (!normalized) {
+    return [];
+  }
+
+  return Object.entries(normalized).map(([key, value]) => [key, memberImportPreviewText(value)]);
+}
+
+function MemberImportPreview({ role }: { role: Role }) {
+  const canUseMemberImportPreview = role === "president" || role === "secretary" || role === "treasurer";
+  const [status, setStatus] = useState<MemberImportPreviewStatus>(canUseMemberImportPreview ? "initializing" : "ready");
+  const [message, setMessage] = useState(
+    canUseMemberImportPreview
+      ? "Loading member import preview access context..."
+      : "Member import preview is available only to authorized officers."
+  );
+  const [previewToken, setPreviewToken] = useState<string | null>(null);
+  const [previewClubId, setPreviewClubId] = useState<number | null>(null);
+  const [pasteRows, setPasteRows] = useState("Member Code\tFull Name\tPhone\tEmail\nM-001\tMember Name\t9999999999\tmember@example.test");
+  const [preview, setPreview] = useState<MemberImportPreviewPayload | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMemberImportPreviewContext() {
+      if (!canUseMemberImportPreview) {
+        setPreviewToken(null);
+        setPreviewClubId(null);
+        setPreview(null);
+        setStatus("ready");
+        setMessage("Member import preview is hidden from Normal Member role and no preview API call is made.");
+        return;
+      }
+
+      setStatus("initializing");
+      setMessage("Loading member import preview access context...");
+      setPreview(null);
+
+      try {
+        const login = LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
+
+        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(login)
+        });
+
+        if (!loginResponse.ok) {
+          throw new Error(loginResponse.status === 401 ? "Please sign in again before previewing member rows." : "Member import preview login failed.");
+        }
+
+        const loginPayload = await loginResponse.json();
+        const token = loginPayload.token as string | undefined;
+
+        if (!token) {
+          throw new Error("Member import preview token missing.");
+        }
+
+        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!meResponse.ok) {
+          throw new Error(meResponse.status === 403 ? "This role is not authorized for member import preview." : "No active club context is available for member import preview.");
+        }
+
+        const mePayload = await meResponse.json();
+        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
+        const loadedClubId = memberships?.[0]?.club?.id;
+
+        if (typeof loadedClubId !== "number") {
+          throw new Error("No active club context is available for member import preview.");
+        }
+
+        if (!cancelled) {
+          setPreviewToken(token);
+          setPreviewClubId(loadedClubId);
+          setStatus("ready");
+          setMessage("Ready to run a preview through the existing backend dry-run API.");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPreviewToken(null);
+          setPreviewClubId(null);
+          setPreview(null);
+          setStatus("error");
+          setMessage(error instanceof Error ? error.message : "Member import preview is unavailable right now.");
+        }
+      }
+    }
+
+    loadMemberImportPreviewContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canUseMemberImportPreview, role]);
+
+  async function runMemberImportPreview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canUseMemberImportPreview) {
+      setStatus("error");
+      setMessage("Normal Member role cannot use member import preview.");
+      return;
+    }
+
+    if (!previewToken || !previewClubId) {
+      setStatus("error");
+      setMessage("Member import preview cannot run without an active club context.");
+      return;
+    }
+
+    const rows = parseMemberImportPreviewRows(pasteRows);
+
+    if (!rows.length) {
+      setPreview(null);
+      setStatus("empty");
+      setMessage("Enter a header row and at least one member row before running preview.");
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("Running dry-run preview through the existing backend API...");
+
+    try {
+      const response = await fetch(API_BASE_URL + "/clubs/" + previewClubId + "/members/import-preview", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + previewToken
+        },
+        body: JSON.stringify({ rows })
+      });
+
+      if (!response.ok) {
+        let failureMessage = "Member import preview is unavailable right now.";
+
+        try {
+          const payload = await response.json() as ApiErrorPayload;
+          failureMessage = payload.message ?? failureMessage;
+        } catch {
+          failureMessage = "Member import preview is unavailable right now.";
+        }
+
+        throw new Error(response.status === 401 ? "Please sign in again before previewing member rows." : response.status === 403 ? "This role is not authorized for member import preview." : failureMessage);
+      }
+
+      const payload = await response.json() as MemberImportPreviewApiResponse;
+      const importPreview = payload.import_preview ?? null;
+      const previewRows = importPreview?.rows ?? [];
+
+      setPreview(importPreview);
+      setStatus(previewRows.length ? "success" : "empty");
+      setMessage(previewRows.length ? "Preview completed. No member records were saved." : "Preview returned no rows.");
+    } catch (error) {
+      setPreview(null);
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Member import preview is unavailable right now.");
+    }
+  }
+
+  if (!canUseMemberImportPreview) {
+    return (
+      <section className="stack">
+        <Toolbar title="Member Import Preview" actionLabel="Officer only" />
+        <div className="notice">
+          Member import preview is hidden from Normal Member role. No preview API call is made and no import preview data is loaded.
+        </div>
+      </section>
+    );
+  }
+
+  const summary = preview?.summary ?? null;
+  const previewRows = preview?.rows ?? [];
+
+  return (
+    <section className="stack">
+      <Toolbar title="Member Import Preview" actionLabel="Preview only" />
+      <div className="notice">
+        Preview only. This screen sends manual rows to the existing backend dry-run endpoint, does not save changes, and does not silently overwrite existing member data.
+      </div>
+      <div className="notice memberHelperText">
+        No Excel upload, parser package, file storage, create/update/delete action, finance import, ledger change, payment change, receipt change, export, or reminder workflow is available here.
+      </div>
+
+      <form className="formPanel" onSubmit={runMemberImportPreview}>
+        <label>
+          Paste spreadsheet-like rows
+          <textarea
+            value={pasteRows}
+            onChange={(event) => setPasteRows(event.target.value)}
+            rows={7}
+            placeholder="Member Code\tFull Name\tPhone\tEmail"
+          />
+        </label>
+        <div className="buttonRow">
+          <button disabled={status === "initializing" || status === "loading"}>Run preview</button>
+        </div>
+      </form>
+
+      {message && <div className="notice memberHelperText">{message}</div>}
+      {(status === "initializing" || status === "loading") && <div className="notice memberHelperText">Loading member import preview...</div>}
+      {status === "empty" && <div className="memberEmptyState">No preview rows are available yet.</div>}
+
+      {summary && (
+        <section className="compactPanel">
+          <Toolbar title="Preview Summary" actionLabel={preview?.dry_run ? "Dry run" : "Preview"} />
+          <div className="metricsGrid">
+            <Metric label="Total Rows" value={memberImportPreviewText(summary.total_rows)} />
+            <Metric label="Accepted Rows" value={memberImportPreviewText(summary.accepted_rows)} />
+            <Metric label="Rejected Rows" value={memberImportPreviewText(summary.rejected_rows)} />
+            <Metric label="Duplicate Rows" value={memberImportPreviewText(summary.duplicate_rows)} />
+            <Metric label="Possible Matches" value={memberImportPreviewText(summary.possible_existing_match_rows)} />
+          </div>
+          <div className="notice memberHelperText">
+            Committed: {preview?.committed ? "Yes" : "No"}. Existing-member matches are preview information only.
+          </div>
+        </section>
+      )}
+
+      {previewRows.length > 0 && (
+        <div className="financeCardList">
+          {previewRows.map((row, index) => (
+            <article className="financeStackCard" key={`${row.row_number ?? "row"}-${index}`}>
+              <h3>Row {memberImportPreviewText(row.row_number)}</h3>
+              <span>Validity: {row.valid ? "Accepted" : "Needs review"}</span>
+              <span>Intent: {memberImportPreviewText(row.intent)}</span>
+              <span>Validation Errors: {memberImportPreviewErrors(row.errors)}</span>
+              <span>Duplicate Warnings: {memberImportPreviewMatches(row.duplicate_matches?.batch)}</span>
+              <span>Existing-Member Match Warnings: {memberImportPreviewMatches(row.duplicate_matches?.existing)}</span>
+              {memberImportPreviewNormalizedFields(row.normalized).length > 0 ? (
+                <div className="tableLike">
+                  {memberImportPreviewNormalizedFields(row.normalized).map(([field, value]) => (
+                    <div className="staticRow" key={`${row.row_number}-${field}`}>
+                      <strong>{field}</strong>
+                      <span>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span>Normalized Fields: Unavailable</span>
+              )}
+            </article>
+          ))}
+        </div>
       )}
     </section>
   );
