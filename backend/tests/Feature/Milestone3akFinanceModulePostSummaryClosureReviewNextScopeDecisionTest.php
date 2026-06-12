@@ -171,6 +171,7 @@ class Milestone3akFinanceModulePostSummaryClosureReviewNextScopeDecisionTest ext
             if (in_array($uri, [
                 'api/v1/clubs/{club}/finance/reports',
                 'api/v1/clubs/{club}/finance/balance-sheet',
+                'api/v1/clubs/{club}/members/import-preview',
             ], true)) {
                 continue;
             }

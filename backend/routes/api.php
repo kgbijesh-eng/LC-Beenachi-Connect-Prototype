@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\Finance\PaymentHistoryController;
 use App\Http\Controllers\Api\V1\Finance\PaymentReceiptPdfController;
 use App\Http\Controllers\Api\V1\Finance\ReceiptController;
 use App\Http\Controllers\Api\V1\Member\MemberController;
+use App\Http\Controllers\Api\V1\Members\MemberDataImportPreviewController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -36,6 +37,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/finance/balance-sheet', [ClubFinanceReportController::class, 'balanceSheet']);
 
             Route::get('/clubs/{club}/members', [MemberController::class, 'index']);
+            Route::post('/clubs/{club}/members/import-preview', [MemberDataImportPreviewController::class, 'store']);
             Route::get('/clubs/{club}/members/me/balance', [MemberLedgerBalanceController::class, 'own']);
             Route::get('/clubs/{club}/members/me/payments/history', [PaymentHistoryController::class, 'own']);
             Route::get('/clubs/{club}/members/{member}/balance', [MemberLedgerBalanceController::class, 'show']);

@@ -363,7 +363,9 @@ class Milestone3bxMemberDataImportApiImplementationAuthorizationTest extends Tes
             ->values()
             ->all();
 
-        $this->assertSame([], $memberImportRoutes);
+        $this->assertSame([
+            'POST api/v1/clubs/{club}/members/import-preview',
+        ], $memberImportRoutes);
     }
 
     public function test_3bx_selects_3by_as_next_narrow_implementation_milestone(): void

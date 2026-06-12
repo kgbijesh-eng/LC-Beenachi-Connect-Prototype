@@ -322,7 +322,9 @@ class Milestone3bwMemberDataImportApiScopeGateTest extends TestCase
             ->values()
             ->all();
 
-        $this->assertSame([], $memberImportRoutes);
+        $this->assertSame([
+            'POST api/v1/clubs/{club}/members/import-preview',
+        ], $memberImportRoutes);
     }
 
     public function test_3bw_selects_3bx_as_next_implementation_authorization_milestone(): void

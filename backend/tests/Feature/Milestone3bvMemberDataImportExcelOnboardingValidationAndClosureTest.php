@@ -273,7 +273,7 @@ class Milestone3bvMemberDataImportExcelOnboardingValidationAndClosureTest extend
         }
     }
 
-    public function test_3bv_confirms_no_member_import_api_routes_are_registered(): void
+    public function test_3bv_confirms_only_the_later_authorized_3by_preview_route_is_registered(): void
     {
         $memberImportRoutes = collect(Route::getRoutes())
             ->filter(fn ($route): bool => str_contains($route->uri(), 'import'))
@@ -281,7 +281,9 @@ class Milestone3bvMemberDataImportExcelOnboardingValidationAndClosureTest extend
             ->values()
             ->all();
 
-        $this->assertSame([], $memberImportRoutes);
+        $this->assertSame([
+            'POST api/v1/clubs/{club}/members/import-preview',
+        ], $memberImportRoutes);
     }
 
     public function test_3bv_document_records_all_closure_claims(): void
