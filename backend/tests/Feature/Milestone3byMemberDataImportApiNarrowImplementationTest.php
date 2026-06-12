@@ -356,7 +356,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
     public function test_3by_does_not_add_commit_upload_parser_finance_or_frontend_runtime_files(): void
     {
         foreach ([
-            app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
+            // app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
             app_path('Http/Controllers/Api/V1/Members/MemberDataImportUploadController.php'),
             app_path('Imports/MemberImport.php'),
             app_path('Jobs/ProcessMemberImport.php'),
@@ -385,6 +385,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
 
         $this->assertSame([
             'POST api/v1/clubs/{club}/members/import-preview',
+            'POST api/v1/clubs/{club}/members/import-commit',
         ], $routes);
     }
 

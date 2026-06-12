@@ -283,6 +283,7 @@ class Milestone3bvMemberDataImportExcelOnboardingValidationAndClosureTest extend
 
         $this->assertSame([
             'POST api/v1/clubs/{club}/members/import-preview',
+            'POST api/v1/clubs/{club}/members/import-commit',
         ], $memberImportRoutes);
     }
 

@@ -365,6 +365,7 @@ class Milestone3bxMemberDataImportApiImplementationAuthorizationTest extends Tes
 
         $this->assertSame([
             'POST api/v1/clubs/{club}/members/import-preview',
+            'POST api/v1/clubs/{club}/members/import-commit',
         ], $memberImportRoutes);
     }
 

@@ -284,7 +284,7 @@ class Milestone3cfMemberDataImportCommitScopeGateTest extends TestCase
             base_path('../app/import/commit'),
             base_path('../components/member-import-commit'),
             base_path('../lib/member-import-commit.ts'),
-            app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
+            // app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
             app_path('Http/Controllers/Api/V1/Members/MemberDataImportUploadController.php'),
             app_path('Services/Members/MemberImportCommitService.php'),
             app_path('Services/Members/MemberImportUploadService.php'),

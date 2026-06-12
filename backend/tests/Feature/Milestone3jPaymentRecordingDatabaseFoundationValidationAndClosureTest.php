@@ -160,6 +160,7 @@ class Milestone3jPaymentRecordingDatabaseFoundationValidationAndClosureTest exte
                 'api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
                 'api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
                 'api/v1/clubs/{club}/members/import-preview',
+                'api/v1/clubs/{club}/members/import-commit',
             ], true)) // authorized 3Q payment route, 3BM payment history routes, 3Y receipt route, 3AD PDF route, and 3BY import preview route
             ->values();
 

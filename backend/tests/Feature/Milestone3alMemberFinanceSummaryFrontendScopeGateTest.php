@@ -201,6 +201,7 @@ class Milestone3alMemberFinanceSummaryFrontendScopeGateTest extends TestCase
                 'api/v1/clubs/{club}/finance/reports',
                 'api/v1/clubs/{club}/finance/balance-sheet',
                 'api/v1/clubs/{club}/members/import-preview',
+                'api/v1/clubs/{club}/members/import-commit',
             ], true)) {
                 continue;
             }

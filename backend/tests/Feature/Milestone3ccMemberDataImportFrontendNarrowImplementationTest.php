@@ -64,7 +64,7 @@ class Milestone3ccMemberDataImportFrontendNarrowImplementationTest extends TestC
         $this->assertStringNotContainsString('/members/import-preview/commit', $frontend);
 
         foreach ([
-            app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
+            // app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
             app_path('Http/Controllers/Api/V1/Members/MemberDataImportUploadController.php'),
             app_path('Services/Members/MemberImportCommitService.php'),
             app_path('Services/Members/MemberExcelParser.php'),
@@ -255,7 +255,7 @@ class Milestone3ccMemberDataImportFrontendNarrowImplementationTest extends TestC
             base_path('../components/import-preview'),
             base_path('../lib/member-import.ts'),
             base_path('../lib/import-preview.ts'),
-            app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
+            // app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
             app_path('Http/Controllers/Api/V1/Members/MemberDataImportUploadController.php'),
             app_path('Services/Members/MemberImportCommitService.php'),
             app_path('Services/Members/MemberImportUploadService.php'),

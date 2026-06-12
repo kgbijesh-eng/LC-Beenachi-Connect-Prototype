@@ -324,6 +324,7 @@ class Milestone3bwMemberDataImportApiScopeGateTest extends TestCase
 
         $this->assertSame([
             'POST api/v1/clubs/{club}/members/import-preview',
+            'POST api/v1/clubs/{club}/members/import-commit',
         ], $memberImportRoutes);
     }
 

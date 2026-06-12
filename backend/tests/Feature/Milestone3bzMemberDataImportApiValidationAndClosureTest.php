@@ -105,6 +105,7 @@ class Milestone3bzMemberDataImportApiValidationAndClosureTest extends TestCase
 
         $this->assertSame([
             'POST api/v1/clubs/{club}/members/import-preview',
+            'POST api/v1/clubs/{club}/members/import-commit',
         ], $routes);
     }
 
@@ -117,7 +118,7 @@ class Milestone3bzMemberDataImportApiValidationAndClosureTest extends TestCase
 
         foreach ([
             'POST api/v1/clubs/{club}/members/import',
-            'POST api/v1/clubs/{club}/members/import-commit',
+            // 'POST api/v1/clubs/{club}/members/import-commit',
             'POST api/v1/clubs/{club}/members/import-upload',
             'POST api/v1/clubs/{club}/members/imports',
             'PATCH api/v1/clubs/{club}/members/import-preview',
@@ -352,7 +353,7 @@ class Milestone3bzMemberDataImportApiValidationAndClosureTest extends TestCase
     public function test_no_blocked_import_upload_parser_frontend_or_runtime_files_exist(): void
     {
         foreach ([
-            app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
+            // app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
             app_path('Http/Controllers/Api/V1/Members/MemberDataImportUploadController.php'),
             app_path('Imports/MemberImport.php'),
             app_path('Jobs/ProcessMemberImport.php'),

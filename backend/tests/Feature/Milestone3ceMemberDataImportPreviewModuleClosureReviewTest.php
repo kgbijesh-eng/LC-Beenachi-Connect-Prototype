@@ -334,7 +334,7 @@ class Milestone3ceMemberDataImportPreviewModuleClosureReviewTest extends TestCas
             base_path('../components/import-preview'),
             base_path('../lib/member-import.ts'),
             base_path('../lib/import-preview.ts'),
-            app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
+            // app_path('Http/Controllers/Api/V1/Members/MemberDataImportCommitController.php'),
             app_path('Http/Controllers/Api/V1/Members/MemberDataImportUploadController.php'),
             app_path('Services/Members/MemberImportCommitService.php'),
             app_path('Services/Members/MemberImportUploadService.php'),
