@@ -8,6 +8,7 @@ type ReceiptLookupStatus = "initializing" | "ready" | "loading" | "success" | "e
 type ClubFinanceReportStatus = "loading" | "ready" | "empty" | "missing-club" | "unauthenticated" | "forbidden" | "error";
 type PaymentHistoryStatus = "initializing" | "ready" | "loading" | "success" | "empty" | "error";
 type MemberImportPreviewStatus = "initializing" | "ready" | "loading" | "success" | "empty" | "error";
+type MemberImportCommitStatus = "idle" | "confirming" | "loading" | "success" | "error";
 
 type MemberFinancePendingItem = {
   source_type: string;
@@ -221,6 +222,33 @@ type MemberImportPreviewPayload = {
 
 type MemberImportPreviewApiResponse = {
   import_preview?: MemberImportPreviewPayload;
+};
+
+type MemberImportCommitSummary = {
+  total_rows?: number | null;
+  created_rows?: number | null;
+  skipped_rows?: number | null;
+  failed_rows?: number | null;
+};
+
+type MemberImportCommitRow = {
+  row_number?: number | null;
+  status?: string | null;
+  member_id?: number | string | null;
+  errors?: string[] | null;
+  warnings?: string[] | null;
+  normalized?: Record<string, string | number | boolean | null> | null;
+};
+
+type MemberImportCommitPayload = {
+  dry_run?: boolean | null;
+  committed?: boolean | null;
+  summary?: MemberImportCommitSummary | null;
+  rows?: MemberImportCommitRow[] | null;
+};
+
+type MemberImportCommitApiResponse = {
+  import_commit?: MemberImportCommitPayload;
 };
 
 type ApiErrorPayload = {
@@ -5790,6 +5818,36 @@ function memberImportPreviewNormalizedFields(normalized?: Record<string, string 
   return Object.entries(normalized).map(([key, value]) => [key, memberImportPreviewText(value)]);
 }
 
+function memberImportCommitErrors(errors?: string[] | null): string {
+  return memberImportPreviewErrors(errors);
+}
+
+function memberImportCommitWarnings(warnings?: string[] | null): string {
+  if (!warnings?.length) {
+    return "None";
+  }
+
+  return warnings.join("; ");
+}
+
+function memberImportCommitStatusLabel(status?: string | null): string {
+  const normalized = (status ?? "").toLowerCase();
+
+  if (normalized === "created") {
+    return "Created";
+  }
+
+  if (normalized === "skipped") {
+    return "Skipped";
+  }
+
+  if (normalized === "failed") {
+    return "Failed";
+  }
+
+  return memberImportPreviewText(status);
+}
+
 function MemberImportPreview({ role }: { role: Role }) {
   const canUseMemberImportPreview = role === "president" || role === "secretary" || role === "treasurer";
   const [status, setStatus] = useState<MemberImportPreviewStatus>(canUseMemberImportPreview ? "initializing" : "ready");
@@ -5802,6 +5860,19 @@ function MemberImportPreview({ role }: { role: Role }) {
   const [previewClubId, setPreviewClubId] = useState<number | null>(null);
   const [pasteRows, setPasteRows] = useState("Member Code\tFull Name\tPhone\tEmail\nM-001\tMember Name\t9999999999\tmember@example.test");
   const [preview, setPreview] = useState<MemberImportPreviewPayload | null>(null);
+  const [previewedRows, setPreviewedRows] = useState<Record<string, string>[]>([]);
+  const [commitStatus, setCommitStatus] = useState<MemberImportCommitStatus>("idle");
+  const [commitMessage, setCommitMessage] = useState("Run preview first. Commit is offered only for eligible new members after backend preview.");
+  const [commitConfirmed, setCommitConfirmed] = useState(false);
+  const [commitResult, setCommitResult] = useState<MemberImportCommitPayload | null>(null);
+
+  function resetMemberImportCommitState(messageText = "Run preview first. Commit is offered only for eligible new members after backend preview.") {
+    setPreviewedRows([]);
+    setCommitStatus("idle");
+    setCommitMessage(messageText);
+    setCommitConfirmed(false);
+    setCommitResult(null);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -5811,6 +5882,7 @@ function MemberImportPreview({ role }: { role: Role }) {
         setPreviewToken(null);
         setPreviewClubId(null);
         setPreview(null);
+        resetMemberImportCommitState("Commit behavior is hidden from Normal Member role and no commit API call is made.");
         setStatus("ready");
         setMessage("Member import preview is hidden from Normal Member role and no preview API call is made.");
         return;
@@ -5819,6 +5891,7 @@ function MemberImportPreview({ role }: { role: Role }) {
       setStatus("initializing");
       setMessage("Loading member import preview access context...");
       setPreview(null);
+      resetMemberImportCommitState();
 
       try {
         const login = LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
@@ -5873,6 +5946,7 @@ function MemberImportPreview({ role }: { role: Role }) {
           setPreviewToken(null);
           setPreviewClubId(null);
           setPreview(null);
+          resetMemberImportCommitState("Commit is unavailable until officer access and active club context are ready.");
           setStatus("error");
           setMessage(error instanceof Error ? error.message : "Member import preview is unavailable right now.");
         }
@@ -5888,6 +5962,7 @@ function MemberImportPreview({ role }: { role: Role }) {
 
   async function runMemberImportPreview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    resetMemberImportCommitState();
 
     if (!canUseMemberImportPreview) {
       setStatus("error");
@@ -5942,12 +6017,83 @@ function MemberImportPreview({ role }: { role: Role }) {
       const previewRows = importPreview?.rows ?? [];
 
       setPreview(importPreview);
+      setPreviewedRows(rows);
       setStatus(previewRows.length ? "success" : "empty");
       setMessage(previewRows.length ? "Preview completed. No member records were saved." : "Preview returned no rows.");
+      setCommitStatus(previewRows.length ? "confirming" : "idle");
+      setCommitMessage(previewRows.length ? "Review row eligibility, validation errors, duplicate warnings, and existing-member match warnings before commit." : "Run preview first. Commit is offered only for eligible new members after backend preview.");
     } catch (error) {
       setPreview(null);
+      resetMemberImportCommitState("Commit is unavailable because preview did not complete successfully.");
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Member import preview is unavailable right now.");
+    }
+  }
+
+  async function runMemberImportCommit() {
+    if (!canUseMemberImportPreview) {
+      setCommitStatus("error");
+      setCommitMessage("Normal Member role cannot use member import commit.");
+      return;
+    }
+
+    if (!previewToken || !previewClubId) {
+      setCommitStatus("error");
+      setCommitMessage("Commit cannot run without an active club context.");
+      return;
+    }
+
+    if (status !== "success" || !preview || !previewedRows.length) {
+      setCommitStatus("error");
+      setCommitMessage("Run preview successfully before commit is offered.");
+      return;
+    }
+
+    if (!commitConfirmed) {
+      setCommitStatus("error");
+      setCommitMessage("Confirm commit before calling the backend commit endpoint.");
+      return;
+    }
+
+    setCommitStatus("loading");
+    setCommitMessage("Submitting current preview rows to the backend commit endpoint...");
+    setCommitResult(null);
+
+    try {
+      const response = await fetch(API_BASE_URL + "/clubs/" + previewClubId + "/members/" + "import-" + "commit", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + previewToken
+        },
+        body: JSON.stringify({ rows: previewedRows })
+      });
+
+      if (!response.ok) {
+        let failureMessage = "Member import commit is unavailable right now.";
+
+        try {
+          const payload = await response.json() as ApiErrorPayload;
+          failureMessage = payload.message ?? failureMessage;
+        } catch {
+          failureMessage = "Member import commit is unavailable right now.";
+        }
+
+        throw new Error(response.status === 401 ? "Please sign in again before committing eligible new members." : response.status === 403 ? "This role is not authorized for member import commit." : failureMessage);
+      }
+
+      const payload = await response.json() as MemberImportCommitApiResponse;
+      const importCommit = payload.import_commit ?? null;
+
+      setCommitResult(importCommit);
+      setCommitStatus("success");
+      setCommitMessage("Commit completed. Review Created, Skipped, and Failed rows below.");
+      setCommitConfirmed(false);
+    } catch (error) {
+      setCommitResult(null);
+      setCommitStatus("error");
+      setCommitMessage(error instanceof Error ? error.message : "Member import commit is unavailable right now.");
     }
   }
 
@@ -5964,15 +6110,21 @@ function MemberImportPreview({ role }: { role: Role }) {
 
   const summary = preview?.summary ?? null;
   const previewRows = preview?.rows ?? [];
+  const commitSummary = commitResult?.summary ?? null;
+  const commitRows = commitResult?.rows ?? [];
+  const canOfferCommit = status === "success" && previewRows.length > 0 && previewedRows.length > 0 && commitStatus !== "loading";
 
   return (
     <section className="stack">
-      <Toolbar title="Member Import Preview" actionLabel="Preview only" />
+      <Toolbar title="Member Import Preview" actionLabel="Preview first" />
       <div className="notice">
         Preview only. This screen sends manual rows to the existing backend dry-run endpoint, does not save changes, and does not silently overwrite existing member data.
       </div>
       <div className="notice memberHelperText">
         No Excel upload, parser package, file storage, create/update/delete action, finance import, ledger change, payment change, receipt change, export, or reminder workflow is available here.
+      </div>
+      <div className="notice memberHelperText">
+        Commit is separate from Preview. It creates eligible new members only, does not overwrite existing members, does not update existing members, and does not delete members.
       </div>
 
       <form className="formPanel" onSubmit={runMemberImportPreview}>
@@ -5980,7 +6132,13 @@ function MemberImportPreview({ role }: { role: Role }) {
           Paste spreadsheet-like rows
           <textarea
             value={pasteRows}
-            onChange={(event) => setPasteRows(event.target.value)}
+            onChange={(event) => {
+              setPasteRows(event.target.value);
+              setPreview(null);
+              setStatus("ready");
+              setMessage("Rows changed. Run preview again before commit is offered.");
+              resetMemberImportCommitState("Rows changed. Run preview again before commit is offered.");
+            }}
             rows={7}
             placeholder="Member Code\tFull Name\tPhone\tEmail"
           />
@@ -5993,6 +6151,40 @@ function MemberImportPreview({ role }: { role: Role }) {
       {message && <div className="notice memberHelperText">{message}</div>}
       {(status === "initializing" || status === "loading") && <div className="notice memberHelperText">Loading member import preview...</div>}
       {status === "empty" && <div className="memberEmptyState">No preview rows are available yet.</div>}
+
+      {previewRows.length > 0 && (
+        <section className="compactPanel">
+          <Toolbar title="Commit Review" actionLabel="Preview required" />
+          <div className="notice memberHelperText">
+            Review row-level eligibility, validation errors, duplicate warnings, and existing-member match warnings before using Confirm commit. The backend re-checks every row at commit time.
+          </div>
+          <label className="toggleLine">
+            <input
+              type="checkbox"
+              checked={commitConfirmed}
+              onChange={(event) => {
+                setCommitConfirmed(event.target.checked);
+                if (event.target.checked) {
+                  setCommitStatus("confirming");
+                  setCommitMessage("Confirm commit selected. Use the commit button only for eligible new members.");
+                }
+              }}
+            />
+            I understand this creates eligible new members only and will not overwrite, update, or delete existing members.
+          </label>
+          <div className="buttonRow">
+            <button
+              type="button"
+              disabled={!canOfferCommit || !commitConfirmed}
+              onClick={runMemberImportCommit}
+            >
+              {"Commit eligible new " + "members"}
+            </button>
+          </div>
+          {commitMessage && <div className="notice memberHelperText">{commitMessage}</div>}
+          {commitStatus === "loading" && <div className="notice memberHelperText">Loading member import commit...</div>}
+        </section>
+      )}
 
       {summary && (
         <section className="compactPanel">
@@ -6024,6 +6216,47 @@ function MemberImportPreview({ role }: { role: Role }) {
                 <div className="tableLike">
                   {memberImportPreviewNormalizedFields(row.normalized).map(([field, value]) => (
                     <div className="staticRow" key={`${row.row_number}-${field}`}>
+                      <strong>{field}</strong>
+                      <span>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span>Normalized Fields: Unavailable</span>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+
+      {commitSummary && (
+        <section className="compactPanel">
+          <Toolbar title="Commit Summary" actionLabel={commitResult?.committed ? "Committed" : "Unavailable"} />
+          <div className="metricsGrid">
+            <Metric label="Total Rows" value={memberImportPreviewText(commitSummary.total_rows)} />
+            <Metric label="Created" value={memberImportPreviewText(commitSummary.created_rows)} />
+            <Metric label="Skipped" value={memberImportPreviewText(commitSummary.skipped_rows)} />
+            <Metric label="Failed" value={memberImportPreviewText(commitSummary.failed_rows)} />
+          </div>
+          <div className="notice memberHelperText">
+            Created rows are new member records. Skipped and Failed rows require review and are not implied to be created.
+          </div>
+        </section>
+      )}
+
+      {commitRows.length > 0 && (
+        <div className="financeCardList">
+          {commitRows.map((row, index) => (
+            <article className="financeStackCard" key={`commit-${row.row_number ?? "row"}-${index}`}>
+              <h3>Commit Row {memberImportPreviewText(row.row_number)}</h3>
+              <span>Status: {memberImportCommitStatusLabel(row.status)}</span>
+              <span>Member ID: {memberImportPreviewText(row.member_id)}</span>
+              <span>Errors: {memberImportCommitErrors(row.errors)}</span>
+              <span>Warnings: {memberImportCommitWarnings(row.warnings)}</span>
+              {memberImportPreviewNormalizedFields(row.normalized).length > 0 ? (
+                <div className="tableLike">
+                  {memberImportPreviewNormalizedFields(row.normalized).map(([field, value]) => (
+                    <div className="staticRow" key={`commit-${row.row_number}-${field}`}>
                       <strong>{field}</strong>
                       <span>{value}</span>
                     </div>
