@@ -3358,9 +3358,10 @@ function MemberFinanceSummaryPanel({
       <div className="memberDuesSummary">
         <Metric label="Current Dues" value={financeCurrentDuesText(summary)} />
         <Metric label="Payment Status" value={summary.payment_status} />
-        {!compact && <Metric label="Last Payment" value={financeLastPaymentText(summary)} />}
-        {!compact && <Metric label="Receipt Status" value={financeReceiptText(summary)} />}
+        <Metric label="Last Payment" value={financeLastPaymentText(summary)} />
+        <Metric label="Receipt Status" value={financeReceiptText(summary)} />
       </div>
+      {compact && <div className="notice memberHelperText">Current Dues, Last Payment, and Receipt Status come from the existing member finance summary API.</div>}
 
       {showPendingItems && (
         <section className="memberPanel">
@@ -3412,6 +3413,7 @@ function Dashboard({
     const advanceBalance = netBalance > 0 ? netBalance : 0;
     return (
       <section className="memberHome">
+        <InternalMvpReadinessPanel role={role} setScreen={setScreen} />
         <div className="memberHero">
           <Avatar name={member.name} />
           <div>
@@ -3464,6 +3466,7 @@ function Dashboard({
 
   return (
     <section className="stack">
+      <InternalMvpReadinessPanel role={role} setScreen={setScreen} totalOutstanding={totalOutstanding} />
       <PstOverview role={role} totalOutstanding={totalOutstanding} openDashboardDetail={openDashboardDetail} />
       <MyMemberAreaPanel setScreen={setScreen} />
       <section className="compactPanel">
@@ -3551,6 +3554,8 @@ function PresidentDashboard({
         <span className="statusPill">Control room view</span>
       </div>
 
+      <InternalMvpReadinessPanel role="president" setScreen={setScreen} totalOutstanding={totalOutstanding} />
+
       <section className="compactPanel dashboardPanel">
         <DashboardSectionHeader title="Today’s Priority Actions" label="Needs attention now" />
         <div className="priorityList">
@@ -3614,6 +3619,53 @@ function PresidentDashboard({
           <button onClick={() => openDashboardDetail("upcoming-events")}><strong>Upcoming meeting</strong><span>Board Meeting - 10 Jun 2026</span><small>View details</small></button>
         </div>
       </section>
+    </section>
+  );
+}
+
+function InternalMvpReadinessPanel({
+  role,
+  setScreen,
+  totalOutstanding
+}: {
+  role: Role;
+  setScreen: (screen: Screen) => void;
+  totalOutstanding?: number;
+}) {
+  const officerRole = role === "president" || role === "secretary" || role === "treasurer";
+  const profileDocumentAction = role === "member" ? "Own metadata" : role === "treasurer" ? "View metadata" : "Manage metadata";
+  const financeValue = role === "member" ? "Own dues" : totalOutstanding !== undefined ? money(totalOutstanding) : "Existing APIs";
+
+  return (
+    <section className="compactPanel dashboardPanel" data-milestone="3DJ-internal-mvp-usability">
+      <DashboardSectionHeader title="Internal MVP Quick Actions" label="Internal MVP" />
+      <div className="notice memberHelperText">MVP Manual Check: Confirm member list, dues, payments, receipts, and profile document metadata before live use.</div>
+      <div className="compactDashboardGrid">
+        <CompactDashboardCard
+          label="Members"
+          value={role === "member" ? "Directory" : "Active Members"}
+          action={officerRole ? "Select a member" : "View directory"}
+          onClick={() => setScreen("members")}
+        />
+        <CompactDashboardCard
+          label="Finance"
+          value={financeValue}
+          action={role === "member" ? "Current Dues" : role === "treasurer" ? "Record Payment" : "Review dues"}
+          onClick={() => setScreen(role === "member" ? "member-dues-detail" : role === "treasurer" ? "record-member-payment" : "ledger")}
+        />
+        <CompactDashboardCard
+          label="Receipts"
+          value="Receipt PDF"
+          action="Open receipts"
+          onClick={() => setScreen("receipt-list")}
+        />
+        <CompactDashboardCard
+          label="Profile Documents"
+          value="Metadata only"
+          action={profileDocumentAction}
+          onClick={() => setScreen("member-profile")}
+        />
+      </div>
     </section>
   );
 }
@@ -4076,6 +4128,9 @@ function MembersList({ setScreen, role }: { setScreen: (screen: Screen) => void;
   return (
     <section className="stack">
       <Toolbar title="Member Directory" actionLabel={role === "member" ? "Consent-approved fields only" : "Role-based management"} />
+      <div className="notice memberHelperText">
+        Select a member to view details, finance summary, and Profile Documents metadata. Create or edit members where authorized through the existing member management flow.
+      </div>
       <div className="tableLike">
         {members.map((member) => (
           <button key={member.id} className="rowButton" onClick={() => setScreen(role === "member" ? "member-profile" : "member-profile")}>
@@ -4471,6 +4526,8 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
           <Field label="Financial visibility" value={role === "member" ? "Own dues only" : "Role-based club view"} />
         </div>
       </div>
+      <div className="notice memberHelperText">Member Details: review the member profile here, then use the finance summary and Profile Documents metadata section below. Backend authorization remains the source of truth.</div>
+      <MemberFinanceSummaryPanel compact />
       {renderProfileDocumentsSection()}
     </section>
   );
@@ -4918,6 +4975,7 @@ function MemberDuesDetail({ member, setScreen }: { member: Member; setScreen: (s
       <MemberFinanceSummaryPanel showPendingItems />
       <section className="memberPanel">
         <Toolbar title="Current Dues Details" actionLabel="Member view" />
+        <div className="notice memberHelperText">Current Dues, Member Finance Summary, Last Payment, Receipt Status, and Payment History are shown only through existing frontend data and backend APIs.</div>
         <div className="memberDuesSummary">
           <Metric label="Current Dues" value={money(currentDues)} />
           {advanceBalance > 0 && <Metric label="Advance" value={money(advanceBalance)} />}
@@ -5033,6 +5091,7 @@ function PaymentsReceiptsHub({ setScreen }: { setScreen: (screen: Screen) => voi
     <section className="stack">
       <Toolbar title="Payments / Receipts" actionLabel="Choose finance workflow" />
       <div className="notice">Record Member Payment uses the backend payment API. Receipt List reads already issued receipts. Payment History now reads the existing backend payment history APIs only.</div>
+      <div className="notice memberHelperText">Use this internal MVP hub to find Record Payment, Receipts, Receipt PDF, and Payment History without adding new finance backend behavior.</div>
       <div className="actionGrid">
         <Action title="Record Member Payment" body="Record a member payment through the existing backend API without generating a receipt." onClick={() => setScreen("record-member-payment")} />
         <Action title="Record Club Income / Donation" body="Record collection box, donation, or other club income without changing member dues." onClick={() => setScreen("collection-box")} />
@@ -5313,6 +5372,7 @@ function RecordMemberPayment({ role }: { role: Role }) {
       <div className="notice">
         Milestone 3AR narrow implementation. This form records member payments through the existing backend payment API. Receipt generation and receipt download remain separate workflows.
       </div>
+      <div className="notice memberHelperText">Select a member, review Current Dues and Last Payment, then record payment only if the existing backend context is ready.</div>
       <div className="notice">{apiMessage}</div>
 
       <form className="formPanel" onSubmit={submitPayment}>
@@ -5737,6 +5797,7 @@ function ReceiptList({ role }: { role: Role }) {
     <section className="stack">
       <Toolbar title="Receipt List" actionLabel="Existing issued receipts" />
       <div className="notice">This screen uses only existing receipt view and PDF download APIs. It does not generate receipts, change payments, or show payment history.</div>
+      <div className="notice memberHelperText">Receipt and Receipt PDF access are available here only for already issued payment receipts supported by the existing backend.</div>
 
       {status === "initializing" && (
         <div className="notice memberHelperText">Loading receipt access context...</div>
@@ -6039,6 +6100,7 @@ function PaymentHistory({ role }: { role: Role }) {
       <div className="notice">
         This screen uses only the existing payment history GET APIs. It does not create, edit, cancel, reverse, allocate, export, or generate receipts.
       </div>
+      <div className="notice memberHelperText">Use Payment History to confirm existing payment records and receipt status after member selection. Refreshes and pagination reuse the current backend API.</div>
 
       {canUseSelectedMemberHistory ? (
         <div className="formPanel">
