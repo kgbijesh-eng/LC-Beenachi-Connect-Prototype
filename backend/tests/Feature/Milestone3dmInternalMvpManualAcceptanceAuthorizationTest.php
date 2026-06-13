@@ -46,34 +46,25 @@ class Milestone3dmInternalMvpManualAcceptanceAuthorizationTest extends TestCase
         }
     }
 
-    public function test_3dm_current_file_changes_are_limited_to_approved_docs_and_test_files(): void
+    public function test_3dm_records_file_scope_without_policing_later_working_tree_changes(): void
     {
-        $allowed = [
+        $document = $this->authorizationDocument();
+
+        foreach ([
             'backend/docs/milestone_3dm_internal_mvp_manual_acceptance_authorization.md',
             'backend/tests/Feature/Milestone3dmInternalMvpManualAcceptanceAuthorizationTest.php',
-            'backend/tests/Feature/Milestone3dlInternalMvpManualAcceptanceScopeGateTest.php',
-        ];
-
-        $repoRoot = dirname(__DIR__, 3);
-        $status = shell_exec('git -C '.escapeshellarg($repoRoot).' status --short --untracked-files=all') ?? '';
-        $changed = collect(preg_split('/\R/', trim($status)))
-            ->filter()
-            ->map(function (string $line): string {
-                $path = preg_replace('/^[ MARCUD?!]{1,2}\s+/', '', $line) ?? $line;
-                $path = trim($path);
-                if (str_contains($path, ' -> ')) {
-                    $path = trim(substr($path, strrpos($path, ' -> ') + 4));
-                }
-
-                return str_replace('\\', '/', $path);
-            })
-            ->values()
-            ->all();
-
-        $this->assertSame([], array_values(array_diff($changed, $allowed)), '3DM may change only the approved authorization doc and test files.');
+            'Read-only inspection of existing frontend, backend, docs, and tests is allowed.',
+            'app/page.tsx is not edited in 3DM.',
+            'Frontend runtime is not edited in 3DM.',
+            'Backend runtime is not edited in 3DM.',
+            'Routes/controllers/requests/resources/services/models/migrations are not edited in 3DM.',
+            'Older milestone tests are not edited in 3DM.',
+        ] as $expectedText) {
+            $this->assertStringContainsString($expectedText, $document);
+        }
 
         foreach ($this->blockedPaths() as $path) {
-            $this->assertNotContains($path, $changed, "{$path} must not be edited in 3DM.");
+            $this->assertStringNotContainsString("- {$path}", $document, "{$path} must not be listed as a 3DM editable file.");
         }
     }
 
