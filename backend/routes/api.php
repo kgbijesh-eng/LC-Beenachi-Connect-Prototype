@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\Finance\ReceiptController;
 use App\Http\Controllers\Api\V1\Member\MemberController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportPreviewController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportCommitController;
+use App\Http\Controllers\Api\V1\Members\MemberProfileDocumentController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -45,6 +46,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/members/{member}/balance', [MemberLedgerBalanceController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/finance-summary', [MemberFinanceSummaryController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/payments/history', [PaymentHistoryController::class, 'show']);
+            Route::get('/clubs/{club}/members/{member}/profile-documents', [MemberProfileDocumentController::class, 'index']);
+            Route::get('/clubs/{club}/members/{member}/profile-documents/{document}', [MemberProfileDocumentController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/payments/{payment}/receipt', [ReceiptController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf', [PaymentReceiptPdfController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}', [MemberController::class, 'show']);

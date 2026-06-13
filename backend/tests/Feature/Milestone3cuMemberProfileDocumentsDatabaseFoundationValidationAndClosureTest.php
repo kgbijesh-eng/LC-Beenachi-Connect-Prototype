@@ -195,21 +195,59 @@ class Milestone3cuMemberProfileDocumentsDatabaseFoundationValidationAndClosureTe
         }
     }
 
-    public function test_no_backend_document_routes_controllers_requests_resources_or_services_were_added(): void
+    public function test_only_3cx_read_only_document_routes_and_artifacts_are_allowed_after_stale_guard_update(): void
     {
+        $approvedRoutes = [
+            'api/v1/clubs/{club}/members/{member}/profile-documents',
+            'api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
+        ];
+
         $routes = collect(Route::getRoutes())
-            ->map(fn ($route): string => $route->uri())
-            ->filter(fn (string $uri): bool => str_contains($uri, 'document'))
+            ->filter(fn ($route): bool => in_array($route->uri(), $approvedRoutes, true));
+
+        $this->assertSame($approvedRoutes, $routes->map(fn ($route): string => $route->uri())->values()->all());
+
+        $routes->each(function ($route): void {
+            $this->assertSame(['GET', 'HEAD'], $route->methods());
+        });
+
+        $blockedRoutes = collect(Route::getRoutes())
+            ->filter(fn ($route): bool => str_contains($route->uri(), 'profile-documents'))
+            ->filter(function ($route): bool {
+                $uri = $route->uri();
+
+                return ! in_array($uri, [
+                    'api/v1/clubs/{club}/members/{member}/profile-documents',
+                    'api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
+                ], true)
+                    || count(array_intersect($route->methods(), ['POST', 'PUT', 'PATCH', 'DELETE'])) > 0
+                    || str_contains($uri, 'upload')
+                    || str_contains($uri, 'download')
+                    || str_contains($uri, 'ocr')
+                    || str_contains($uri, 'pdf');
+            })
             ->values()
             ->all();
 
-        $this->assertSame([], $routes);
+        $this->assertSame([], $blockedRoutes);
 
         foreach ([
             app_path('Http/Controllers/Api/V1/Members/MemberProfileDocumentController.php'),
-            app_path('Http/Requests/Members/MemberProfileDocumentRequest.php'),
             app_path('Http/Resources/Members/MemberProfileDocumentResource.php'),
+            app_path('Services/Members/MemberProfileDocumentReadService.php'),
+        ] as $approvedPath) {
+            $this->assertFileExists($approvedPath);
+        }
+
+        foreach ([
+            app_path('Http/Requests/Members/MemberProfileDocumentRequest.php'),
             app_path('Services/Members/MemberProfileDocumentService.php'),
+            app_path('Policies/MemberProfileDocumentPolicy.php'),
+            app_path('Http/Middleware/MemberProfileDocumentMiddleware.php'),
+            app_path('Services/Members/MemberProfileDocumentUploadService.php'),
+            app_path('Services/Members/MemberProfileDocumentStorageService.php'),
+            app_path('Services/Members/MemberProfileDocumentOcrService.php'),
+            app_path('Services/Members/MemberProfileDocumentPdfService.php'),
         ] as $blockedPath) {
             $this->assertFileDoesNotExist($blockedPath);
         }
