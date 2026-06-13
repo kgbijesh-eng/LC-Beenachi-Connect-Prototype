@@ -195,21 +195,20 @@ class Milestone3cuMemberProfileDocumentsDatabaseFoundationValidationAndClosureTe
         }
     }
 
-    public function test_only_3cx_read_only_document_routes_and_artifacts_are_allowed_after_stale_guard_update(): void
+    public function test_profile_document_routes_and_artifacts_remain_metadata_only_after_3db_forward_compatibility_update(): void
     {
-        $approvedRoutes = [
-            'api/v1/clubs/{club}/members/{member}/profile-documents',
-            'api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
-        ];
-
         $routes = collect(Route::getRoutes())
-            ->filter(fn ($route): bool => in_array($route->uri(), $approvedRoutes, true));
+            ->filter(fn ($route): bool => str_contains($route->uri(), 'profile-documents'))
+            ->map(fn ($route): string => implode('|', $route->methods()).' '.$route->uri())
+            ->values()
+            ->all();
 
-        $this->assertSame($approvedRoutes, $routes->map(fn ($route): string => $route->uri())->values()->all());
-
-        $routes->each(function ($route): void {
-            $this->assertSame(['GET', 'HEAD'], $route->methods());
-        });
+        $this->assertSame([
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/profile-documents',
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
+            'POST api/v1/clubs/{club}/members/{member}/profile-documents',
+            'PATCH api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
+        ], $routes);
 
         $blockedRoutes = collect(Route::getRoutes())
             ->filter(fn ($route): bool => str_contains($route->uri(), 'profile-documents'))
@@ -220,7 +219,7 @@ class Milestone3cuMemberProfileDocumentsDatabaseFoundationValidationAndClosureTe
                     'api/v1/clubs/{club}/members/{member}/profile-documents',
                     'api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
                 ], true)
-                    || count(array_intersect($route->methods(), ['POST', 'PUT', 'PATCH', 'DELETE'])) > 0
+                    || count(array_intersect($route->methods(), ['PUT', 'DELETE'])) > 0
                     || str_contains($uri, 'upload')
                     || str_contains($uri, 'download')
                     || str_contains($uri, 'ocr')

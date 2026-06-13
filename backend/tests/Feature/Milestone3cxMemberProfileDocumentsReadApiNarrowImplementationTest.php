@@ -44,7 +44,7 @@ class Milestone3cxMemberProfileDocumentsReadApiNarrowImplementationTest extends 
         }
     }
 
-    public function test_3cx_adds_only_approved_read_api_routes(): void
+    public function test_profile_document_routes_remain_metadata_only_after_3db_forward_compatibility_update(): void
     {
         $routes = collect(Route::getRoutes())
             ->filter(fn ($route): bool => str_contains($route->uri(), 'profile-documents'))
@@ -55,18 +55,20 @@ class Milestone3cxMemberProfileDocumentsReadApiNarrowImplementationTest extends 
         $this->assertSame([
             'GET|HEAD api/v1/clubs/{club}/members/{member}/profile-documents',
             'GET|HEAD api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
+            'POST api/v1/clubs/{club}/members/{member}/profile-documents',
+            'PATCH api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
         ], $routes);
     }
 
-    public function test_profile_document_routes_do_not_include_mutation_upload_download_ocr_or_pdf_methods(): void
+    public function test_profile_document_routes_do_not_include_delete_upload_download_ocr_or_pdf_methods(): void
     {
         $routes = collect(Route::getRoutes())
             ->filter(fn ($route): bool => str_contains($route->uri(), 'profile-documents'));
 
-        $this->assertCount(2, $routes);
+        $this->assertCount(4, $routes);
 
         foreach ($routes as $route) {
-            $this->assertSame(['GET', 'HEAD'], $route->methods());
+            $this->assertSame([], array_values(array_intersect($route->methods(), ['PUT', 'DELETE'])));
 
             foreach (['upload', 'download', 'ocr', 'pdf', 'export'] as $blockedFragment) {
                 $this->assertStringNotContainsString($blockedFragment, $route->uri());

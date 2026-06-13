@@ -206,34 +206,35 @@ class Milestone3daMemberProfileDocumentsCreateUpdateImplementationAuthorizationT
         }
     }
 
-    public function test_only_read_only_profile_document_routes_exist_in_3da(): void
+    public function test_profile_document_routes_remain_metadata_only_after_3db_forward_compatibility_update(): void
     {
-        $approvedRoutes = [
-            'api/v1/clubs/{club}/members/{member}/profile-documents',
-            'api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
-        ];
-
         $routes = collect(Route::getRoutes())
             ->filter(fn ($route): bool => str_contains($route->uri(), 'profile-documents'));
 
-        $this->assertSame($approvedRoutes, $routes->map(fn ($route): string => $route->uri())->values()->all());
+        $this->assertSame([
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/profile-documents',
+            'GET|HEAD api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
+            'POST api/v1/clubs/{club}/members/{member}/profile-documents',
+            'PATCH api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
+        ], $routes->map(fn ($route): string => implode('|', $route->methods()).' '.$route->uri())->values()->all());
 
         $routes->each(function ($route): void {
-            $this->assertSame(['GET', 'HEAD'], $route->methods());
-            $this->assertNotContains('POST', $route->methods());
-            $this->assertNotContains('PATCH', $route->methods());
             $this->assertNotContains('PUT', $route->methods());
             $this->assertNotContains('DELETE', $route->methods());
+
+            foreach (['upload', 'download', 'ocr', 'pdf', 'storage'] as $blockedFragment) {
+                $this->assertStringNotContainsString($blockedFragment, $route->uri());
+            }
         });
     }
 
-    public function test_runtime_files_remain_without_create_update_delete_or_blocked_fields(): void
+    public function test_runtime_files_keep_blocking_delete_file_storage_ocr_pdf_and_model_migration_mutation(): void
     {
         $controller = file_get_contents($this->controllerPath);
         $model = file_get_contents($this->modelPath);
         $migration = file_get_contents($this->migrationPath);
 
-        foreach (['store', 'update', 'destroy'] as $method) {
+        foreach (['destroy', 'upload', 'download'] as $method) {
             $this->assertStringNotContainsString("public function {$method}", $controller);
         }
 

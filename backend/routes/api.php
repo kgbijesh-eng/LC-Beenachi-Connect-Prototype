@@ -56,6 +56,8 @@ Route::prefix('v1')->group(function (): void {
         Route::middleware('club.permission:members.manage,club')->group(function (): void {
             Route::post('/clubs/{club}/members', [MemberController::class, 'store']);
             Route::patch('/clubs/{club}/members/{member}', [MemberController::class, 'update']);
+            Route::post('/clubs/{club}/members/{member}/profile-documents', [MemberProfileDocumentController::class, 'store']);
+            Route::patch('/clubs/{club}/members/{member}/profile-documents/{document}', [MemberProfileDocumentController::class, 'update']);
         });
 
         Route::middleware('club.permission:payments.record,club')->group(function (): void {

@@ -103,7 +103,7 @@ class Milestone3cyMemberProfileDocumentsReadApiValidationAndClosureTest extends 
         }
     }
 
-    public function test_only_approved_3cx_get_routes_exist_for_profile_documents(): void
+    public function test_profile_document_routes_remain_metadata_only_after_3db_forward_compatibility_update(): void
     {
         $routes = collect(Route::getRoutes())
             ->filter(fn ($route): bool => str_contains($route->uri(), 'profile-documents'))
@@ -114,18 +114,20 @@ class Milestone3cyMemberProfileDocumentsReadApiValidationAndClosureTest extends 
         $this->assertSame([
             'GET|HEAD api/v1/clubs/{club}/members/{member}/profile-documents',
             'GET|HEAD api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
+            'POST api/v1/clubs/{club}/members/{member}/profile-documents',
+            'PATCH api/v1/clubs/{club}/members/{member}/profile-documents/{document}',
         ], $routes);
     }
 
-    public function test_profile_document_routes_do_not_include_mutation_upload_download_file_ocr_or_pdf_behavior(): void
+    public function test_profile_document_routes_do_not_include_delete_upload_download_file_ocr_or_pdf_behavior(): void
     {
         $routes = collect(Route::getRoutes())
             ->filter(fn ($route): bool => str_contains($route->uri(), 'profile-documents'));
 
-        $this->assertCount(2, $routes);
+        $this->assertCount(4, $routes);
 
         foreach ($routes as $route) {
-            $this->assertSame(['GET', 'HEAD'], $route->methods());
+            $this->assertSame([], array_values(array_intersect($route->methods(), ['PUT', 'DELETE'])));
 
             foreach (['upload', 'download', 'ocr', 'pdf', 'export', 'storage'] as $blockedFragment) {
                 $this->assertStringNotContainsString($blockedFragment, $route->uri());
@@ -157,7 +159,7 @@ class Milestone3cyMemberProfileDocumentsReadApiValidationAndClosureTest extends 
             $this->assertStringContainsString($expectedText, $controller);
         }
 
-        foreach (['function store', 'function update', 'function destroy', 'function upload', 'function download'] as $blockedText) {
+        foreach (['function destroy', 'function upload', 'function download'] as $blockedText) {
             $this->assertStringNotContainsString($blockedText, $controller);
         }
 

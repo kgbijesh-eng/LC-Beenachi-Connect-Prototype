@@ -193,29 +193,30 @@ class Milestone3czMemberProfileDocumentsCreateUpdateScopeGateTest extends TestCa
         }
     }
 
-    public function test_no_create_update_routes_exist_for_profile_documents(): void
+    public function test_profile_document_routes_remain_metadata_only_after_3db_forward_compatibility_update(): void
     {
         $routes = collect(Route::getRoutes())
             ->filter(fn ($route): bool => str_contains($route->uri(), 'profile-documents'));
 
-        $this->assertCount(2, $routes);
+        $this->assertCount(4, $routes);
 
         foreach ($routes as $route) {
-            $this->assertSame(['GET', 'HEAD'], $route->methods());
-            $this->assertNotContains('POST', $route->methods());
-            $this->assertNotContains('PATCH', $route->methods());
             $this->assertNotContains('PUT', $route->methods());
             $this->assertNotContains('DELETE', $route->methods());
+
+            foreach (['upload', 'download', 'ocr', 'pdf', 'storage'] as $blockedFragment) {
+                $this->assertStringNotContainsString($blockedFragment, $route->uri());
+            }
         }
     }
 
-    public function test_runtime_files_are_unmutated(): void
+    public function test_runtime_files_keep_blocking_delete_file_storage_ocr_pdf_and_model_migration_mutation(): void
     {
         $controller = file_get_contents($this->controllerPath);
         $model = file_get_contents($this->modelPath);
         $migration = file_get_contents($this->migrationPath);
 
-        foreach (['store', 'update', 'destroy'] as $method) {
+        foreach (['destroy', 'upload', 'download'] as $method) {
             $this->assertStringNotContainsString("public function {$method}", $controller);
         }
 
