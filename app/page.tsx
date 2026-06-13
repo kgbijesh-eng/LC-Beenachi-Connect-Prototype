@@ -256,6 +256,25 @@ type ApiErrorPayload = {
   errors?: Record<string, string[]>;
 };
 
+type ProfileDocumentStatus = "initializing" | "ready" | "loading" | "saving" | "empty" | "error";
+
+type ProfileDocumentMetadataRecord = {
+  id: number;
+  document_type?: string | null;
+  status?: string | null;
+  external_reference?: string | null;
+  remarks?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type ProfileDocumentFormState = {
+  document_type: string;
+  status: string;
+  external_reference: string;
+  remarks: string;
+};
+
 const LOCAL_PAYMENT_RECORDING_LOGINS: Record<Exclude<Role, "member">, PaymentRecordingLogin> = {
   president: {
     email: "president@lcbeenachi.test",
@@ -4090,21 +4109,369 @@ function Committees() {
 }
 
 function MemberProfile({ member, role }: { member: Member; role: Role }) {
+  const canManageProfileDocumentMetadata = role === "president" || role === "secretary";
+  const [documentStatus, setDocumentStatus] = useState<ProfileDocumentStatus>("initializing");
+  const [documentMessage, setDocumentMessage] = useState("Loading profile document metadata...");
+  const [documentToken, setDocumentToken] = useState<string | null>(null);
+  const [documentClubId, setDocumentClubId] = useState<number | null>(null);
+  const [documentMemberId, setDocumentMemberId] = useState<number | null>(null);
+  const [profileDocuments, setProfileDocuments] = useState<ProfileDocumentMetadataRecord[]>([]);
+  const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
+  const [showDocumentForm, setShowDocumentForm] = useState(false);
+  const [documentForm, setDocumentForm] = useState<ProfileDocumentFormState>({
+    document_type: "",
+    status: "active",
+    external_reference: "",
+    remarks: ""
+  });
+  const isDocumentBusy = documentStatus === "initializing" || documentStatus === "loading" || documentStatus === "saving";
+
+  function profileDocumentApiMessage(payload: ApiErrorPayload | null, fallback: string) {
+    if (!payload) return fallback;
+
+    if (payload.message) {
+      return payload.message;
+    }
+
+    if (payload.errors) {
+      const messages = Object.values(payload.errors).flat();
+      if (messages.length) {
+        return messages.join(" ");
+      }
+    }
+
+    return fallback;
+  }
+
+  async function fetchProfileDocuments(currentToken: string, currentClubId: number, currentMemberId: number) {
+    const response = await fetch(API_BASE_URL + "/clubs/" + currentClubId + "/members/" + currentMemberId + "/profile-documents", {
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer " + currentToken
+      }
+    });
+
+    const payload = await response.json().catch(() => null) as { profile_documents?: ProfileDocumentMetadataRecord[] } & ApiErrorPayload | null;
+
+    if (!response.ok) {
+      throw new Error(profileDocumentApiMessage(payload, "Profile document metadata is unavailable."));
+    }
+
+    return payload?.profile_documents ?? [];
+  }
+
+  async function refreshProfileDocuments(currentToken = documentToken, currentClubId = documentClubId, currentMemberId = documentMemberId) {
+    if (!currentToken || !currentClubId || !currentMemberId) {
+      setDocumentStatus("error");
+      setDocumentMessage("Profile document metadata context is unavailable.");
+      return;
+    }
+
+    setDocumentStatus("loading");
+    setDocumentMessage("Loading profile document metadata...");
+
+    try {
+      const documents = await fetchProfileDocuments(currentToken, currentClubId, currentMemberId);
+      setProfileDocuments(documents);
+      setDocumentStatus(documents.length ? "ready" : "empty");
+      setDocumentMessage(documents.length ? "Profile document metadata loaded." : "No profile document records added yet.");
+    } catch (error) {
+      setProfileDocuments([]);
+      setDocumentStatus("error");
+      setDocumentMessage(error instanceof Error ? error.message : "Profile document metadata is unavailable.");
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfileDocumentContext() {
+      setDocumentStatus("initializing");
+      setDocumentMessage("Loading profile document metadata...");
+      setProfileDocuments([]);
+      setEditingDocumentId(null);
+      setShowDocumentForm(false);
+
+      try {
+        const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
+
+        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(login)
+        });
+
+        if (!loginResponse.ok) {
+          throw new Error("Profile document role login failed.");
+        }
+
+        const loginPayload = await loginResponse.json();
+        const token = loginPayload.token as string | undefined;
+
+        if (!token) {
+          throw new Error("Profile document token missing.");
+        }
+
+        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!meResponse.ok) {
+          throw new Error("Profile document club lookup failed.");
+        }
+
+        const mePayload = await meResponse.json();
+        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
+        const loadedClubId = memberships?.[0]?.club?.id;
+
+        if (typeof loadedClubId !== "number") {
+          throw new Error("No active club context is available for profile document metadata.");
+        }
+
+        const membersResponse = await fetch(API_BASE_URL + "/clubs/" + loadedClubId + "/members", {
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + token
+          }
+        });
+
+        if (!membersResponse.ok) {
+          throw new Error("Member lookup unavailable for profile document metadata.");
+        }
+
+        const membersPayload = await membersResponse.json();
+        const backendMembers = (membersPayload.members as BackendMemberRecord[] | undefined) ?? [];
+        const selectedBackendMember = backendMembers.find((backendMember) => backendMember.member_code === member.id)
+          ?? backendMembers.find((backendMember) => backendMember.full_name === member.dashboardName || backendMember.full_name === member.name);
+
+        if (!selectedBackendMember) {
+          throw new Error("Selected member was not found in backend member records.");
+        }
+
+        const documents = await fetchProfileDocuments(token, loadedClubId, selectedBackendMember.id);
+
+        if (!cancelled) {
+          setDocumentToken(token);
+          setDocumentClubId(loadedClubId);
+          setDocumentMemberId(selectedBackendMember.id);
+          setProfileDocuments(documents);
+          setDocumentStatus(documents.length ? "ready" : "empty");
+          setDocumentMessage(documents.length ? "Profile document metadata loaded." : "No profile document records added yet.");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDocumentToken(null);
+          setDocumentClubId(null);
+          setDocumentMemberId(null);
+          setProfileDocuments([]);
+          setDocumentStatus("error");
+          setDocumentMessage(error instanceof Error ? error.message : "Profile document metadata is unavailable.");
+        }
+      }
+    }
+
+    loadProfileDocumentContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [member.dashboardName, member.id, member.name, role]);
+
+  function resetProfileDocumentForm() {
+    setEditingDocumentId(null);
+    setShowDocumentForm(false);
+    setDocumentForm({
+      document_type: "",
+      status: "active",
+      external_reference: "",
+      remarks: ""
+    });
+  }
+
+  function startProfileDocumentCreate() {
+    setEditingDocumentId(null);
+    setDocumentForm({
+      document_type: "",
+      status: "active",
+      external_reference: "",
+      remarks: ""
+    });
+    setShowDocumentForm(true);
+    setDocumentMessage("Add document metadata for this member.");
+  }
+
+  function startProfileDocumentEdit(document: ProfileDocumentMetadataRecord) {
+    setEditingDocumentId(document.id);
+    setDocumentForm({
+      document_type: document.document_type ?? "",
+      status: document.status ?? "",
+      external_reference: document.external_reference ?? "",
+      remarks: document.remarks ?? ""
+    });
+    setShowDocumentForm(true);
+    setDocumentMessage("Edit document metadata for this member.");
+  }
+
+  async function submitProfileDocumentMetadata(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canManageProfileDocumentMetadata || !documentToken || !documentClubId || !documentMemberId) {
+      setDocumentStatus("error");
+      setDocumentMessage("Backend authorization is required before profile document metadata can be saved.");
+      return;
+    }
+
+    setDocumentStatus("saving");
+    setDocumentMessage("Saving profile document metadata...");
+
+    try {
+      const response = await fetch(
+        API_BASE_URL + "/clubs/" + documentClubId + "/members/" + documentMemberId + "/profile-documents" + (editingDocumentId ? "/" + editingDocumentId : ""),
+        {
+          method: editingDocumentId ? "PATCH" : "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + documentToken
+          },
+          body: JSON.stringify({
+            document_type: documentForm.document_type,
+            status: documentForm.status,
+            external_reference: documentForm.external_reference,
+            remarks: documentForm.remarks
+          })
+        }
+      );
+
+      const payload = await response.json().catch(() => null) as ApiErrorPayload | null;
+
+      if (!response.ok) {
+        throw new Error(profileDocumentApiMessage(payload, "Profile document metadata could not be saved."));
+      }
+
+      resetProfileDocumentForm();
+      await refreshProfileDocuments(documentToken, documentClubId, documentMemberId);
+      setDocumentMessage("Profile document metadata saved and refreshed.");
+    } catch (error) {
+      setDocumentStatus("error");
+      setDocumentMessage(error instanceof Error ? error.message : "Profile document metadata could not be saved.");
+    }
+  }
+
+  function renderProfileDocumentsSection() {
+    return (
+      <section className="compactPanel profileDocumentsSection" data-milestone="3DF-profile-documents-frontend-narrow-implementation">
+        <Toolbar title="Profile Documents" actionLabel={canManageProfileDocumentMetadata ? "Metadata controls" : "Metadata view"} />
+        <div className="notice memberHelperText">Document metadata only. File upload and document storage are not enabled in this version.</div>
+        <div className="notice memberHelperText">{documentMessage}</div>
+
+        {canManageProfileDocumentMetadata && (
+          <div className="buttonRow">
+            <button type="button" className="secondaryButton" disabled={isDocumentBusy} onClick={startProfileDocumentCreate}>Add Document Metadata</button>
+            <button type="button" className="secondaryButton" disabled={isDocumentBusy} onClick={() => void refreshProfileDocuments()}>Refresh Metadata</button>
+          </div>
+        )}
+
+        {showDocumentForm && canManageProfileDocumentMetadata && (
+          <form className="formPanel" onSubmit={submitProfileDocumentMetadata}>
+            <div className="fieldGrid">
+              <label>
+                Document type
+                <input
+                  value={documentForm.document_type}
+                  disabled={isDocumentBusy}
+                  maxLength={255}
+                  onChange={(event) => setDocumentForm({ ...documentForm, document_type: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Status
+                <input
+                  value={documentForm.status}
+                  disabled={isDocumentBusy}
+                  maxLength={255}
+                  onChange={(event) => setDocumentForm({ ...documentForm, status: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                External reference
+                <input
+                  value={documentForm.external_reference}
+                  disabled={isDocumentBusy}
+                  maxLength={255}
+                  onChange={(event) => setDocumentForm({ ...documentForm, external_reference: event.target.value })}
+                  placeholder="Optional reference"
+                />
+              </label>
+              <label>
+                Remarks
+                <textarea
+                  value={documentForm.remarks}
+                  disabled={isDocumentBusy}
+                  maxLength={5000}
+                  onChange={(event) => setDocumentForm({ ...documentForm, remarks: event.target.value })}
+                  placeholder="Optional remarks"
+                />
+              </label>
+            </div>
+            <div className="buttonRow">
+              <button type="submit" disabled={isDocumentBusy}>{documentStatus === "saving" ? "Saving..." : "Save Metadata"}</button>
+              <button type="button" className="secondaryButton" disabled={isDocumentBusy} onClick={resetProfileDocumentForm}>Cancel</button>
+            </div>
+          </form>
+        )}
+
+        {(documentStatus === "initializing" || documentStatus === "loading") && <div className="notice memberHelperText">Loading profile document metadata...</div>}
+        {documentStatus === "empty" && <div className="notice memberHelperText">No profile document records added yet.</div>}
+        {documentStatus === "error" && <div className="notice memberHelperText">Profile document metadata could not be loaded or saved safely.</div>}
+
+        {profileDocuments.length > 0 && (
+          <div className="financeCardList">
+            {profileDocuments.map((document) => (
+              <article className="financeStackCard" key={document.id}>
+                <h3>{document.document_type || "Document metadata"}</h3>
+                <span>Status: {document.status || "Not set"}</span>
+                <span>External reference: {document.external_reference || "Not set"}</span>
+                <span>Remarks: {document.remarks || "Not set"}</span>
+                <span>Created: {document.created_at || "Not returned"}</span>
+                <span>Updated: {document.updated_at || "Not returned"}</span>
+                {canManageProfileDocumentMetadata && (
+                  <button type="button" className="filterButton" disabled={isDocumentBusy} onClick={() => startProfileDocumentEdit(document)}>Edit Metadata</button>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
-    <section className="detailGrid">
-      <div className="profilePanel">
-        <Avatar name={member.name} large />
-        <h2>{member.dashboardName}</h2>
-        <p>{member.id} - {member.clubRole}</p>
-        <span className="tag">{member.status}</span>
+    <section className="stack">
+      <div className="detailGrid">
+        <div className="profilePanel">
+          <Avatar name={member.name} large />
+          <h2>{member.dashboardName}</h2>
+          <p>{member.id} - {member.clubRole}</p>
+          <span className="tag">{member.status}</span>
+        </div>
+        <div className="fieldsPanel">
+          <Field label="Phone" value={member.consentContact || role !== "member" ? member.phone : "Hidden by privacy"} />
+          <Field label="Blood group" value={member.bloodGroup} />
+          <Field label="Contact consent" value={member.consentContact ? "Enabled" : "Disabled"} />
+          <Field label="Donor consent" value={member.donorConsent ? "Enabled" : "Disabled"} />
+          <Field label="Financial visibility" value={role === "member" ? "Own dues only" : "Role-based club view"} />
+        </div>
       </div>
-      <div className="fieldsPanel">
-        <Field label="Phone" value={member.consentContact || role !== "member" ? member.phone : "Hidden by privacy"} />
-        <Field label="Blood group" value={member.bloodGroup} />
-        <Field label="Contact consent" value={member.consentContact ? "Enabled" : "Disabled"} />
-        <Field label="Donor consent" value={member.donorConsent ? "Enabled" : "Disabled"} />
-        <Field label="Financial visibility" value={role === "member" ? "Own dues only" : "Role-based club view"} />
-      </div>
+      {renderProfileDocumentsSection()}
     </section>
   );
 }

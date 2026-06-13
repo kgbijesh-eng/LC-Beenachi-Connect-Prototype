@@ -266,23 +266,20 @@ class Milestone3deMemberProfileDocumentsFrontendImplementationAuthorizationTest 
         }
     }
 
-    public function test_3de_does_not_add_profile_document_frontend_runtime_copy_to_app_page(): void
+    public function test_3de_records_frontend_runtime_as_future_3df_work_instead_of_a_permanent_app_page_ban(): void
     {
-        $this->assertFileExists($this->frontendPath);
-
-        $appPage = file_get_contents($this->frontendPath);
+        $document = $this->authorizationDocument();
 
         foreach ([
-            'Add Document Metadata',
-            'Edit Metadata',
-            'No profile document records added yet.',
-            'Document metadata only. File upload and document storage are not enabled in this version.',
-            'Upload Document',
-            'Attach File',
-            'Preview File',
-            'Generate PDF',
-        ] as $text) {
-            $this->assertStringNotContainsString($text, $appPage);
+            'Milestone 3DE is a docs/tests-only frontend implementation authorization milestone.',
+            '3DE does not implement frontend runtime behavior.',
+            '3DE does not edit app/page.tsx.',
+            '3DE must not edit app/page.tsx.',
+            '3DE must not start 3DF.',
+            'Milestone 3DF - Member Profile Documents Frontend Narrow Implementation',
+            '3DF may implement a narrow frontend metadata UI only if explicitly approved later.',
+        ] as $expectedText) {
+            $this->assertStringContainsString($expectedText, $document);
         }
     }
 
