@@ -75,6 +75,8 @@ class Milestone3dvMemberEditFlowDefectScopeGateTest extends TestCase
             'backend/docs/milestone_3dv_member_edit_flow_defect_scope_gate.md',
             'backend/tests/Feature/Milestone3dvMemberEditFlowDefectScopeGateTest.php',
             'backend/tests/Feature/Milestone3duPaymentRefreshRetestExecutionTest.php',
+            'backend/docs/milestone_3dw_member_edit_flow_investigation_retest_execution.md',
+            'backend/tests/Feature/Milestone3dwMemberEditFlowInvestigationRetestExecutionTest.php',
         ];
 
         $repoRoot = dirname(__DIR__, 3);
