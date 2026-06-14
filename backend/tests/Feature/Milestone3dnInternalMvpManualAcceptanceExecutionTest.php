@@ -95,8 +95,9 @@ class Milestone3dnInternalMvpManualAcceptanceExecutionTest extends TestCase
             'app/page.tsx static inspection.',
             'npm run build validation.',
             'Backend PHPUnit validation.',
-            '127.0.0.1:3000 was not listening during execution.',
-            '127.0.0.1:8000 was not listening during execution.',
+            'Live localhost API login/logout checks for all seeded role personas.',
+            '127.0.0.1:3000 started in local dev mode and initially returned 200',
+            '127.0.0.1:8000 started in local mode and returned 200 from /api/v1/health.',
         ] as $expectedText) {
             $this->assertStringContainsString($expectedText, $document);
         }
@@ -120,20 +121,20 @@ class Milestone3dnInternalMvpManualAcceptanceExecutionTest extends TestCase
         foreach ([
             'PASS',
             'PASS WITH MINOR NOTES',
-            'BLOCKED',
             'FAIL',
+            'BLOCKED',
             'NOT IN MVP SCOPE',
             'Critical defects: 0',
-            'Major defects: 0',
+            'Major defects: 4',
             'Minor defects: 0',
-            'Notes: 18',
+            'Notes: 22',
             'Total checks: 55',
-            'PASS: 37',
-            'PASS WITH MINOR NOTES: 8',
-            'BLOCKED: 10',
-            'FAIL: 0',
+            'PASS: 39',
+            'PASS WITH MINOR NOTES: 12',
+            'BLOCKED: 0',
+            'FAIL: 4',
             'NOT IN MVP SCOPE: 0',
-            'Go/No-Go recommendation: BLOCKED PENDING SETUP.',
+            'Go/No-Go recommendation: NO-GO PENDING DEFECT FIXES.',
         ] as $expectedText) {
             $this->assertStringContainsString($expectedText, $document);
         }
@@ -144,14 +145,15 @@ class Milestone3dnInternalMvpManualAcceptanceExecutionTest extends TestCase
         $document = $this->executionDocument();
 
         foreach ([
-            'No Critical, Major, or Minor defects were found.',
-            'Blocked items:',
-            'DN-006 President/Admin login is testable.',
-            'DN-047 Refresh after create/update/payment works where safely testable.',
+            'No Critical defects were found.',
+            'Major defects were found:',
+            'DN-010 Logout deletes the token',
+            'DN-031 Seeded local roles do not include payments.record',
+            'Blocked items: none.',
             'No checklist row was marked NOT IN MVP SCOPE.',
             'No safety stop condition was encountered.',
-            'Local server unavailability caused selected checks to be marked BLOCKED instead of forcing execution.',
-            '3DN execution decision: partial manual acceptance executed with static/build/test evidence and BLOCKED local browser/server-dependent checks.',
+            'No setup stop condition remains.',
+            '3DN execution decision: manual acceptance executed with static/build/test evidence and localhost API/frontend startup evidence',
             'No fixes were implemented.',
             'No runtime files were edited.',
         ] as $expectedText) {
@@ -175,7 +177,7 @@ class Milestone3dnInternalMvpManualAcceptanceExecutionTest extends TestCase
             'Manual acceptance was limited to local/test data.',
             'UI role hiding is not security; backend authorization must remain authoritative.',
             'Existing app/page.tsx is large and future changes must remain narrow.',
-            'Any BLOCKED items must be resolved before broader real-club use.',
+            'Any FAIL items must be fixed and revalidated before broader real-club use.',
             'Milestone 3DO - Internal MVP Manual Acceptance Closure Review',
         ] as $expectedText) {
             $this->assertStringContainsString($expectedText, $document);

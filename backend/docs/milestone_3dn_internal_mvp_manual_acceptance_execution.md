@@ -4,7 +4,7 @@
 
 Milestone 3DN is the controlled internal MVP manual acceptance execution milestone authorized by 3DM.
 
-3DN executes the acceptance checklist using local/static/build/test evidence where safe, and records blocked items where local browser/server execution is unavailable.
+3DN executes the acceptance checklist using local/static/build/test evidence where safe, and records pass/fail evidence from localhost-only manual checks.
 
 3DN does not implement runtime code.
 
@@ -58,7 +58,7 @@ Created branch:
 
 ## Manual Acceptance Execution Scope
 
-3DN used safe local/static/build/test inspection only.
+3DN used safe local/static/build/test inspection and localhost-only live API/frontend startup checks.
 
 3DN did not start a production deployment.
 
@@ -70,7 +70,7 @@ Created branch:
 
 3DN did not perform real payment collection.
 
-3DN recorded unavailable local browser/server checks as BLOCKED.
+3DN resolved the previously blocked setup-dependent checks into PASS, PASS WITH MINOR NOTES, or FAIL evidence.
 
 ## Relationship to Prior Milestones
 
@@ -92,13 +92,13 @@ Frontend local environment only: confirmed by local project build command and no
 
 Backend local environment only: confirmed by backend .env APP_ENV=local and APP_URL=http://localhost.
 
-Database is non-production: confirmed as local configuration using DB_HOST=127.0.0.1 and DB_DATABASE=lc_beenachi_connect. Direct data contents were not inspected.
+Database is non-production: confirmed as local configuration using DB_HOST=127.0.0.1 and DB_DATABASE=lc_beenachi_connect. Live checks used only seeded users and synthetic local test data.
 
-No real member financial records are used: confirmed because execution was limited to static/build/test inspection and did not query or mutate financial records.
+No real member financial records are used: confirmed because live checks used only seeded users, one synthetic local test member, and a rejected synthetic payment attempt that did not create a payment record.
 
-No live deployment is used: confirmed by local configuration and no server listening on 127.0.0.1:3000 or 127.0.0.1:8000 during the check.
+No live deployment is used: confirmed by local configuration and localhost-only frontend/backend startup on 127.0.0.1:3000 and 127.0.0.1:8000.
 
-No real payment collection is used: confirmed; no payment submission was executed.
+No real payment collection is used: confirmed; only a synthetic local payment attempt was submitted and it was rejected before payment creation.
 
 Seeded/local test users are used: source inspected in LocalRoleTestUsersSeeder.
 
@@ -139,32 +139,36 @@ Evidence sources used:
 - app/page.tsx static inspection.
 - npm run build validation.
 - Backend PHPUnit validation.
-- Local port checks for 127.0.0.1:3000 and 127.0.0.1:8000.
+- Localhost frontend/backend startup checks for 127.0.0.1:3000 and 127.0.0.1:8000.
+- Live localhost API login/logout checks for all seeded role personas.
+- Live localhost API member create/update refresh check using a synthetic local test member.
+- Live localhost API authorization checks for unauthorized payment and profile-document metadata writes.
+- Live localhost API synthetic payment attempt for an authorized seeded President/Admin user.
 
 Frontend server status:
 
-- 127.0.0.1:3000 was not listening during execution.
+- 127.0.0.1:3000 started in local dev mode and initially returned 200, but later browser/HTTP requests timed out while compiling or serving the page.
 
 Backend server status:
 
-- 127.0.0.1:8000 was not listening during execution.
+- 127.0.0.1:8000 started in local mode and returned 200 from /api/v1/health.
 
-Because local browser/server access was unavailable, login/session and write-flow interaction checks are recorded as BLOCKED where static evidence is insufficient.
+Because localhost services were available, previously blocked setup-dependent checks were executed. No checklist row remains blocked by setup. The run found defects in logout failure handling, frontend responsiveness under browser/manual access, and seeded payment permission readiness.
 
 ## Checklist Execution Results
 
 | ID | Area | Role | Test Step | Expected Result | Actual Result | Status | Severity | Notes |
 |----|------|------|-----------|-----------------|---------------|--------|----------|-------|
 | DN-001 | Environment and safety | All | Confirm branch/hash. | Correct 3DN branch from verified 3DM base. | Branch created from verified 3DM base hash 68b5b66805d014ef0809da893376a8ba4b7a88ce. | PASS |  |  |
-| DN-002 | Environment and safety | All | Confirm local/non-production environment. | Local non-production environment only. | APP_ENV=local, APP_URL=http://localhost, DB_HOST=127.0.0.1; data contents not inspected. | PASS WITH MINOR NOTES | Note | Local config is non-production, but live DB contents were not queried. |
-| DN-003 | Environment and safety | All | Confirm no real member financial records are used. | No real financial data used. | No financial record queries or payment submissions were executed. | PASS |  | Static/build/test evidence only. |
-| DN-004 | Environment and safety | All | Confirm no live deployment or production URL is used. | No production URL or deployment. | No live deployment used; local ports 3000 and 8000 were not serving. | PASS |  |  |
+| DN-002 | Environment and safety | All | Confirm local/non-production environment. | Local non-production environment only. | APP_ENV=local, APP_URL=http://localhost, DB_HOST=127.0.0.1; live checks used seeded users and synthetic local data only. | PASS WITH MINOR NOTES | Note | Local config is non-production. |
+| DN-003 | Environment and safety | All | Confirm no real member financial records are used. | No real financial data used. | Only seeded users and one synthetic local test member were used; the synthetic payment attempt was rejected before payment creation. | PASS |  | Localhost evidence only. |
+| DN-004 | Environment and safety | All | Confirm no live deployment or production URL is used. | No production URL or deployment. | No live deployment used; only 127.0.0.1:3000 and 127.0.0.1:8000 were used. | PASS |  |  |
 | DN-005 | Environment and safety | All | Confirm local/test users are available or record BLOCKED. | Local/test users found. | LocalRoleTestUsersSeeder records President/Admin, Secretary, Treasurer, and Normal Member users. | PASS |  |  |
-| DN-006 | Login/session | President/Admin | President/Admin login is testable. | Login can be tested. | BLOCKED because local frontend/backend servers were unavailable. | BLOCKED | Note | User exists in seeder. |
-| DN-007 | Login/session | Secretary | Secretary login is testable. | Login can be tested. | BLOCKED because local frontend/backend servers were unavailable. | BLOCKED | Note | User exists in seeder. |
-| DN-008 | Login/session | Treasurer | Treasurer login is testable. | Login can be tested. | BLOCKED because local frontend/backend servers were unavailable. | BLOCKED | Note | User exists in seeder. |
-| DN-009 | Login/session | Normal Member | Normal Member login is testable. | Login can be tested. | BLOCKED because local frontend/backend servers were unavailable. | BLOCKED | Note | User exists in seeder. |
-| DN-010 | Login/session | All | Logout/session handling is understandable. | Logout/session flow can be inspected. | BLOCKED because browser/server session flow was unavailable. | BLOCKED | Note |  |
+| DN-006 | Login/session | President/Admin | President/Admin login is testable. | Login can be tested. | Localhost API login succeeded and /auth/me returned president-admin role for president@lcbeenachi.test. | PASS WITH MINOR NOTES | Note | Frontend browser session later timed out, but backend seeded login is testable. |
+| DN-007 | Login/session | Secretary | Secretary login is testable. | Login can be tested. | Localhost API login succeeded and /auth/me returned secretary role for secretary@lcbeenachi.test. | PASS WITH MINOR NOTES | Note | Frontend browser session later timed out, but backend seeded login is testable. |
+| DN-008 | Login/session | Treasurer | Treasurer login is testable. | Login can be tested. | Localhost API login succeeded and /auth/me returned treasurer role for treasurer@lcbeenachi.test. | PASS WITH MINOR NOTES | Note | Frontend browser session later timed out, but backend seeded login is testable. |
+| DN-009 | Login/session | Normal Member | Normal Member login is testable. | Login can be tested. | Localhost API login succeeded and /auth/me returned member role for local.member@lcbeenachi.test. | PASS WITH MINOR NOTES | Note | Frontend browser session later timed out, but backend seeded login is testable. |
+| DN-010 | Login/session | All | Logout/session handling is understandable. | Logout/session flow can be inspected. | Logout endpoint returned success for all four seeded users, but a subsequent /auth/me request with the logged-out token returned HTTP 500 instead of a clean unauthorized response. | FAIL | Major | Session invalidation works enough to delete the token, but failure handling is not acceptable for internal MVP acceptance. |
 | DN-011 | Dashboard and quick actions | All | Dashboard loads without fatal error. | Dashboard can load. | Build passed and Dashboard code is present; browser load not executed. | PASS WITH MINOR NOTES | Note | Needs browser confirmation later. |
 | DN-012 | Dashboard and quick actions | All | Internal MVP / Quick Actions area is visible. | Internal MVP quick actions present. | Static inspection found Internal MVP Quick Actions. | PASS |  |  |
 | DN-013 | Dashboard and quick actions | All | Members area is discoverable. | Members entry is discoverable. | Static inspection found Members / Active Members. | PASS |  |  |
@@ -174,18 +178,18 @@ Because local browser/server access was unavailable, login/session and write-flo
 | DN-017 | Dashboard and quick actions | All | UI does not claim production readiness or SaaS readiness. | No production/SaaS readiness claim. | Static inspection and docs did not add production/SaaS readiness claims. | PASS |  |  |
 | DN-018 | Members | All | Member list loads clearly. | Member list is understandable. | Static inspection found Member Directory and Active Members; browser load not executed. | PASS WITH MINOR NOTES | Note | Needs browser confirmation later. |
 | DN-019 | Members | Officer | Authorized officer can find member create flow. | Create flow is discoverable. | Static inspection found Add Member/authorized member-management wording. | PASS WITH MINOR NOTES | Note | Actual create action not executed. |
-| DN-020 | Members | Officer | Authorized officer can find member edit flow. | Edit flow is discoverable. | BLOCKED because edit interaction could not be confirmed without browser/server access. | BLOCKED | Note |  |
+| DN-020 | Members | Officer | Authorized officer can find member edit flow. | Edit flow is discoverable. | Localhost API member create and secretary update succeeded for a synthetic local member, and the refreshed member read returned the edited data; frontend browser edit-flow confirmation timed out. | FAIL | Major | Backend edit path works, but manual browser discoverability remains defective because local frontend requests timed out. |
 | DN-021 | Members | Normal Member | Normal Member does not see officer-only member create/edit controls. | Officer-only controls hidden. | Static role navigation indicates member-only area without officer management actions. | PASS |  | Browser confirmation pending. |
 | DN-022 | Members | All | Member detail/profile context is understandable. | Member context is clear. | Static inspection found Member Details helper copy. | PASS |  |  |
 | DN-023 | Finance/current dues | All | Current dues/member finance summary is visible where supported. | Current dues and summary visible. | Static inspection found Current Dues and Member Finance Summary surfaces. | PASS WITH MINOR NOTES | Note | Runtime API call not executed. |
 | DN-024 | Finance/current dues | All | Last payment/receipt status is understandable where supported. | Last payment/receipt status visible. | Static inspection found Last Payment and Receipt Status summary copy. | PASS WITH MINOR NOTES | Note | Runtime API call not executed. |
 | DN-025 | Finance/current dues | All | Finance UI does not invent fake data. | Uses existing/frontend-backed data only. | Static copy states existing frontend data and backend APIs only. | PASS |  |  |
 | DN-026 | Finance/current dues | All | Unauthorized finance actions are hidden where frontend role checks support it. | Unauthorized finance actions hidden. | Static role checks exist for payment/finance controls. | PASS WITH MINOR NOTES | Note | Browser role check not executed. |
-| DN-027 | Finance/current dues | All | Backend still blocks unauthorized finance actions where safely testable. | Backend authorization blocks unauthorized access. | BLOCKED because safe live API authorization test was not executed. | BLOCKED | Note | Existing automated suite covers authorization broadly. |
+| DN-027 | Finance/current dues | All | Backend still blocks unauthorized finance actions where safely testable. | Backend authorization blocks unauthorized access. | Normal Member payment write attempt against a synthetic local member returned HTTP 403. | PASS |  | Existing backend authorization remains authoritative. |
 | DN-028 | Payment recording | Officer | Payment recording entry point is discoverable for authorized roles where supported. | Record Payment discoverable. | Static inspection found Record Payment and payment hub. | PASS |  |  |
 | DN-029 | Payment recording | Officer | Payment flow uses existing backend capability only. | Uses existing backend API only. | Static inspection found existing backend payment API copy. | PASS |  |  |
 | DN-030 | Payment recording | Officer | Validation/error handling is understandable. | Errors/messages are understandable. | Static inspection found backend API message handling and safe error copy. | PASS |  |  |
-| DN-031 | Payment recording | Officer | Success/refresh behavior after payment is understandable where safely testable. | Success/refresh can be verified. | BLOCKED because no payment submission was executed. | BLOCKED | Note | Real payment collection is prohibited. |
+| DN-031 | Payment recording | Officer | Success/refresh behavior after payment is understandable where safely testable. | Success/refresh can be verified. | Synthetic President/Admin payment attempt against a synthetic local member returned HTTP 403 because the seeded local roles do not include payments.record. | FAIL | Major | No payment was created. This is a readiness defect, not a setup blocker. |
 | DN-032 | Receipts and payment history | All | Receipt access is discoverable where supported. | Receipt access visible. | Static inspection found Receipt List and issued receipt flow. | PASS |  |  |
 | DN-033 | Receipts and payment history | All | Receipt PDF access is discoverable where already approved and safely testable. | Receipt PDF access visible. | Static inspection found Download Receipt PDF for payment receipts. | PASS |  | PDF download was not executed. |
 | DN-034 | Receipts and payment history | All | Payment history visibility is understandable where supported. | Payment History visible. | Static inspection found Payment History and My Payment History. | PASS |  |  |
@@ -195,13 +199,13 @@ Because local browser/server access was unavailable, login/session and write-flo
 | DN-038 | Member profile documents | President/Admin, Secretary | Authorized roles can find add document metadata flow. | Add metadata flow visible. | Static inspection found Add Document Metadata. | PASS |  |  |
 | DN-039 | Member profile documents | President/Admin, Secretary | Authorized roles can find edit document metadata flow. | Edit metadata flow visible. | Static inspection found Edit Metadata. | PASS |  |  |
 | DN-040 | Member profile documents | Treasurer, Normal Member | Treasurer and Normal Member do not see unauthorized profile document create/edit controls. | Unauthorized controls hidden. | Static role check limits metadata controls to president/secretary. | PASS |  |  |
-| DN-041 | Member profile documents | Treasurer, Normal Member | Backend still blocks unauthorized document metadata actions where safely testable. | Backend blocks unauthorized actions. | BLOCKED because safe live API authorization test was not executed. | BLOCKED | Note |  |
+| DN-041 | Member profile documents | Treasurer, Normal Member | Backend still blocks unauthorized document metadata actions where safely testable. | Backend blocks unauthorized actions. | Treasurer and Normal Member profile-document metadata write attempts against a synthetic local member both returned HTTP 403. | PASS |  | Metadata-only authorization boundary held. |
 | DN-042 | Member profile documents | All | No profile document upload/download/preview/delete/OCR/PDF behavior is present. | Unsupported behavior absent. | Static inspection found no blocked profile-document labels/fields. | PASS WITH MINOR NOTES | Note | General receipt PDF remains present for payment receipts. |
 | DN-043 | States and errors | All | Loading states are understandable. | Loading states clear. | Static inspection found loading messages for finance, receipt, payment history, payment, import, and profile documents. | PASS |  |  |
 | DN-044 | States and errors | All | Empty states are understandable. | Empty states clear. | Static inspection found empty states for payment history and profile documents. | PASS |  |  |
 | DN-045 | States and errors | All | Safe error states are understandable. | Error states clear. | Static inspection found safe unavailable/error messages. | PASS |  |  |
 | DN-046 | States and errors | All | Validation messages are understandable. | Validation messages clear. | Static inspection found API payload error handling. | PASS |  |  |
-| DN-047 | States and errors | All | Refresh after create/update/payment works where safely testable. | Refresh behavior can be tested. | BLOCKED because no write action was executed. | BLOCKED | Note | Static code includes refresh paths. |
+| DN-047 | States and errors | All | Refresh after create/update/payment works where safely testable. | Refresh behavior can be tested. | Synthetic member create/update refresh was verified by a follow-up read returning edited data, but payment refresh could not be verified because authorized seeded payment recording returned HTTP 403. | FAIL | Major | Member refresh path works; payment refresh remains unaccepted until DN-031 is fixed. |
 | DN-048 | Explicit exclusions | All | No profile document upload is available. | Upload absent. | Static inspection found no Upload Document profile-document copy. | PASS |  |  |
 | DN-049 | Explicit exclusions | All | No profile document download is available. | Download absent. | Static inspection found no Download Profile Document copy. | PASS |  |  |
 | DN-050 | Explicit exclusions | All | No profile document preview is available. | Preview absent. | Static inspection found no Preview File copy. | PASS |  |  |
@@ -213,28 +217,24 @@ Because local browser/server access was unavailable, login/session and write-flo
 
 ## Defects Found
 
-No Critical, Major, or Minor defects were found.
+No Critical defects were found.
 
-Notes were recorded for static-only confirmations and blocked local server/browser checks.
+Major defects were found:
+
+- DN-010 Logout deletes the token but subsequent protected API access with the deleted token returns HTTP 500 instead of a clean unauthorized response.
+- DN-020 Local frontend/browser interaction did not remain responsive enough to confirm member edit flow discoverability, although backend create/update/read worked for a synthetic local member.
+- DN-031 Seeded local roles do not include payments.record, so a seeded President/Admin cannot record a synthetic local payment through the existing payment API.
+- DN-047 Payment refresh behavior cannot be accepted until authorized seeded payment recording succeeds.
+
+Notes were recorded for static-only confirmations and partial frontend/browser checks.
 
 ## Blocked Items
 
-Blocked items:
-
-- DN-006 President/Admin login is testable.
-- DN-007 Secretary login is testable.
-- DN-008 Treasurer login is testable.
-- DN-009 Normal Member login is testable.
-- DN-010 Logout/session handling is understandable.
-- DN-020 Authorized officer can find member edit flow.
-- DN-027 Backend still blocks unauthorized finance actions where safely testable.
-- DN-031 Success/refresh behavior after payment is understandable where safely testable.
-- DN-041 Backend still blocks unauthorized document metadata actions where safely testable.
-- DN-047 Refresh after create/update/payment works where safely testable.
+Blocked items: none.
 
 Blocked reason:
 
-- Local frontend and backend servers were not available on 127.0.0.1:3000 or 127.0.0.1:8000 during execution, and write/API authorization checks were not forced.
+- Previously blocked setup-dependent checks were executed against localhost. Remaining concerns are recorded as FAIL or PASS WITH MINOR NOTES, not BLOCKED.
 
 ## Not-in-MVP-Scope Items
 
@@ -246,13 +246,13 @@ Profile document upload/download/preview/delete/OCR/PDF generation, production d
 
 Total checks: 55
 
-PASS: 37
+PASS: 39
 
-PASS WITH MINOR NOTES: 8
+PASS WITH MINOR NOTES: 12
 
-BLOCKED: 10
+BLOCKED: 0
 
-FAIL: 0
+FAIL: 4
 
 NOT IN MVP SCOPE: 0
 
@@ -260,17 +260,17 @@ NOT IN MVP SCOPE: 0
 
 Critical defects: 0
 
-Major defects: 0
+Major defects: 4
 
 Minor defects: 0
 
-Notes: 18
+Notes: 22
 
 ## Go/No-Go Recommendation
 
-Go/No-Go recommendation: BLOCKED PENDING SETUP.
+Go/No-Go recommendation: NO-GO PENDING DEFECT FIXES.
 
-The internal MVP shows a strong static/build/test readiness signal, but browser/server login, role navigation, and safe write/authorization checks require a running local frontend/backend environment before broader real-club use.
+The internal MVP can move off BLOCKED PENDING SETUP because localhost frontend/backend setup was attempted and the setup-dependent checks were executed. It should not move to GO for broader real-club internal use until the logout 500, frontend responsiveness/manual edit-flow confirmation, seeded payment permission readiness, and payment refresh acceptance defects are fixed and revalidated.
 
 No Critical defects were found.
 
@@ -286,7 +286,7 @@ No live deployment or public production URL was used.
 
 No real payment collection was performed.
 
-Local server unavailability caused selected checks to be marked BLOCKED instead of forcing execution.
+No setup stop condition remains. The remaining stop is acceptance quality: Major defects prevent GO.
 
 ## Unsupported Feature Exclusions Verified
 
@@ -332,17 +332,17 @@ Receipt PDF is allowed only because it belongs to the approved finance/receipt l
 
 Profile document upload/download/PDF/OCR remains out of scope.
 
-Any BLOCKED items must be resolved before broader real-club use.
+Any FAIL items must be fixed and revalidated before broader real-club use.
 
 ## Execution Decision
 
-3DN execution decision: partial manual acceptance executed with static/build/test evidence and BLOCKED local browser/server-dependent checks.
+3DN execution decision: manual acceptance executed with static/build/test evidence and localhost API/frontend startup evidence; setup blockers were resolved into PASS, PASS WITH MINOR NOTES, or FAIL outcomes.
 
 No fixes were implemented.
 
 No runtime files were edited.
 
-The next lane should review the blocked setup-dependent checks before declaring broader internal use readiness.
+The next lane should not declare broader internal use readiness until the 3DN Major defects are fixed and revalidated.
 
 ## Expected Next Milestone
 
