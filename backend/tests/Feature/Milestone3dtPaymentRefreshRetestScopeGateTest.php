@@ -37,6 +37,8 @@ class Milestone3dtPaymentRefreshRetestScopeGateTest extends TestCase
             'backend/docs/milestone_3dt_payment_refresh_retest_scope_gate.md',
             'backend/tests/Feature/Milestone3dtPaymentRefreshRetestScopeGateTest.php',
             'backend/tests/Feature/Milestone3dsSeededPaymentPermissionDefectImplementationTest.php',
+            'backend/docs/milestone_3du_payment_refresh_retest_execution.md',
+            'backend/tests/Feature/Milestone3duPaymentRefreshRetestExecutionTest.php',
         ];
 
         $repoRoot = dirname(__DIR__, 3);
