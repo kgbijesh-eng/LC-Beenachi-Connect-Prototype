@@ -83,6 +83,8 @@ class Milestone3dwMemberEditFlowInvestigationRetestExecutionTest extends TestCas
             'backend/docs/milestone_3dw_member_edit_flow_investigation_retest_execution.md',
             'backend/tests/Feature/Milestone3dwMemberEditFlowInvestigationRetestExecutionTest.php',
             'backend/tests/Feature/Milestone3dvMemberEditFlowDefectScopeGateTest.php',
+            'backend/docs/milestone_3dx_member_edit_flow_defect_implementation_scope_gate.md',
+            'backend/tests/Feature/Milestone3dxMemberEditFlowDefectImplementationScopeGateTest.php',
         ];
 
         $repoRoot = dirname(__DIR__, 3);
