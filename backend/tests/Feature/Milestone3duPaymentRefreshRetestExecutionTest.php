@@ -80,6 +80,8 @@ class Milestone3duPaymentRefreshRetestExecutionTest extends TestCase
             'backend/docs/milestone_3du_payment_refresh_retest_execution.md',
             'backend/tests/Feature/Milestone3duPaymentRefreshRetestExecutionTest.php',
             'backend/tests/Feature/Milestone3dtPaymentRefreshRetestScopeGateTest.php',
+            'backend/docs/milestone_3dv_member_edit_flow_defect_scope_gate.md',
+            'backend/tests/Feature/Milestone3dvMemberEditFlowDefectScopeGateTest.php',
         ];
 
         $repoRoot = dirname(__DIR__, 3);
