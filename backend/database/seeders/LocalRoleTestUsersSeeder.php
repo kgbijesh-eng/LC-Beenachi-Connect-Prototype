@@ -4,8 +4,10 @@ namespace Database\Seeders;
 
 use App\Models\Club;
 use App\Models\ClubMembership;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Finance\PaymentRecordingService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -18,6 +20,15 @@ class LocalRoleTestUsersSeeder extends Seeder
         }
 
         $club = Club::where('code', 'LCB')->firstOrFail();
+
+        $paymentRecordPermission = Permission::updateOrCreate(
+            ['slug' => PaymentRecordingService::PERMISSION_RECORD_PAYMENT],
+            [
+                'name' => 'Record Payments',
+                'group' => 'finance',
+                'description' => 'Allows seeded local President/Admin acceptance users to record member payments.',
+            ]
+        );
 
         $localUsers = [
             [
@@ -44,6 +55,10 @@ class LocalRoleTestUsersSeeder extends Seeder
 
         foreach ($localUsers as $localUser) {
             $role = Role::where('slug', $localUser['role_slug'])->firstOrFail();
+
+            if ($localUser['role_slug'] === 'president-admin') {
+                $role->permissions()->syncWithoutDetaching([$paymentRecordPermission->id]);
+            }
 
             $user = User::updateOrCreate(
                 ['email' => $localUser['email']],

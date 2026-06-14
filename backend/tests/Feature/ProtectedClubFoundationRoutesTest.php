@@ -63,9 +63,12 @@ class ProtectedClubFoundationRoutesTest extends TestCase
             ])
             ->assertJsonFragment([
                 'members.manage',
+            ])
+            ->assertJsonFragment([
+                'payments.record',
             ]);
 
-        $this->assertCount(12, $response->json('permissions'));
+        $this->assertCount(13, $response->json('permissions'));
     }
 
     public function test_normal_member_can_view_club_foundation_but_only_gets_limited_permissions(): void
