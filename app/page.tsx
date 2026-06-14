@@ -4181,6 +4181,19 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
   });
   const isDocumentBusy = documentStatus === "initializing" || documentStatus === "loading" || documentStatus === "saving";
 
+  const canEditMember = role === "president" || role === "secretary";
+  const [isEditingMember, setIsEditingMember] = useState(false);
+  const [memberForm, setMemberForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    bloodGroup: "",
+    status: ""
+  });
+  const [backendMember, setBackendMember] = useState<any | null>(null);
+  const [editStatus, setEditStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [editMessage, setEditMessage] = useState("");
+
   function profileDocumentApiMessage(payload: ApiErrorPayload | null, fallback: string) {
     if (!payload) return fallback;
 
@@ -4315,6 +4328,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
           setDocumentToken(token);
           setDocumentClubId(loadedClubId);
           setDocumentMemberId(selectedBackendMember.id);
+          setBackendMember(selectedBackendMember);
           setProfileDocuments(documents);
           setDocumentStatus(documents.length ? "ready" : "empty");
           setDocumentMessage(documents.length ? "Profile document metadata loaded." : "No profile document records added yet.");
@@ -4324,6 +4338,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
           setDocumentToken(null);
           setDocumentClubId(null);
           setDocumentMemberId(null);
+          setBackendMember(null);
           setProfileDocuments([]);
           setDocumentStatus("error");
           setDocumentMessage(error instanceof Error ? error.message : "Profile document metadata is unavailable.");
@@ -4337,6 +4352,82 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
       cancelled = true;
     };
   }, [member.dashboardName, member.id, member.name, role]);
+
+  function startMemberEdit() {
+    if (!backendMember) return;
+    setMemberForm({
+      name: backendMember.full_name || member.name || "",
+      phone: backendMember.phone || member.phone || "",
+      email: backendMember.email || "",
+      bloodGroup: backendMember.blood_group || member.bloodGroup || "",
+      status: backendMember.status || member.status || ""
+    });
+    setIsEditingMember(true);
+    setEditStatus("idle");
+    setEditMessage("");
+  }
+
+  async function submitMemberUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canEditMember || !documentToken || !documentClubId || !documentMemberId) {
+      setEditStatus("error");
+      setEditMessage("Backend authorization is required before member updates can be saved.");
+      return;
+    }
+
+    setEditStatus("saving");
+    setEditMessage("Saving member updates...");
+
+    try {
+      const memberUpdateUrl = `${API_BASE_URL}/clubs/${documentClubId}/members/${documentMemberId}`;
+      const response = await fetch(
+        memberUpdateUrl,
+        {
+          method: "PATCH",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + documentToken
+          },
+          body: JSON.stringify({
+            full_name: memberForm.name,
+            phone: memberForm.phone,
+            email: memberForm.email,
+            blood_group: memberForm.bloodGroup,
+            status: memberForm.status
+          })
+        }
+      );
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(profileDocumentApiMessage(payload, "Member updates could not be saved."));
+      }
+
+      const updatedBackendMember = payload.member;
+      setBackendMember(updatedBackendMember);
+
+      if (updatedBackendMember) {
+        member.name = updatedBackendMember.full_name || member.name;
+        member.dashboardName = updatedBackendMember.full_name || member.dashboardName;
+        member.phone = updatedBackendMember.phone || member.phone;
+        member.bloodGroup = updatedBackendMember.blood_group || member.bloodGroup;
+        if (updatedBackendMember.status) {
+          const statusLower = updatedBackendMember.status.toLowerCase();
+          member.status = statusLower === 'active' ? 'Active' : 'Inactive';
+        }
+      }
+
+      setIsEditingMember(false);
+      setEditStatus("success");
+      setEditMessage("Member updates saved successfully.");
+    } catch (error) {
+      setEditStatus("error");
+      setEditMessage(error instanceof Error ? error.message : "Member updates could not be saved.");
+    }
+  }
 
   function resetProfileDocumentForm() {
     setEditingDocumentId(null);
@@ -4518,13 +4609,89 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
           <p>{member.id} - {member.clubRole}</p>
           <span className="tag">{member.status}</span>
         </div>
-        <div className="fieldsPanel">
-          <Field label="Phone" value={member.consentContact || role !== "member" ? member.phone : "Hidden by privacy"} />
-          <Field label="Blood group" value={member.bloodGroup} />
-          <Field label="Contact consent" value={member.consentContact ? "Enabled" : "Disabled"} />
-          <Field label="Donor consent" value={member.donorConsent ? "Enabled" : "Disabled"} />
-          <Field label="Financial visibility" value={role === "member" ? "Own dues only" : "Role-based club view"} />
-        </div>
+        {isEditingMember ? (
+          <form className="fieldsPanel formPanel" onSubmit={submitMemberUpdate} style={{ gridColumn: "span 2" }}>
+            <div className="fieldGrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+              <label>
+                Full Name
+                <input
+                  value={memberForm.name}
+                  disabled={editStatus === "saving"}
+                  maxLength={255}
+                  onChange={(event) => setMemberForm({ ...memberForm, name: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  value={memberForm.phone}
+                  disabled={editStatus === "saving"}
+                  maxLength={255}
+                  onChange={(event) => setMemberForm({ ...memberForm, phone: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={memberForm.email}
+                  disabled={editStatus === "saving"}
+                  maxLength={255}
+                  onChange={(event) => setMemberForm({ ...memberForm, email: event.target.value })}
+                />
+              </label>
+              <label>
+                Blood Group
+                <select
+                  value={memberForm.bloodGroup}
+                  disabled={editStatus === "saving"}
+                  onChange={(event) => setMemberForm({ ...memberForm, bloodGroup: event.target.value })}
+                  required
+                >
+                  {["O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"].map((group) => (
+                    <option key={group} value={group}>{group}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Status
+                <select
+                  value={memberForm.status}
+                  disabled={editStatus === "saving"}
+                  onChange={(event) => setMemberForm({ ...memberForm, status: event.target.value })}
+                  required
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
+            </div>
+            {editMessage && <div className="notice memberHelperText" style={{ marginTop: "1rem" }}>{editMessage}</div>}
+            <div className="buttonRow" style={{ marginTop: "1rem" }}>
+              <button type="submit" disabled={editStatus === "saving"}>
+                {editStatus === "saving" ? "Saving..." : "Save Profile"}
+              </button>
+              <button type="button" className="secondaryButton" disabled={editStatus === "saving"} onClick={() => setIsEditingMember(false)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="fieldsPanel">
+            <Field label="Phone" value={member.consentContact || role !== "member" ? member.phone : "Hidden by privacy"} />
+            <Field label="Blood group" value={member.bloodGroup} />
+            <Field label="Contact consent" value={member.consentContact ? "Enabled" : "Disabled"} />
+            <Field label="Donor consent" value={member.donorConsent ? "Enabled" : "Disabled"} />
+            <Field label="Financial visibility" value={role === "member" ? "Own dues only" : "Role-based club view"} />
+            {canEditMember && backendMember && (
+              <div className="buttonRow" style={{ gridColumn: "span 2", marginTop: "1rem" }}>
+                <button type="button" className="secondaryButton" onClick={startMemberEdit}>Edit Member Details</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <div className="notice memberHelperText">Member Details: review the member profile here, then use the finance summary and Profile Documents metadata section below. Backend authorization remains the source of truth.</div>
       <MemberFinanceSummaryPanel compact />
