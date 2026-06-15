@@ -259,7 +259,7 @@ type ApiErrorPayload = {
   errors?: Record<string, string[]>;
 };
 
-type ProfileDocumentStatus = "initializing" | "ready" | "loading" | "saving" | "empty" | "error";
+type ProfileDocumentStatus = "initializing" | "ready" | "loading" | "saving" | "empty" | "error" | "not_linked";
 
 type ProfileDocumentMetadataRecord = {
   id: number;
@@ -4190,8 +4190,9 @@ function MembersList({
             onClick={() => {
               if (onSelectMember) {
                 onSelectMember(member);
+              } else {
+                setScreen("member-profile");
               }
-              setScreen("member-profile");
             }}
           >
             <Avatar name={member.name} />
@@ -4378,11 +4379,104 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
 
         const membersPayload = await membersResponse.json();
         const backendMembers = (membersPayload.members as BackendMemberRecord[] | undefined) ?? [];
-        const selectedBackendMember = backendMembers.find((backendMember) => backendMember.member_code === member.id)
-          ?? backendMembers.find((backendMember) => backendMember.full_name === member.dashboardName || backendMember.full_name === member.name);
+
+        const cleanStr = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+        const cleanDigits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
+
+        let found = backendMembers.find(
+          (b) => b.member_code && cleanStr(b.member_code) === cleanStr(member.id)
+        );
+
+        if (!found) {
+          found = backendMembers.find((b) => {
+            if (!b.member_code || !member.id) return false;
+            const bClean = cleanStr(b.member_code).replace(/[^a-z0-9]/g, "");
+            const mClean = cleanStr(member.id).replace(/[^a-z0-9]/g, "");
+            if (bClean === mClean) return true;
+
+            const bDigits = cleanDigits(b.member_code);
+            const mDigits = cleanDigits(member.id);
+            if (bDigits && mDigits) {
+              return parseInt(bDigits, 10) === parseInt(mDigits, 10);
+            }
+            return false;
+          });
+        }
+
+        if (!found) {
+          found = backendMembers.find(
+            (b) => cleanStr(b.full_name) === cleanStr(member.name) ||
+                   cleanStr(b.full_name) === cleanStr(member.dashboardName)
+          );
+        }
+
+        if (!found && member.phone) {
+          const mPhoneClean = cleanDigits(member.phone);
+          if (mPhoneClean.length >= 7) {
+            found = backendMembers.find((b) => {
+              if (!b.phone) return false;
+              const bPhoneClean = cleanDigits(b.phone);
+              return bPhoneClean === mPhoneClean ||
+                     (bPhoneClean.length >= 7 && (bPhoneClean.endsWith(mPhoneClean) || mPhoneClean.endsWith(bPhoneClean)));
+            });
+          }
+        }
+
+        if (!found) {
+          found = backendMembers.find((b) => {
+            const bName = cleanStr(b.full_name);
+            const bEmail = cleanStr(b.email);
+
+            // Match President (MEM-001 / Lion Bijesh)
+            if (member.id === "MEM-001") {
+              const isPresidentBackend = bName.includes("president") || bEmail.includes("president") || bName.includes("bijesh");
+              if (isPresidentBackend) return true;
+            }
+
+            // Match Secretary (MEM-002 / Lion Secretary User)
+            if (member.id === "MEM-002") {
+              const isSecretaryBackend = bName.includes("secretary") || bEmail.includes("secretary");
+              if (isSecretaryBackend) return true;
+            }
+
+            // Match Treasurer (MEM-003 / Lion Treasurer User)
+            if (member.id === "MEM-003") {
+              const isTreasurerBackend = bName.includes("treasurer") || bEmail.includes("treasurer");
+              if (isTreasurerBackend) return true;
+            }
+
+            // Match Ajith Kumar (MEM-004)
+            if (member.id === "MEM-004") {
+              const isAjithBackend = bName.includes("ajith") || bName.includes("kumar");
+              if (isAjithBackend) return true;
+            }
+
+            // Generic safe name token matching (only if name contains unique parts)
+            const cleanMemberName = cleanStr(member.name);
+            if (cleanMemberName && bName) {
+              const nameTokens = cleanMemberName.split(/\s+/).filter(t => t.length > 3 && t !== "lion" && t !== "user" && t !== "member");
+              if (nameTokens.length > 0 && nameTokens.every(token => bName.includes(token))) {
+                return true;
+              }
+            }
+
+            return false;
+          });
+        }
+
+        let selectedBackendMember = found;
 
         if (!selectedBackendMember) {
-          throw new Error("Selected member was not found in backend member records.");
+          if (!cancelled) {
+            setDocumentToken(token);
+            setDocumentClubId(loadedClubId);
+            setDocumentMemberId(null);
+            setBackendMember(null);
+            setProfileDocuments([]);
+            setDocumentStatus("not_linked");
+            setDocumentMessage("Profile document metadata is not linked for this prototype member yet.");
+          }
+          return;
         }
 
         const documents = await fetchProfileDocuments(token, loadedClubId, selectedBackendMember.id);
@@ -4590,7 +4684,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
         <div className="notice memberHelperText">Document metadata only. File upload and document storage are not enabled in this version.</div>
         <div className="notice memberHelperText">{documentMessage}</div>
 
-        {canManageProfileDocumentMetadata && (
+        {canManageProfileDocumentMetadata && documentMemberId && (
           <div className="buttonRow">
             <button type="button" className="secondaryButton" disabled={isDocumentBusy} onClick={startProfileDocumentCreate}>Add Document Metadata</button>
             <button type="button" className="secondaryButton" disabled={isDocumentBusy} onClick={() => void refreshProfileDocuments()}>Refresh Metadata</button>
