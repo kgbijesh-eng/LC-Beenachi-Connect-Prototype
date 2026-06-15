@@ -1176,7 +1176,18 @@ export default function Prototype() {
   const [expandedSubItems, setExpandedSubItems] = useState<string[]>([]);
   const [reportDetail, setReportDetail] = useState("Active Member List");
   const [navDetail, setNavDetail] = useState({ parent: "Dashboard", title: "Detail" });
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const activeMember = roleUser[role];
+
+  function handleSetScreen(nextScreen: Screen) {
+    setSelectedMember(null);
+    setScreen(nextScreen);
+  }
+
+  function selectAndOpenMemberProfile(member: Member) {
+    setSelectedMember(member);
+    setScreen("member-profile");
+  }
   const totalOutstanding = members.reduce((sum, member) => sum + member.dues, 0);
   const allowedDonors = useMemo(
     () => members.filter((member) => member.donorConsent && member.bloodGroup === bloodGroup),
@@ -1185,6 +1196,7 @@ export default function Prototype() {
 
   function switchRole(nextRole: Role) {
     setRole(nextRole);
+    setSelectedMember(null);
     setScreen("dashboard");
     setExpandedGroups([]);
     setExpandedSubItems([]);
@@ -1230,6 +1242,11 @@ export default function Prototype() {
 
   function openChild(item: NavItem, group: NavGroup) {
     if (!item.screen) return;
+    if (item.screen === "member-profile") {
+      setSelectedMember(null);
+    } else {
+      setSelectedMember(null);
+    }
     if (item.reportSection) setReportsSection(item.reportSection);
     if (item.reportDetail) setReportDetail(item.reportDetail);
     if (item.detailTitle) setNavDetail({ parent: item.detailParent || group.title, title: item.detailTitle });
@@ -1255,6 +1272,11 @@ export default function Prototype() {
 
   function openDirect(item: NavItem) {
     if (!item.screen) return;
+    if (item.screen === "member-profile") {
+      setSelectedMember(null);
+    } else {
+      setSelectedMember(null);
+    }
     setScreen(item.screen);
     setCollectionDetail(null);
     setEventMeetingSection(null);
@@ -1397,7 +1419,7 @@ export default function Prototype() {
           <Dashboard
             role={role}
             member={activeMember}
-            setScreen={setScreen}
+            setScreen={handleSetScreen}
             openDashboardDetail={openDashboardDetail}
             totalOutstanding={totalOutstanding}
           />
@@ -1407,12 +1429,18 @@ export default function Prototype() {
             detail={dashboardDetail}
             role={role}
             member={activeMember}
-            setScreen={setScreen}
+            setScreen={handleSetScreen}
             openDashboardDetail={openDashboardDetail}
           />
         )}
         {screen === "people-module" && (
-          <PeopleModule section={peopleSection} setSection={setPeopleSection} role={role} setScreen={setScreen} />
+          <PeopleModule
+            section={peopleSection}
+            setSection={setPeopleSection}
+            role={role}
+            setScreen={handleSetScreen}
+            onSelectMember={selectAndOpenMemberProfile}
+          />
         )}
         {screen === "operations-module" && (
           <OperationsModule
@@ -1420,7 +1448,7 @@ export default function Prototype() {
             setSection={setOperationsSection}
             role={role}
             member={activeMember}
-            setScreen={setScreen}
+            setScreen={handleSetScreen}
             tab={fellowshipTab}
             setTab={setFellowshipTab}
             selectedSponsors={selectedSponsors}
@@ -1432,59 +1460,67 @@ export default function Prototype() {
             statementSection={clubStatementSection}
             role={role}
             member={activeMember}
-            setScreen={setScreen}
+            setScreen={handleSetScreen}
             collectionDetail={collectionDetail}
             setCollectionDetail={setCollectionDetail}
             fellowshipPaymentView={fellowshipPaymentView}
           />
         )}
         {screen === "reports-tools-module" && (
-          <ReportsToolsModule section={reportsSection} setSection={setReportsSection} role={role} setScreen={setScreen} />
+          <ReportsToolsModule section={reportsSection} setSection={setReportsSection} role={role} setScreen={handleSetScreen} />
         )}
         {screen === "notifications-reminders" && (
-          <NotificationsReminders role={role} setScreen={setScreen} />
+          <NotificationsReminders role={role} setScreen={handleSetScreen} />
         )}
         {screen === "report-detail" && (
-          <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={setScreen} />
+          <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} />
         )}
         {screen === "nav-detail" && (
-          <NavDetailScreen parent={navDetail.parent} title={navDetail.title} role={role} setScreen={setScreen} />
+          <NavDetailScreen parent={navDetail.parent} title={navDetail.title} role={role} setScreen={handleSetScreen} />
         )}
         {screen === "announcement-detail" && (
-          <AnnouncementDetailScreen detail={announcementDetail} setScreen={setScreen} />
+          <AnnouncementDetailScreen detail={announcementDetail} setScreen={handleSetScreen} />
         )}
         {screen === "club-visibility-module" && (
-          <ClubVisibilityModule section={clubVisibilitySection} setSection={setClubVisibilitySection} role={role} member={activeMember} selectedSponsors={selectedSponsors} setScreen={setScreen} />
+          <ClubVisibilityModule
+            section={clubVisibilitySection}
+            setSection={setClubVisibilitySection}
+            role={role}
+            member={activeMember}
+            selectedSponsors={selectedSponsors}
+            setScreen={handleSetScreen}
+            onSelectMember={selectAndOpenMemberProfile}
+          />
         )}
-        {screen === "members" && <MembersList setScreen={setScreen} role={role} />}
+        {screen === "members" && <MembersList setScreen={handleSetScreen} role={role} onSelectMember={selectAndOpenMemberProfile} />}
         {screen === "committees" && <Committees />}
-        {screen === "member-profile" && <MemberProfile member={activeMember} role={role} />}
+        {screen === "member-profile" && <MemberProfile member={selectedMember ?? activeMember} role={role} />}
         {screen === "digital-card" && <DigitalCard member={activeMember} />}
-        {screen === "fellowship" && <FellowshipDashboard role={role} member={activeMember} setScreen={setScreen} tab={fellowshipTab} setTab={setFellowshipTab} selectedSponsors={selectedSponsors} />}
+        {screen === "fellowship" && <FellowshipDashboard role={role} member={activeMember} setScreen={handleSetScreen} tab={fellowshipTab} setTab={setFellowshipTab} selectedSponsors={selectedSponsors} />}
         {screen === "fellowship-queue" && (
-          <FellowshipQueue selectedSponsors={selectedSponsors} setSelectedSponsors={setSelectedSponsors} setScreen={setScreen} />
+          <FellowshipQueue selectedSponsors={selectedSponsors} setSelectedSponsors={setSelectedSponsors} setScreen={handleSetScreen} />
         )}
-        {screen === "confirm-sponsors" && <ConfirmSponsors selectedSponsors={selectedSponsors} setScreen={setScreen} />}
-        {screen === "ledger" && <Ledger role={role} member={activeMember} setScreen={setScreen} />}
-        {screen === "member-dues-detail" && <MemberDuesDetail member={activeMember} setScreen={setScreen} />}
-        {screen === "special-collection" && <SpecialCollection setScreen={setScreen} />}
+        {screen === "confirm-sponsors" && <ConfirmSponsors selectedSponsors={selectedSponsors} setScreen={handleSetScreen} />}
+        {screen === "ledger" && <Ledger role={role} member={activeMember} setScreen={handleSetScreen} />}
+        {screen === "member-dues-detail" && <MemberDuesDetail member={activeMember} setScreen={handleSetScreen} />}
+        {screen === "special-collection" && <SpecialCollection setScreen={handleSetScreen} />}
         {screen === "record-member-payment" && <RecordMemberPayment role={role} />}
         {screen === "collection-box" && <CollectionBoxReceipt role={role} />}
         {screen === "receipt-list" && <ReceiptList role={role} />}
         {screen === "payment-history" && <PaymentHistory role={role} />}
         {screen === "member-import-preview" && <MemberImportPreview role={role} />}
-        {screen === "outstanding-dues" && <OutstandingDues setScreen={setScreen} />}
+        {screen === "outstanding-dues" && <OutstandingDues setScreen={handleSetScreen} />}
         {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
-        {screen === "fellowship-payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={setScreen} />}
-        {screen === "events-meetings" && <EventsMeetings role={role} member={activeMember} selectedSponsors={selectedSponsors} setScreen={setScreen} selectedSection={eventMeetingSection} />}
+        {screen === "fellowship-payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={handleSetScreen} />}
+        {screen === "events-meetings" && <EventsMeetings role={role} member={activeMember} selectedSponsors={selectedSponsors} setScreen={handleSetScreen} selectedSection={eventMeetingSection} />}
         {screen === "announcements" && <Announcements role={role} member={activeMember} selectedSponsors={selectedSponsors} />}
         {screen === "documents" && <Documents role={role} />}
-        {screen === "projects" && <ProjectsActivities setScreen={setScreen} />}
-        {screen === "celebrations" && <Celebrations role={role} setScreen={setScreen} />}
+        {screen === "projects" && <ProjectsActivities setScreen={handleSetScreen} />}
+        {screen === "celebrations" && <Celebrations role={role} setScreen={handleSetScreen} />}
         {screen === "donor-consent" && <DonorConsent member={activeMember} />}
         {screen === "donor-search" && <DonorSearch bloodGroup={bloodGroup} setBloodGroup={setBloodGroup} allowedDonors={allowedDonors} />}
         {screen === "reports" && <Reports />}
-        {screen === "settings" && <Settings setScreen={setScreen} />}
+        {screen === "settings" && <Settings setScreen={handleSetScreen} />}
       </section>
     </main>
   );
@@ -1617,18 +1653,20 @@ function PeopleModule({
   section,
   setSection,
   role,
-  setScreen
+  setScreen,
+  onSelectMember
 }: {
   section: PeopleSection;
   setSection: (section: PeopleSection) => void;
   role: Role;
   setScreen: (screen: Screen) => void;
+  onSelectMember?: (member: Member) => void;
 }) {
   const options: PeopleSection[] = ["Members", "Board & Committees", "Celebrations"];
   return (
     <section className="stack">
       <ModuleHeader title="People" label="Choose people section" value={section} options={options} onChange={setSection} setScreen={setScreen} />
-      {section === "Members" && <MembersList setScreen={setScreen} role={role} />}
+      {section === "Members" && <MembersList setScreen={setScreen} role={role} onSelectMember={onSelectMember} />}
       {section === "Board & Committees" && <Committees />}
       {section === "Celebrations" && <Celebrations role={role} setScreen={setScreen} />}
     </section>
@@ -2423,7 +2461,8 @@ function ClubVisibilityModule({
   role,
   member,
   selectedSponsors,
-  setScreen
+  setScreen,
+  onSelectMember
 }: {
   section: ClubVisibilitySection;
   setSection: (section: ClubVisibilitySection) => void;
@@ -2431,13 +2470,14 @@ function ClubVisibilityModule({
   member: Member;
   selectedSponsors: string[];
   setScreen: (screen: Screen) => void;
+  onSelectMember?: (member: Member) => void;
 }) {
   const options: ClubVisibilitySection[] = ["Members", "Events & Meetings", "Announcements", "Documents", "Projects / Activities", "Celebrations"];
   return (
     <section className="stack">
       <ModuleHeader title="Club Visibility" label="Choose view-only section" value={section} options={options} onChange={setSection} setScreen={setScreen} />
       <div className="notice">Treasurer view is mostly read-only outside Finance.</div>
-      {section === "Members" && <MembersList setScreen={setScreen} role={role} />}
+      {section === "Members" && <MembersList setScreen={setScreen} role={role} onSelectMember={onSelectMember} />}
       {section === "Events & Meetings" && <EventsMeetings role={role} member={member} selectedSponsors={selectedSponsors} setScreen={setScreen} />}
       {section === "Announcements" && <Announcements role={role} member={member} selectedSponsors={selectedSponsors} />}
       {section === "Documents" && <Documents role={role} />}
@@ -4127,7 +4167,15 @@ function MemberFellowshipDetail({ member, setScreen }: { member: Member; setScre
   );
 }
 
-function MembersList({ setScreen, role }: { setScreen: (screen: Screen) => void; role: Role }) {
+function MembersList({
+  setScreen,
+  role,
+  onSelectMember
+}: {
+  setScreen: (screen: Screen) => void;
+  role: Role;
+  onSelectMember?: (member: Member) => void;
+}) {
   return (
     <section className="stack">
       <Toolbar title="Member Directory" actionLabel={role === "member" ? "Consent-approved fields only" : "Role-based management"} />
@@ -4136,7 +4184,16 @@ function MembersList({ setScreen, role }: { setScreen: (screen: Screen) => void;
       </div>
       <div className="tableLike">
         {members.map((member) => (
-          <button key={member.id} className="rowButton" onClick={() => setScreen(role === "member" ? "member-profile" : "member-profile")}>
+          <button
+            key={member.id}
+            className="rowButton"
+            onClick={() => {
+              if (onSelectMember) {
+                onSelectMember(member);
+              }
+              setScreen("member-profile");
+            }}
+          >
             <Avatar name={member.name} />
             <span>
               <strong>{member.name}</strong>
