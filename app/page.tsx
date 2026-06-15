@@ -113,6 +113,9 @@ type BackendMemberRecord = {
   member_code: string;
   full_name: string;
   status: string;
+  phone?: string | null;
+  email?: string | null;
+  blood_group?: string | null;
 };
 
 type PaymentRecordingFormState = {
@@ -4259,6 +4262,9 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
       setProfileDocuments([]);
       setEditingDocumentId(null);
       setShowDocumentForm(false);
+      setEditStatus("idle");
+      setEditMessage("");
+      setIsEditingMember(false);
 
       try {
         const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
@@ -4332,6 +4338,16 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
           setProfileDocuments(documents);
           setDocumentStatus(documents.length ? "ready" : "empty");
           setDocumentMessage(documents.length ? "Profile document metadata loaded." : "No profile document records added yet.");
+
+          // Sync static member object in memory with backend record
+          member.name = selectedBackendMember.full_name || member.name;
+          member.dashboardName = selectedBackendMember.full_name || member.dashboardName;
+          member.phone = selectedBackendMember.phone || member.phone;
+          member.bloodGroup = selectedBackendMember.blood_group || member.bloodGroup;
+          if (selectedBackendMember.status) {
+            const statusLower = selectedBackendMember.status.toLowerCase();
+            member.status = statusLower === 'active' ? 'Active' : 'Inactive';
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -4685,6 +4701,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
             <Field label="Contact consent" value={member.consentContact ? "Enabled" : "Disabled"} />
             <Field label="Donor consent" value={member.donorConsent ? "Enabled" : "Disabled"} />
             <Field label="Financial visibility" value={role === "member" ? "Own dues only" : "Role-based club view"} />
+            {editMessage && <div className="notice memberHelperText" style={{ marginTop: "0.5rem" }}>{editMessage}</div>}
             {canEditMember && backendMember && (
               <div className="buttonRow" style={{ gridColumn: "span 2", marginTop: "1rem" }}>
                 <button type="button" className="secondaryButton" onClick={startMemberEdit}>Edit Member Details</button>
