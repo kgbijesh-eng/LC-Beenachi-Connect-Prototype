@@ -335,6 +335,7 @@ type Screen =
   | "event-meeting-detail"
   | "announcement-single-detail"
   | "club-document-detail"
+  | "activity-detail"
   | "member-dues-detail"
   | "special-collection"
   | "record-member-payment"
@@ -1194,6 +1195,14 @@ export default function Prototype() {
   const [selectedEventMeeting, setSelectedEventMeeting] = useState<EventMeeting | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<{ title: string; meta: string[]; sourceSection: AnnouncementDetail } | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<{ title: string; meta: string[]; sourceTitle: string } | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<{
+    name: string;
+    date: string;
+    categoryCommittee: string;
+    peopleServed: string;
+    reportStatus: string;
+    sourceTitle: string;
+  } | null>(null);
   const [profileBackContext, setProfileBackContext] = useState<{ screen: Screen; parent?: string; title?: string } | null>(null);
   const activeMember = roleUser[role];
 
@@ -1204,8 +1213,27 @@ export default function Prototype() {
     setSelectedEventMeeting(null);
     setSelectedAnnouncement(null);
     setSelectedDocument(null);
+    setSelectedActivity(null);
     setProfileBackContext(null);
     setScreen(nextScreen);
+  }
+
+  function openActivityDetail(activity: {
+    name: string;
+    date: string;
+    categoryCommittee: string;
+    peopleServed: string;
+    reportStatus: string;
+    sourceTitle: string;
+  }) {
+    setSelectedMember(null);
+    setSelectedUpdate(null);
+    setSelectedCommittee(null);
+    setSelectedEventMeeting(null);
+    setSelectedAnnouncement(null);
+    setSelectedDocument(null);
+    setSelectedActivity(activity);
+    setScreen("activity-detail");
   }
 
   function openDocumentDetail(doc: { title: string; meta: string[]; sourceTitle: string }) {
@@ -1270,6 +1298,7 @@ export default function Prototype() {
     setSelectedEventMeeting(null);
     setSelectedAnnouncement(null);
     setSelectedDocument(null);
+    setSelectedActivity(null);
     setProfileBackContext(null);
     setScreen("dashboard");
     setExpandedGroups([]);
@@ -1611,10 +1640,20 @@ export default function Prototype() {
               handleSetScreen("people-module");
             }}
             onSelectDocument={openDocumentDetail}
+            onSelectActivity={openActivityDetail}
           />
         )}
         {screen === "club-document-detail" && (
           <ClubDocumentDetail item={selectedDocument} setScreen={handleSetScreen} />
+        )}
+        {screen === "activity-detail" && (
+          <ActivityDetail
+            item={selectedActivity}
+            onBack={(sourceTitle) => {
+              setNavDetail({ parent: "Operations", title: sourceTitle });
+              handleSetScreen("nav-detail");
+            }}
+          />
         )}
         {screen === "committee-detail" && (
           <CommitteeDetail committee={selectedCommittee} setScreen={handleSetScreen} />
@@ -1750,6 +1789,7 @@ function screenTitle(screen: Screen) {
     "announcement-detail": "Announcements",
     "announcement-single-detail": "Announcement Details",
     "club-document-detail": "Document Details",
+    "activity-detail": "Activity Details",
     documents: "Documents",
     projects: "Projects / Activities",
     celebrations: "Celebrations",
@@ -2940,7 +2980,8 @@ function NavDetailScreen({
   onSelectUpdate,
   onSelectCommittee,
   onBackToCelebrations,
-  onSelectDocument
+  onSelectDocument,
+  onSelectActivity
 }: {
   parent: string;
   title: string;
@@ -2951,6 +2992,14 @@ function NavDetailScreen({
   onSelectCommittee?: (committee: typeof committeesList[number]) => void;
   onBackToCelebrations?: () => void;
   onSelectDocument?: (doc: { title: string; meta: string[]; sourceTitle: string }) => void;
+  onSelectActivity?: (activity: {
+    name: string;
+    date: string;
+    categoryCommittee: string;
+    peopleServed: string;
+    reportStatus: string;
+    sourceTitle: string;
+  }) => void;
 }) {
   if (parent === "Operations" && title === "Draft / Pending") {
     return <DraftPendingAnnouncements setScreen={setScreen} />;
@@ -2959,6 +3008,32 @@ function NavDetailScreen({
   const rows = navDetailCards(parent, title, role);
 
   const handleRowClick = (row: { title: string; action: string }) => {
+    if (parent === "Operations" && ["This Month", "Pending Reports", "Completed Activities", "Category-wise Activities"].includes(title)) {
+      if (onSelectActivity) {
+        const matched = rows.find((r) => r.title === row.title);
+        if (matched) {
+          const getMetaValue = (prefix: string) => {
+            const found = matched.meta.find(m => m.startsWith(prefix));
+            return found ? found.replace(prefix, "").trim() : "N/A";
+          };
+          const date = getMetaValue("Date:");
+          const categoryCommittee = getMetaValue("Category / Committee:");
+          const peopleServed = getMetaValue("People Served:");
+          const reportStatus = getMetaValue("Report Status:");
+
+          onSelectActivity({
+            name: matched.title.startsWith("Activity:") ? matched.title.substring(9).trim() : matched.title,
+            date,
+            categoryCommittee,
+            peopleServed,
+            reportStatus,
+            sourceTitle: title
+          });
+        }
+      }
+      return;
+    }
+
     if (parent === "Operations" && ["Club Documents", "Meeting Minutes", "Circulars"].includes(title)) {
       if (onSelectDocument) {
         const matched = rows.find((r) => r.title === row.title);
@@ -8377,6 +8452,80 @@ function ClubDocumentDetail({
               <span className="fieldLabel">Document Preview Notice</span>
               <p style={{ marginTop: "0.5rem", color: "var(--muted)", lineHeight: 1.5 }}>
                 This is a secure prototype document viewer. Real document downloads, PDF previews, and role-based storage permissions will be configured during the file system database integration phase.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ActivityDetail({
+  item,
+  onBack
+}: {
+  item: {
+    name: string;
+    date: string;
+    categoryCommittee: string;
+    peopleServed: string;
+    reportStatus: string;
+    sourceTitle: string;
+  } | null;
+  onBack: (sourceTitle: string) => void;
+}) {
+  if (!item) {
+    return (
+      <section className="stack">
+        <div className="compactPanel">
+          <button className="secondaryButton compactBackButton" onClick={() => onBack("This Month")}>← Back to List</button>
+          <div className="notice memberHelperText">No activity selected.</div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="stack">
+      <div className="compactPanel">
+        <button className="secondaryButton compactBackButton" onClick={() => onBack(item.sourceTitle)}>
+          ← {item.sourceTitle}
+        </button>
+        <Toolbar title="Activity Details" actionLabel="Operations / Projects & Activities" />
+      </div>
+
+      <div className="memberPanel">
+        <div className="toolbar">
+          <h3>Activity Information</h3>
+          <span className="statusPill">{item.reportStatus}</span>
+        </div>
+        <div className="detailGrid">
+          <div className="fieldGrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="field">
+              <span className="fieldLabel">Activity Name</span>
+              <strong>{item.name}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Date</span>
+              <strong>{item.date}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Category / Lead Committee</span>
+              <strong>{item.categoryCommittee}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">People Served</span>
+              <strong>{item.peopleServed} Served</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Report Document Status</span>
+              <strong>{item.reportStatus}</strong>
+            </div>
+            <div className="field" style={{ gridColumn: "span 2" }}>
+              <span className="fieldLabel">Activity Description & Impact Note</span>
+              <p style={{ marginTop: "0.5rem", color: "var(--muted)", lineHeight: 1.5 }}>
+                This is a secure prototype activity preview page. Real activity reports, expense attachments, service metrics calculation, and photo uploads will be configured during the database integration phase.
               </p>
             </div>
           </div>
