@@ -333,6 +333,7 @@ type Screen =
   | "profile-update-detail"
   | "committee-detail"
   | "event-meeting-detail"
+  | "announcement-single-detail"
   | "member-dues-detail"
   | "special-collection"
   | "record-member-payment"
@@ -1190,6 +1191,7 @@ export default function Prototype() {
   const [selectedUpdate, setSelectedUpdate] = useState<typeof pendingMemberUpdates[number] | null>(null);
   const [selectedCommittee, setSelectedCommittee] = useState<typeof committeesList[number] | null>(null);
   const [selectedEventMeeting, setSelectedEventMeeting] = useState<EventMeeting | null>(null);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<{ title: string; meta: string[]; sourceSection: AnnouncementDetail } | null>(null);
   const [profileBackContext, setProfileBackContext] = useState<{ screen: Screen; parent?: string; title?: string } | null>(null);
   const activeMember = roleUser[role];
 
@@ -1198,8 +1200,18 @@ export default function Prototype() {
     setSelectedUpdate(null);
     setSelectedCommittee(null);
     setSelectedEventMeeting(null);
+    setSelectedAnnouncement(null);
     setProfileBackContext(null);
     setScreen(nextScreen);
+  }
+
+  function openAnnouncementDetail(announcement: { title: string; meta: string[]; sourceSection: AnnouncementDetail }) {
+    setSelectedMember(null);
+    setSelectedUpdate(null);
+    setSelectedCommittee(null);
+    setSelectedEventMeeting(null);
+    setSelectedAnnouncement(announcement);
+    setScreen("announcement-single-detail");
   }
 
   function openEventMeetingDetail(item: EventMeeting) {
@@ -1243,6 +1255,7 @@ export default function Prototype() {
     setSelectedUpdate(null);
     setSelectedCommittee(null);
     setSelectedEventMeeting(null);
+    setSelectedAnnouncement(null);
     setProfileBackContext(null);
     setScreen("dashboard");
     setExpandedGroups([]);
@@ -1592,7 +1605,14 @@ export default function Prototype() {
           <ProfileUpdateDetail update={selectedUpdate} setScreen={handleSetScreen} />
         )}
         {screen === "announcement-detail" && (
-          <AnnouncementDetailScreen detail={announcementDetail} setScreen={handleSetScreen} />
+          <AnnouncementDetailScreen
+            detail={announcementDetail}
+            setScreen={handleSetScreen}
+            onSelectAnnouncement={openAnnouncementDetail}
+          />
+        )}
+        {screen === "announcement-single-detail" && (
+          <AnnouncementSingleDetail item={selectedAnnouncement} setScreen={handleSetScreen} />
         )}
         {screen === "club-visibility-module" && (
           <ClubVisibilityModule
@@ -1710,6 +1730,7 @@ function screenTitle(screen: Screen) {
     "event-meeting-detail": "Event / Meeting Details",
     announcements: "Announcements",
     "announcement-detail": "Announcements",
+    "announcement-single-detail": "Announcement Details",
     documents: "Documents",
     projects: "Projects / Activities",
     celebrations: "Celebrations",
@@ -3021,7 +3042,15 @@ function DraftPendingAnnouncements({ setScreen }: { setScreen: (screen: Screen) 
   return <AnnouncementDetailScreen detail="Draft / Pending" setScreen={setScreen} />;
 }
 
-function AnnouncementDetailScreen({ detail, setScreen }: { detail: AnnouncementDetail; setScreen: (screen: Screen) => void }) {
+function AnnouncementDetailScreen({
+  detail,
+  setScreen,
+  onSelectAnnouncement
+}: {
+  detail: AnnouncementDetail;
+  setScreen: (screen: Screen) => void;
+  onSelectAnnouncement?: (announcement: { title: string; meta: string[]; sourceSection: AnnouncementDetail }) => void;
+}) {
   const config: Record<AnnouncementDetail, {
     title: string;
     note: string;
@@ -3073,7 +3102,7 @@ function AnnouncementDetailScreen({ detail, setScreen }: { detail: AnnouncementD
               <h3>{item.title}</h3>
               {item.meta.map((line) => <span key={line}>{line}</span>)}
             </div>
-            <button className="filterButton">{current.action}</button>
+            <button className="filterButton" onClick={() => onSelectAnnouncement?.({ ...item, sourceSection: detail })}>{current.action}</button>
           </article>
         ))}
       </div>
@@ -8162,6 +8191,90 @@ function EventMeetingDetail({
             <div className="field">
               <span className="fieldLabel">Activity Category</span>
               <strong>{item.type}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AnnouncementSingleDetail({
+  item,
+  setScreen
+}: {
+  item: { title: string; meta: string[]; sourceSection: AnnouncementDetail } | null;
+  setScreen: (screen: Screen) => void;
+}) {
+  if (!item) {
+    return (
+      <section className="stack">
+        <div className="compactPanel">
+          <button className="secondaryButton compactBackButton" onClick={() => setScreen("announcement-detail")}>← Back to List</button>
+          <div className="notice memberHelperText">No announcement selected.</div>
+        </div>
+      </section>
+    );
+  }
+
+  const getMetaValue = (prefix: string) => {
+    const found = item.meta.find(m => m.startsWith(prefix));
+    return found ? found.replace(prefix, "").trim() : "N/A";
+  };
+
+  const audience = getMetaValue("Audience:");
+  const status = getMetaValue("Status:");
+  const type = getMetaValue("Type:");
+  const owner = getMetaValue("Owner:");
+  const priority = getMetaValue("Priority:");
+
+  return (
+    <section className="stack">
+      <div className="compactPanel">
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("announcement-detail")}>
+          ← {item.sourceSection}
+        </button>
+        <Toolbar title="Announcement Details" actionLabel="Operations / Announcements" />
+      </div>
+
+      <div className="memberPanel">
+        <div className="toolbar">
+          <h3>Announcement Information</h3>
+          {status !== "N/A" && <span className="statusPill">{status}</span>}
+        </div>
+        <div className="detailGrid">
+          <div className="fieldGrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="field">
+              <span className="fieldLabel">Announcement Title</span>
+              <strong>{item.title}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Audience</span>
+              <strong>{audience}</strong>
+            </div>
+            {type !== "N/A" && (
+              <div className="field">
+                <span className="fieldLabel">Announcement Type</span>
+                <strong>{type}</strong>
+              </div>
+            )}
+            {owner !== "N/A" && (
+              <div className="field">
+                <span className="fieldLabel">Owner / Submitted By</span>
+                <strong>{owner}</strong>
+              </div>
+            )}
+            {priority !== "N/A" && (
+              <div className="field">
+                <span className="fieldLabel">Priority</span>
+                <strong>{priority}</strong>
+              </div>
+            )}
+            <div className="field" style={{ gridColumn: "span 2" }}>
+              <span className="fieldLabel">Content Description</span>
+              <p style={{ marginTop: "0.5rem", color: "var(--muted)", lineHeight: 1.5 }}>
+                This is a prototype announcement view. Real announcement body and content attachment support will be configured during the database integration phase.
+              </p>
             </div>
           </div>
         </div>
