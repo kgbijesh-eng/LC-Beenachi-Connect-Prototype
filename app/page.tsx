@@ -329,6 +329,7 @@ type Screen =
   | "fellowship-queue"
   | "confirm-sponsors"
   | "ledger"
+  | "my-dues"
   | "member-dues-detail"
   | "special-collection"
   | "record-member-payment"
@@ -905,7 +906,7 @@ function detailItem(parent: string, label: string): NavItem {
 const myMemberAreaItems: NavItem[] = [
   { label: "My Profile", screen: "member-profile" },
   { label: "My Digital Card", screen: "digital-card" },
-  { label: "My Dues", screen: "ledger" },
+  { label: "My Dues", screen: "my-dues" },
   { label: "My Fellowship", screen: "fellowship" },
   { label: "My Documents", screen: "documents" },
   { label: "My Celebrations", screen: "celebrations" },
@@ -1100,7 +1101,7 @@ const navByRole: Record<Role, NavGroup[]> = {
       { label: "My Digital Card", screen: "digital-card" },
       { label: "Member Directory", screen: "members" },
       { label: "PST Profiles", screen: "nav-detail", detailParent: "People", detailTitle: "PST Profiles" },
-      { label: "My Dues", screen: "ledger" },
+      { label: "My Dues", screen: "my-dues" },
       { label: "My Payment History", screen: "payment-history" },
       { label: "My Fellowship", screen: "fellowship" },
       { label: "Events & Meetings", screen: "events-meetings" },
@@ -1117,7 +1118,7 @@ function money(value: number) {
 }
 
 const memberQuickAccess = [
-  { label: "My Dues", short: "DU", screen: "ledger" as Screen },
+  { label: "My Dues", short: "DU", screen: "my-dues" as Screen },
   { label: "Payments", short: "PH", screen: "payment-history" as Screen },
   { label: "My Fellowship", short: "FE", screen: "fellowship" as Screen },
   { label: "Digital Card", short: "ID", screen: "digital-card" as Screen },
@@ -1131,7 +1132,7 @@ const memberQuickAccess = [
 const pstMemberAreaCards = [
   { label: "My Profile", value: "Member record", action: "Open", screen: "member-profile" as Screen },
   { label: "My Digital Card", value: "In-app card", action: "View", screen: "digital-card" as Screen },
-  { label: "My Dues", value: "Own account", action: "Review", screen: "ledger" as Screen },
+  { label: "My Dues", value: "Own account", action: "Review", screen: "my-dues" as Screen },
   { label: "My Fellowship", value: "Own status", action: "Open", screen: "fellowship" as Screen },
   { label: "My Documents", value: "My access", action: "View", screen: "documents" as Screen },
   { label: "My Celebrations", value: "My wishes", action: "Open", screen: "celebrations" as Screen },
@@ -1501,8 +1502,9 @@ export default function Prototype() {
           <FellowshipQueue selectedSponsors={selectedSponsors} setSelectedSponsors={setSelectedSponsors} setScreen={handleSetScreen} />
         )}
         {screen === "confirm-sponsors" && <ConfirmSponsors selectedSponsors={selectedSponsors} setScreen={handleSetScreen} />}
+        {screen === "my-dues" && <Ledger role={role} member={activeMember} setScreen={handleSetScreen} isPersonal />}
         {screen === "ledger" && <Ledger role={role} member={activeMember} setScreen={handleSetScreen} />}
-        {screen === "member-dues-detail" && <MemberDuesDetail member={activeMember} setScreen={handleSetScreen} />}
+        {screen === "member-dues-detail" && <MemberDuesDetail role={role} member={activeMember} setScreen={handleSetScreen} />}
         {screen === "special-collection" && <SpecialCollection setScreen={handleSetScreen} />}
         {screen === "record-member-payment" && <RecordMemberPayment role={role} />}
         {screen === "collection-box" && <CollectionBoxReceipt role={role} />}
@@ -1527,7 +1529,7 @@ export default function Prototype() {
 }
 
 function Header({ role, user, screen, reportDetail, navTitle }: { role: string; user: string; screen: Screen; reportDetail: string; navTitle: string }) {
-  const title = role === "Member" && screen === "ledger" ? "My Dues" : screen === "report-detail" ? reportDetail : screen === "nav-detail" ? navTitle : screenTitle(screen);
+  const title = (screen === "my-dues" || (role === "Member" && screen === "ledger")) ? "My Dues" : screen === "report-detail" ? reportDetail : screen === "nav-detail" ? navTitle : screenTitle(screen);
   return (
     <header className="topbar">
       <div>
@@ -1559,6 +1561,7 @@ function screenTitle(screen: Screen) {
     "fellowship-queue": "Fellowship Queue",
     "confirm-sponsors": "Confirm Sponsor Group",
     ledger: "Member Ledger / Dues",
+    "my-dues": "My Dues",
     "member-dues-detail": "Current Dues Details",
     "special-collection": "Special Collection",
     "record-member-payment": "Record Member Payment",
@@ -3283,9 +3286,11 @@ function financeReceiptText(summary: MemberFinanceSummary): string {
 }
 
 function MemberFinanceSummaryPanel({
+  role = "member",
   compact = false,
   showPendingItems = false
 }: {
+  role?: Role;
   compact?: boolean;
   showPendingItems?: boolean;
 }) {
@@ -3299,13 +3304,14 @@ function MemberFinanceSummaryPanel({
       setStatus("loading");
 
       try {
+        const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
         const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
           method: "POST",
           headers: {
             Accept: "application/json",
             "Content-Type": "application/json"
           },
-          body: JSON.stringify(LOCAL_MEMBER_FINANCE_LOGIN)
+          body: JSON.stringify(login)
         });
 
         if (!loginResponse.ok) {
@@ -3473,7 +3479,7 @@ function Dashboard({
             <button onClick={() => setScreen("fellowship")}><span>Fellowship</span><strong>June</strong><small>{advanceBalance ? `${money(advanceBalance)} advance available` : "Sponsorship pending"}</small></button>
           </div>
         </section>
-        <MemberFinanceSummaryPanel compact />
+        <MemberFinanceSummaryPanel role={role} compact />
         <section className="memberPanel">
           <Toolbar title="Quick Access" actionLabel="Member tools" />
           <div className="memberQuickGrid">
@@ -4862,7 +4868,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
         )}
       </div>
       <div className="notice memberHelperText">Member Details: review the member profile here, then use the finance summary and Profile Documents metadata section below. Backend authorization remains the source of truth.</div>
-      <MemberFinanceSummaryPanel compact />
+      <MemberFinanceSummaryPanel role={role} compact />
       {renderProfileDocumentsSection()}
     </section>
   );
@@ -5194,8 +5200,8 @@ function ledgerExtraFields(row: (typeof ledgerRows)[number]) {
   return [];
 }
 
-function Ledger({ role, member, setScreen }: { role: Role; member: Member; setScreen: (screen: Screen) => void }) {
-  const visibleRows = role === "member" ? ledgerRows.filter((row) => row.member === member.name) : ledgerRows;
+function Ledger({ role, member, setScreen, isPersonal = false }: { role: Role; member: Member; setScreen: (screen: Screen) => void; isPersonal?: boolean }) {
+  const visibleRows = (role === "member" || isPersonal) ? ledgerRows.filter((row) => row.member === member.name) : ledgerRows;
   const memberPendingDues = outstandingDues.filter((due) => due.member === member.name && due.status === "Pending");
   const pendingTotal = memberPendingDues.reduce((sum, due) => sum + due.amount, 0);
   const memberDebits = visibleRows.reduce((sum, row) => sum + row.debit, 0);
@@ -5205,11 +5211,11 @@ function Ledger({ role, member, setScreen }: { role: Role; member: Member; setSc
   const advanceBalance = currentDues === 0 && netBalance > 0 ? netBalance : 0;
   const lastPayment = [...visibleRows].reverse().find((row) => row.credit > 0);
 
-  if (role === "member") {
+  if (role === "member" || isPersonal) {
     return (
       <section className="stack">
         <Toolbar title="My Dues" actionLabel="Own records only" />
-        <MemberFinanceSummaryPanel showPendingItems />
+        <MemberFinanceSummaryPanel role={role} showPendingItems />
         <section className="memberPanel">
           <Toolbar title="Current Status" actionLabel="Private view" />
           <div className="memberDuesSummary">
@@ -5290,7 +5296,7 @@ function Ledger({ role, member, setScreen }: { role: Role; member: Member; setSc
   );
 }
 
-function MemberDuesDetail({ member, setScreen }: { member: Member; setScreen: (screen: Screen) => void }) {
+function MemberDuesDetail({ role = "member", member, setScreen }: { role?: Role; member: Member; setScreen: (screen: Screen) => void }) {
   const rows = ledgerRows.filter((row) => row.member === member.name);
   const memberPendingDues = outstandingDues.filter((due) => due.member === member.name && due.status === "Pending");
   const pendingTotal = memberPendingDues.reduce((sum, due) => sum + due.amount, 0);
@@ -5304,10 +5310,10 @@ function MemberDuesDetail({ member, setScreen }: { member: Member; setScreen: (s
   return (
     <section className="stack">
       <div className="buttonRow">
-        <button className="secondaryButton" onClick={() => setScreen("ledger")}>Back to My Dues</button>
+        <button className="secondaryButton" onClick={() => setScreen("my-dues")}>Back to My Dues</button>
         <button className="secondaryButton" onClick={() => setScreen("dashboard")}>Back to Dashboard</button>
       </div>
-      <MemberFinanceSummaryPanel showPendingItems />
+      <MemberFinanceSummaryPanel role={role} showPendingItems />
       <section className="memberPanel">
         <Toolbar title="Current Dues Details" actionLabel="Member view" />
         <div className="notice memberHelperText">Current Dues, Member Finance Summary, Last Payment, Receipt Status, and Payment History are shown only through existing frontend data and backend APIs.</div>
