@@ -331,6 +331,7 @@ type Screen =
   | "ledger"
   | "my-dues"
   | "profile-update-detail"
+  | "committee-detail"
   | "member-dues-detail"
   | "special-collection"
   | "record-member-payment"
@@ -789,6 +790,12 @@ const pendingMemberUpdates = [
   { member: "Lion Treasurer User", change: "Blood donor consent update", submitted: "01 Jun 2026", status: "Needs confirmation" }
 ];
 
+const committeesList = [
+  { id: "COM-001", name: "Committee List", lead: "Lion Secretary User", count: 4, purpose: "Oversee school kit distribution and educational service projects." },
+  { id: "COM-002", name: "Committee List item 2", lead: "Lion Treasurer User", count: 5, purpose: "Coordinate general health screening camps and medical drives." },
+  { id: "COM-003", name: "Committee List item 3", lead: "Lion Bijesh", count: 6, purpose: "Direct community service projects and school support activities." }
+];
+
 const clubReminders = [
   { title: "PST review due", role: "President", due: "14 Jun 2026", priority: "High", status: "Open" },
   { title: "Close May activity reports", role: "Secretary", due: "07 Jun 2026", priority: "Medium", status: "Pending" },
@@ -1180,14 +1187,23 @@ export default function Prototype() {
   const [navDetail, setNavDetail] = useState({ parent: "Dashboard", title: "Detail" });
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [selectedUpdate, setSelectedUpdate] = useState<typeof pendingMemberUpdates[number] | null>(null);
+  const [selectedCommittee, setSelectedCommittee] = useState<typeof committeesList[number] | null>(null);
   const [profileBackContext, setProfileBackContext] = useState<{ screen: Screen; parent?: string; title?: string } | null>(null);
   const activeMember = roleUser[role];
 
   function handleSetScreen(nextScreen: Screen) {
     setSelectedMember(null);
     setSelectedUpdate(null);
+    setSelectedCommittee(null);
     setProfileBackContext(null);
     setScreen(nextScreen);
+  }
+
+  function openCommitteeDetail(committee: typeof committeesList[number]) {
+    setSelectedMember(null);
+    setSelectedUpdate(null);
+    setSelectedCommittee(committee);
+    setScreen("committee-detail");
   }
 
   function selectAndOpenMemberProfile(member: Member) {
@@ -1214,6 +1230,7 @@ export default function Prototype() {
     setRole(nextRole);
     setSelectedMember(null);
     setSelectedUpdate(null);
+    setSelectedCommittee(null);
     setProfileBackContext(null);
     setScreen("dashboard");
     setExpandedGroups([]);
@@ -1518,7 +1535,11 @@ export default function Prototype() {
             setScreen={handleSetScreen}
             onSelectMember={selectAndOpenMemberProfile}
             onSelectUpdate={openProfileUpdateDetail}
+            onSelectCommittee={openCommitteeDetail}
           />
+        )}
+        {screen === "committee-detail" && (
+          <CommitteeDetail committee={selectedCommittee} setScreen={handleSetScreen} />
         )}
         {screen === "profile-update-detail" && (
           <ProfileUpdateDetail update={selectedUpdate} setScreen={handleSetScreen} />
@@ -1615,6 +1636,7 @@ function screenTitle(screen: Screen) {
     ledger: "Member Ledger / Dues",
     "my-dues": "My Dues",
     "profile-update-detail": "Profile Update Request",
+    "committee-detail": "Committee Details",
     "member-dues-detail": "Current Dues Details",
     "special-collection": "Special Collection",
     "record-member-payment": "Record Member Payment",
@@ -2815,7 +2837,8 @@ function NavDetailScreen({
   role,
   setScreen,
   onSelectMember,
-  onSelectUpdate
+  onSelectUpdate,
+  onSelectCommittee
 }: {
   parent: string;
   title: string;
@@ -2823,6 +2846,7 @@ function NavDetailScreen({
   setScreen: (screen: Screen) => void;
   onSelectMember?: (member: Member) => void;
   onSelectUpdate?: (update: typeof pendingMemberUpdates[number]) => void;
+  onSelectCommittee?: (committee: typeof committeesList[number]) => void;
 }) {
   if (parent === "Operations" && title === "Draft / Pending") {
     return <DraftPendingAnnouncements setScreen={setScreen} />;
@@ -2831,6 +2855,16 @@ function NavDetailScreen({
   const rows = navDetailCards(parent, title, role);
 
   const handleRowClick = (row: { title: string; action: string }) => {
+    if (parent === "People" && title === "Committee List") {
+      if (onSelectCommittee) {
+        const foundCommittee = committeesList.find((c) => c.name === row.title);
+        if (foundCommittee) {
+          onSelectCommittee(foundCommittee);
+        }
+      }
+      return;
+    }
+
     if (parent === "People" && title === "Profile Update Pending" && onSelectUpdate) {
       const foundUpdate = pendingMemberUpdates.find((u) => u.member === row.title);
       if (foundUpdate) {
@@ -2988,6 +3022,18 @@ function navDetailNote(parent: string, title: string) {
 }
 
 function navDetailCards(parent: string, title: string, role: Role = "president"): { title: string; meta: string[]; action: string }[] {
+  if (parent === "People" && title === "Committee List") {
+    return committeesList.map((item) => ({
+      title: item.name,
+      meta: [
+        `Lead: ${item.lead}`,
+        `Members Count: ${item.count}`,
+        `Purpose: ${item.purpose}`
+      ],
+      action: "View"
+    }));
+  }
+
   if (parent === "People" && title === "Profile Update Pending") {
     return pendingMemberUpdates.map((item) => ({
       title: item.member,
@@ -7893,5 +7939,93 @@ function Field({ label, value }: { label: string; value: string }) {
 function Avatar({ name, large = false }: { name: string; large?: boolean }) {
   const initials = name.split(" ").filter((part) => part !== "Lion" && part !== "-" && part !== "Member").slice(0, 2).map((part) => part[0]).join("");
   return <span className={large ? "avatar large" : "avatar"}>{initials}</span>;
+}
+
+function CommitteeDetail({
+  committee,
+  setScreen
+}: {
+  committee: { id: string; name: string; lead: string; count: number; purpose: string } | null;
+  setScreen: (screen: Screen) => void;
+}) {
+  if (!committee) {
+    return (
+      <section className="stack">
+        <div className="compactPanel">
+          <button className="secondaryButton compactBackButton" onClick={() => setScreen("nav-detail")}>← Back to List</button>
+          <div className="notice memberHelperText">No committee selected.</div>
+        </div>
+      </section>
+    );
+  }
+
+  const committeeMembers: Record<string, string[]> = {
+    "COM-001": ["Lion Secretary User (Lead)", "Lion Bijesh", "Lion Treasurer User", "Lion Ajith Kumar"],
+    "COM-002": ["Lion Treasurer User (Lead)", "Lion Bijesh", "Lion Secretary User", "Lion Ajith Kumar", "Lion Member 5"],
+    "COM-003": ["Lion Bijesh (Lead)", "Lion Secretary User", "Lion Treasurer User", "Lion Ajith Kumar", "Lion Member 5", "Lion Member 6"]
+  };
+
+  const membersList = committeeMembers[committee.id] || ["Lion Bijesh", "Lion Secretary User", "Lion Treasurer User"];
+
+  return (
+    <section className="stack">
+      <div className="compactPanel">
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("nav-detail")}>← Back to List</button>
+        <Toolbar title="Committee Details" actionLabel="Active Committee" />
+      </div>
+
+      <div className="memberPanel">
+        <div className="toolbar">
+          <h3>Committee Information</h3>
+          <span className="statusPill">{committee.id}</span>
+        </div>
+        <div className="detailGrid">
+          <div className="fieldGrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="field">
+              <span className="fieldLabel">Committee Name</span>
+              <strong>{committee.name}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Lead / Chair</span>
+              <strong>{committee.lead}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Total Members</span>
+              <strong>{committee.count} Members</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Purpose</span>
+              <strong>{committee.purpose}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="memberPanel">
+        <Toolbar title="Committee Members" actionLabel="Assigned Rosters" />
+        <div style={{ marginTop: "1rem" }}>
+          <ul style={{ listStyleType: "none", padding: 0, margin: 0 }}>
+            {membersList.map((m, idx) => (
+              <li 
+                key={idx} 
+                style={{ 
+                  padding: "0.75rem 1rem", 
+                  borderBottom: idx < membersList.length - 1 ? "1px solid rgba(255, 255, 255, 0.1)" : "none",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <span>{m}</span>
+                <span className="statusPill" style={{ opacity: 0.8, fontSize: "0.75rem" }}>
+                  {m.includes("(Lead)") ? "Chair" : "Member"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
 }
 
