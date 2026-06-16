@@ -2804,15 +2804,21 @@ function NavDetailScreen({
         <div className="notice">{navDetailNote(parent, title)}</div>
       </div>
       <div className="draftPendingGrid">
-        {rows.map((row, index) => (
-          <article className="draftPendingCard" key={`${parent}-${title}-${row.title}-${index}`}>
-            <div>
-              <h3>{row.title}</h3>
-              {row.meta.map((line) => <span key={line}>{line}</span>)}
-            </div>
-            <button className="filterButton" onClick={() => handleRowClick(row)}>{row.action}</button>
-          </article>
-        ))}
+        {rows.length > 0 ? (
+          rows.map((row, index) => (
+            <article className="draftPendingCard" key={`${parent}-${title}-${row.title}-${index}`}>
+              <div>
+                <h3>{row.title}</h3>
+                {row.meta.map((line) => <span key={line}>{line}</span>)}
+              </div>
+              <button className="filterButton" onClick={() => handleRowClick(row)}>{row.action}</button>
+            </article>
+          ))
+        ) : (
+          <div className="notice memberHelperText">
+            {title === "Inactive Members" ? "No inactive members found." : "No records found."}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -3091,7 +3097,10 @@ function peopleCelebrationCards(title: string): { title: string; meta: string[];
 
 function navDetailRows(parent: string, title: string) {
   if (parent === "People" && title.includes("Member")) {
-    return members.map((member) => [member.name, member.clubRole, member.status, member.bloodGroup, member.consentContact ? member.phone : "Contact hidden"]);
+    const statusFilter = title === "Inactive Members" ? "Inactive" : "Active";
+    return members
+      .filter((member) => member.status === statusFilter)
+      .map((member) => [member.name, member.clubRole, member.status, member.bloodGroup, member.consentContact ? member.phone : "Contact hidden"]);
   }
   if (parent === "People" && title.includes("Celebration")) {
     return celebrationsForRole("president").map((item) => [item.name, item.type, item.date, item.contact, item.wishStatus]);
