@@ -1567,6 +1567,10 @@ export default function Prototype() {
             onSelectMember={selectAndOpenMemberProfile}
             onSelectUpdate={openProfileUpdateDetail}
             onSelectCommittee={openCommitteeDetail}
+            onBackToCelebrations={() => {
+              setPeopleSection("Celebrations");
+              handleSetScreen("people-module");
+            }}
           />
         )}
         {screen === "committee-detail" && (
@@ -2869,7 +2873,8 @@ function NavDetailScreen({
   setScreen,
   onSelectMember,
   onSelectUpdate,
-  onSelectCommittee
+  onSelectCommittee,
+  onBackToCelebrations
 }: {
   parent: string;
   title: string;
@@ -2878,6 +2883,7 @@ function NavDetailScreen({
   onSelectMember?: (member: Member) => void;
   onSelectUpdate?: (update: typeof pendingMemberUpdates[number]) => void;
   onSelectCommittee?: (committee: typeof committeesList[number]) => void;
+  onBackToCelebrations?: () => void;
 }) {
   if (parent === "Operations" && title === "Draft / Pending") {
     return <DraftPendingAnnouncements setScreen={setScreen} />;
@@ -2924,11 +2930,23 @@ function NavDetailScreen({
     }
   };
 
+  const isCelebrationPage = parent === "People" && ["Today", "This Week", "Birthdays", "Anniversaries"].includes(title);
+
+  const handleBackClick = () => {
+    if (isCelebrationPage && onBackToCelebrations) {
+      onBackToCelebrations();
+    } else {
+      setScreen(parentScreen(parent));
+    }
+  };
+
   return (
     <section className="stack">
       <div className="compactPanel">
         <Toolbar title={navDetailTitle(parent, title)} actionLabel={parent} />
-        <button className="secondaryButton compactBackButton" onClick={() => setScreen(parentScreen(parent))}>← {parent}</button>
+        <button className="secondaryButton compactBackButton" onClick={handleBackClick}>
+          ← {isCelebrationPage ? "Celebrations" : parent}
+        </button>
         <div className="notice">{navDetailNote(parent, title)}</div>
       </div>
       <div className="draftPendingGrid">
