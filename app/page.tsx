@@ -1477,7 +1477,7 @@ export default function Prototype() {
           <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} />
         )}
         {screen === "nav-detail" && (
-          <NavDetailScreen parent={navDetail.parent} title={navDetail.title} role={role} setScreen={handleSetScreen} />
+          <NavDetailScreen parent={navDetail.parent} title={navDetail.title} role={role} setScreen={handleSetScreen} onSelectMember={selectAndOpenMemberProfile} />
         )}
         {screen === "announcement-detail" && (
           <AnnouncementDetailScreen detail={announcementDetail} setScreen={handleSetScreen} />
@@ -2756,12 +2756,46 @@ function FellowshipPaymentReport() {
   );
 }
 
-function NavDetailScreen({ parent, title, role, setScreen }: { parent: string; title: string; role: Role; setScreen: (screen: Screen) => void }) {
+function NavDetailScreen({
+  parent,
+  title,
+  role,
+  setScreen,
+  onSelectMember
+}: {
+  parent: string;
+  title: string;
+  role: Role;
+  setScreen: (screen: Screen) => void;
+  onSelectMember?: (member: Member) => void;
+}) {
   if (parent === "Operations" && title === "Draft / Pending") {
     return <DraftPendingAnnouncements setScreen={setScreen} />;
   }
 
   const rows = navDetailCards(parent, title, role);
+
+  const handleRowClick = (row: { title: string; action: string }) => {
+    if (onSelectMember && parent === "People") {
+      let target = row.title;
+      if (target.startsWith("Member: ")) {
+        target = target.substring(8);
+      }
+      const cleanName = (n: string) => n.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+      const targetCleaned = cleanName(target);
+
+      const found = members.find((m) => {
+        const mName = cleanName(m.name);
+        const mDash = cleanName(m.dashboardName);
+        return targetCleaned.includes(mName) || mName.includes(targetCleaned) || targetCleaned.includes(mDash) || mDash.includes(targetCleaned);
+      });
+
+      if (found) {
+        onSelectMember(found);
+      }
+    }
+  };
+
   return (
     <section className="stack">
       <div className="compactPanel">
@@ -2776,7 +2810,7 @@ function NavDetailScreen({ parent, title, role, setScreen }: { parent: string; t
               <h3>{row.title}</h3>
               {row.meta.map((line) => <span key={line}>{line}</span>)}
             </div>
-            <button className="filterButton">{row.action}</button>
+            <button className="filterButton" onClick={() => handleRowClick(row)}>{row.action}</button>
           </article>
         ))}
       </div>
