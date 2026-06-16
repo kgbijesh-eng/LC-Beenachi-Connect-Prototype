@@ -1180,15 +1180,22 @@ export default function Prototype() {
   const [navDetail, setNavDetail] = useState({ parent: "Dashboard", title: "Detail" });
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [selectedUpdate, setSelectedUpdate] = useState<typeof pendingMemberUpdates[number] | null>(null);
+  const [profileBackContext, setProfileBackContext] = useState<{ screen: Screen; parent?: string; title?: string } | null>(null);
   const activeMember = roleUser[role];
 
   function handleSetScreen(nextScreen: Screen) {
     setSelectedMember(null);
     setSelectedUpdate(null);
+    setProfileBackContext(null);
     setScreen(nextScreen);
   }
 
   function selectAndOpenMemberProfile(member: Member) {
+    setProfileBackContext({
+      screen: screen,
+      parent: screen === "nav-detail" ? navDetail.parent : undefined,
+      title: screen === "nav-detail" ? navDetail.title : undefined
+    });
     setSelectedMember(member);
     setScreen("member-profile");
   }
@@ -1207,6 +1214,7 @@ export default function Prototype() {
     setRole(nextRole);
     setSelectedMember(null);
     setSelectedUpdate(null);
+    setProfileBackContext(null);
     setScreen("dashboard");
     setExpandedGroups([]);
     setExpandedSubItems([]);
@@ -1412,17 +1420,34 @@ export default function Prototype() {
       </aside>
 
       <section className="workspace">
-        <Header role={roleLabels[role]} user={activeMember.dashboardName} screen={screen} reportDetail={reportDetail} navTitle={navDetailTitle(navDetail.parent, navDetail.title)} />
-        {activeParent && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
+        <Header role={roleLabels[role]} user={activeMember.dashboardName} screen={screen} reportDetail={reportDetail} navTitle={navDetailTitle(navDetail.parent, navDetail.title)} selectedMember={selectedMember} />
+        {screen === "member-profile" && profileBackContext ? (
           <ContextBack
-            parent={activeParent}
+            parent={profileBackContext.screen === "nav-detail" ? (profileBackContext.title === "PST Profiles" ? "PST Profiles" : profileBackContext.title || "Back") : (profileBackContext.screen === "members" ? "Member Directory" : "Back")}
             onBack={() => {
-              setScreen(parentScreen(activeParent));
-              setCollectionDetail(null);
-              setEventMeetingSection(null);
-              setExpandedGroups([activeParent]);
+              if (profileBackContext.screen === "nav-detail") {
+                setNavDetail({
+                  parent: profileBackContext.parent || "People",
+                  title: profileBackContext.title || "Detail"
+                });
+                setExpandedGroups([profileBackContext.parent || "People"]);
+              }
+              setScreen(profileBackContext.screen);
+              setProfileBackContext(null);
             }}
           />
+        ) : (
+          activeParent && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
+            <ContextBack
+              parent={activeParent}
+              onBack={() => {
+                setScreen(parentScreen(activeParent));
+                setCollectionDetail(null);
+                setEventMeetingSection(null);
+                setExpandedGroups([activeParent]);
+              }}
+            />
+          )
         )}
         {screen === "login" && <LoginScreen switchRole={switchRole} />}
         {screen === "dashboard" && (
@@ -1547,8 +1572,16 @@ export default function Prototype() {
   );
 }
 
-function Header({ role, user, screen, reportDetail, navTitle }: { role: string; user: string; screen: Screen; reportDetail: string; navTitle: string }) {
-  const title = (screen === "my-dues" || (role === "Member" && screen === "ledger")) ? "My Dues" : screen === "report-detail" ? reportDetail : screen === "nav-detail" ? navTitle : screenTitle(screen);
+function Header({ role, user, screen, reportDetail, navTitle, selectedMember }: { role: string; user: string; screen: Screen; reportDetail: string; navTitle: string; selectedMember: Member | null }) {
+  const title = (screen === "my-dues" || (role === "Member" && screen === "ledger")) 
+    ? "My Dues" 
+    : screen === "member-profile" && selectedMember !== null
+      ? "Member Profile"
+      : screen === "report-detail" 
+        ? reportDetail 
+        : screen === "nav-detail" 
+          ? navTitle 
+          : screenTitle(screen);
   return (
     <header className="topbar">
       <div>
