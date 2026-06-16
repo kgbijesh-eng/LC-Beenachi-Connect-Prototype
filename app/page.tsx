@@ -330,6 +330,7 @@ type Screen =
   | "confirm-sponsors"
   | "ledger"
   | "my-dues"
+  | "profile-update-detail"
   | "member-dues-detail"
   | "special-collection"
   | "record-member-payment"
@@ -1178,16 +1179,23 @@ export default function Prototype() {
   const [reportDetail, setReportDetail] = useState("Active Member List");
   const [navDetail, setNavDetail] = useState({ parent: "Dashboard", title: "Detail" });
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [selectedUpdate, setSelectedUpdate] = useState<typeof pendingMemberUpdates[number] | null>(null);
   const activeMember = roleUser[role];
 
   function handleSetScreen(nextScreen: Screen) {
     setSelectedMember(null);
+    setSelectedUpdate(null);
     setScreen(nextScreen);
   }
 
   function selectAndOpenMemberProfile(member: Member) {
     setSelectedMember(member);
     setScreen("member-profile");
+  }
+
+  function openProfileUpdateDetail(update: typeof pendingMemberUpdates[number]) {
+    setSelectedUpdate(update);
+    setScreen("profile-update-detail");
   }
   const totalOutstanding = members.reduce((sum, member) => sum + member.dues, 0);
   const allowedDonors = useMemo(
@@ -1198,6 +1206,7 @@ export default function Prototype() {
   function switchRole(nextRole: Role) {
     setRole(nextRole);
     setSelectedMember(null);
+    setSelectedUpdate(null);
     setScreen("dashboard");
     setExpandedGroups([]);
     setExpandedSubItems([]);
@@ -1477,7 +1486,17 @@ export default function Prototype() {
           <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} />
         )}
         {screen === "nav-detail" && (
-          <NavDetailScreen parent={navDetail.parent} title={navDetail.title} role={role} setScreen={handleSetScreen} onSelectMember={selectAndOpenMemberProfile} />
+          <NavDetailScreen
+            parent={navDetail.parent}
+            title={navDetail.title}
+            role={role}
+            setScreen={handleSetScreen}
+            onSelectMember={selectAndOpenMemberProfile}
+            onSelectUpdate={openProfileUpdateDetail}
+          />
+        )}
+        {screen === "profile-update-detail" && (
+          <ProfileUpdateDetail update={selectedUpdate} setScreen={handleSetScreen} />
         )}
         {screen === "announcement-detail" && (
           <AnnouncementDetailScreen detail={announcementDetail} setScreen={handleSetScreen} />
@@ -1562,6 +1581,7 @@ function screenTitle(screen: Screen) {
     "confirm-sponsors": "Confirm Sponsor Group",
     ledger: "Member Ledger / Dues",
     "my-dues": "My Dues",
+    "profile-update-detail": "Profile Update Request",
     "member-dues-detail": "Current Dues Details",
     "special-collection": "Special Collection",
     "record-member-payment": "Record Member Payment",
@@ -2761,13 +2781,15 @@ function NavDetailScreen({
   title,
   role,
   setScreen,
-  onSelectMember
+  onSelectMember,
+  onSelectUpdate
 }: {
   parent: string;
   title: string;
   role: Role;
   setScreen: (screen: Screen) => void;
   onSelectMember?: (member: Member) => void;
+  onSelectUpdate?: (update: typeof pendingMemberUpdates[number]) => void;
 }) {
   if (parent === "Operations" && title === "Draft / Pending") {
     return <DraftPendingAnnouncements setScreen={setScreen} />;
@@ -2776,6 +2798,14 @@ function NavDetailScreen({
   const rows = navDetailCards(parent, title, role);
 
   const handleRowClick = (row: { title: string; action: string }) => {
+    if (parent === "People" && title === "Profile Update Pending" && onSelectUpdate) {
+      const foundUpdate = pendingMemberUpdates.find((u) => u.member === row.title);
+      if (foundUpdate) {
+        onSelectUpdate(foundUpdate);
+        return;
+      }
+    }
+
     if (onSelectMember && parent === "People") {
       let target = row.title;
       if (target.startsWith("Member: ")) {
@@ -2925,6 +2955,18 @@ function navDetailNote(parent: string, title: string) {
 }
 
 function navDetailCards(parent: string, title: string, role: Role = "president"): { title: string; meta: string[]; action: string }[] {
+  if (parent === "People" && title === "Profile Update Pending") {
+    return pendingMemberUpdates.map((item) => ({
+      title: item.member,
+      meta: [
+        `Requested Change: ${item.change}`,
+        `Submitted Date: ${item.submitted}`,
+        `Approval Status: ${item.status}`
+      ],
+      action: "View"
+    }));
+  }
+
   if (parent === "People" && ["Today", "This Week", "Birthdays", "Anniversaries"].includes(title)) {
     return peopleCelebrationCards(title);
   }
@@ -5401,6 +5443,119 @@ function MemberDuesDetail({ role = "member", member, setScreen }: { role?: Role;
           ))}
         </div>
       </section>
+    </section>
+  );
+}
+
+function ProfileUpdateDetail({
+  update,
+  setScreen
+}: {
+  update: typeof pendingMemberUpdates[number] | null;
+  setScreen: (screen: Screen) => void;
+}) {
+  if (!update) {
+    return (
+      <section className="stack">
+        <div className="compactPanel">
+          <button className="secondaryButton compactBackButton" onClick={() => setScreen("nav-detail")}>← Back to List</button>
+          <div className="notice memberHelperText">No update request selected.</div>
+        </div>
+      </section>
+    );
+  }
+
+  let changeDetails = {
+    field: "Phone Number",
+    oldValue: "+91 98765 10004",
+    newValue: "+91 98765 99999",
+    reason: "Correction of typo in directory record."
+  };
+
+  if (update.member.includes("Secretary")) {
+    changeDetails = {
+      field: "Anniversary Consent",
+      oldValue: "Hidden / Restricted",
+      newValue: "Visible to Members",
+      reason: "Updating privacy settings to show anniversary to all club members."
+    };
+  } else if (update.member.includes("Treasurer")) {
+    changeDetails = {
+      field: "Blood Donor Consent",
+      oldValue: "No Consent (Not Shared)",
+      newValue: "Consent Granted (Show O+)",
+      reason: "Opting in as active blood donor for club emergency requests."
+    };
+  }
+
+  return (
+    <section className="stack">
+      <div className="compactPanel">
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("nav-detail")}>← Back to List</button>
+        <Toolbar title="Profile Update Request Details" actionLabel="Review Pending Approval" />
+      </div>
+
+      <div className="memberPanel">
+        <div className="toolbar">
+          <h3>Request Information</h3>
+          <span className="statusPill">{update.status}</span>
+        </div>
+        <div className="detailGrid">
+          <div className="fieldGrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="field">
+              <span className="fieldLabel">Member Name</span>
+              <strong>{update.member}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Change Requested</span>
+              <strong>{update.change}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Submitted Date</span>
+              <strong>{update.submitted}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Submission Status</span>
+              <strong>{update.status}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="memberPanel">
+        <Toolbar title="Field Comparison (Before vs After)" actionLabel="Proposed Change" />
+        <table className="tableLike" style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem" }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
+              <th style={{ padding: "0.5rem" }}>Field</th>
+              <th style={{ padding: "0.5rem" }}>Current Value</th>
+              <th style={{ padding: "0.5rem", color: "#2563eb" }}>Proposed Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={{ borderBottom: "1px solid #eee" }}>
+              <td style={{ padding: "0.8rem 0.5rem" }}><strong>{changeDetails.field}</strong></td>
+              <td style={{ padding: "0.8rem 0.5rem", color: "#ef4444" }}>{changeDetails.oldValue}</td>
+              <td style={{ padding: "0.8rem 0.5rem", color: "#10b981", fontWeight: "bold" }}>{changeDetails.newValue}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style={{ marginTop: "1rem" }} className="notice">
+          <strong>Member's Reason / Comments:</strong><br />
+          {changeDetails.reason}
+        </div>
+      </div>
+
+      <div className="buttonRow">
+        <button onClick={() => {
+          alert("Prototype approval simulation: Change approved successfully.");
+          setScreen("nav-detail");
+        }}>Approve Change</button>
+        <button className="secondaryButton" onClick={() => {
+          alert("Prototype rejection simulation: Change request rejected.");
+          setScreen("nav-detail");
+        }}>Reject</button>
+      </div>
     </section>
   );
 }
