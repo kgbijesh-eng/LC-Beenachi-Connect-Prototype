@@ -332,6 +332,7 @@ type Screen =
   | "my-dues"
   | "profile-update-detail"
   | "committee-detail"
+  | "event-meeting-detail"
   | "member-dues-detail"
   | "special-collection"
   | "record-member-payment"
@@ -1188,6 +1189,7 @@ export default function Prototype() {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [selectedUpdate, setSelectedUpdate] = useState<typeof pendingMemberUpdates[number] | null>(null);
   const [selectedCommittee, setSelectedCommittee] = useState<typeof committeesList[number] | null>(null);
+  const [selectedEventMeeting, setSelectedEventMeeting] = useState<EventMeeting | null>(null);
   const [profileBackContext, setProfileBackContext] = useState<{ screen: Screen; parent?: string; title?: string } | null>(null);
   const activeMember = roleUser[role];
 
@@ -1195,8 +1197,17 @@ export default function Prototype() {
     setSelectedMember(null);
     setSelectedUpdate(null);
     setSelectedCommittee(null);
+    setSelectedEventMeeting(null);
     setProfileBackContext(null);
     setScreen(nextScreen);
+  }
+
+  function openEventMeetingDetail(item: EventMeeting) {
+    setSelectedMember(null);
+    setSelectedUpdate(null);
+    setSelectedCommittee(null);
+    setSelectedEventMeeting(item);
+    setScreen("event-meeting-detail");
   }
 
   function openCommitteeDetail(committee: typeof committeesList[number]) {
@@ -1231,6 +1242,7 @@ export default function Prototype() {
     setSelectedMember(null);
     setSelectedUpdate(null);
     setSelectedCommittee(null);
+    setSelectedEventMeeting(null);
     setProfileBackContext(null);
     setScreen("dashboard");
     setExpandedGroups([]);
@@ -1614,7 +1626,19 @@ export default function Prototype() {
         {screen === "outstanding-dues" && <OutstandingDues setScreen={handleSetScreen} />}
         {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} />}
         {screen === "fellowship-payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={handleSetScreen} />}
-        {screen === "events-meetings" && <EventsMeetings role={role} member={activeMember} selectedSponsors={selectedSponsors} setScreen={handleSetScreen} selectedSection={eventMeetingSection} />}
+        {screen === "events-meetings" && (
+          <EventsMeetings
+            role={role}
+            member={activeMember}
+            selectedSponsors={selectedSponsors}
+            setScreen={handleSetScreen}
+            selectedSection={eventMeetingSection}
+            onSelectEventMeeting={openEventMeetingDetail}
+          />
+        )}
+        {screen === "event-meeting-detail" && (
+          <EventMeetingDetail item={selectedEventMeeting} setScreen={handleSetScreen} />
+        )}
         {screen === "announcements" && <Announcements role={role} member={activeMember} selectedSponsors={selectedSponsors} />}
         {screen === "documents" && <Documents role={role} />}
         {screen === "projects" && <ProjectsActivities setScreen={handleSetScreen} />}
@@ -1683,6 +1707,7 @@ function screenTitle(screen: Screen) {
     "collection-summary": "Collection Summary",
     "fellowship-payments": "Fellowship Payments",
     "events-meetings": "Events & Meetings",
+    "event-meeting-detail": "Event / Meeting Details",
     announcements: "Announcements",
     "announcement-detail": "Announcements",
     documents: "Documents",
@@ -7554,13 +7579,15 @@ function EventsMeetings({
   member,
   selectedSponsors,
   setScreen,
-  selectedSection
+  selectedSection,
+  onSelectEventMeeting
 }: {
   role: Role;
   member: Member;
   selectedSponsors: string[];
   setScreen: (screen: Screen) => void;
   selectedSection?: EventMeetingSection | null;
+  onSelectEventMeeting?: (item: EventMeeting) => void;
 }) {
   const visible = role === "member" ? eventsMeetings.filter((item) => item.visibility === "All Members") : eventsMeetings;
   const memberIsFellowshipSponsor = selectedSponsors.includes(member.name) || selectedSponsors.includes(member.dashboardName);
@@ -7629,7 +7656,7 @@ function EventsMeetings({
                   <span>Venue: {item.venue}</span>
                   <span>Audience: {item.visibility}</span>
                   <span className="tag">{item.status}</span>
-                  <button className="filterButton">View details</button>
+                  <button className="filterButton" onClick={() => onSelectEventMeeting?.(item)}>View details</button>
                 </article>
               ))}
               {sectionItems.length === 0 && <div className="memberEmptyState">{role === "member" || section === "Meeting Notices" ? emptyMessage : "No items in this section."}</div>}
@@ -8072,6 +8099,71 @@ function CommitteeDetail({
               </li>
             ))}
           </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EventMeetingDetail({
+  item,
+  setScreen
+}: {
+  item: EventMeeting | null;
+  setScreen: (screen: Screen) => void;
+}) {
+  if (!item) {
+    return (
+      <section className="stack">
+        <div className="compactPanel">
+          <button className="secondaryButton compactBackButton" onClick={() => setScreen("events-meetings")}>← Back to List</button>
+          <div className="notice memberHelperText">No event or meeting selected.</div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="stack">
+      <div className="compactPanel">
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("events-meetings")}>
+          ← {item.section}
+        </button>
+        <Toolbar title="Event / Meeting Details" actionLabel="Operational Schedule" />
+      </div>
+
+      <div className="memberPanel">
+        <div className="toolbar">
+          <h3>{item.type} Information</h3>
+          <span className="statusPill">{item.status}</span>
+        </div>
+        <div className="detailGrid">
+          <div className="fieldGrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="field">
+              <span className="fieldLabel">Title</span>
+              <strong>{item.title}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Date & Time</span>
+              <strong>{item.date}{item.time ? ` @ ${item.time}` : ""}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Venue</span>
+              <strong>{item.venue}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Audience (Visibility)</span>
+              <strong>{item.visibility}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Section Type</span>
+              <strong>{item.section}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Activity Category</span>
+              <strong>{item.type}</strong>
+            </div>
+          </div>
         </div>
       </div>
     </section>
