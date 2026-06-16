@@ -334,6 +334,7 @@ type Screen =
   | "committee-detail"
   | "event-meeting-detail"
   | "announcement-single-detail"
+  | "club-document-detail"
   | "member-dues-detail"
   | "special-collection"
   | "record-member-payment"
@@ -1192,6 +1193,7 @@ export default function Prototype() {
   const [selectedCommittee, setSelectedCommittee] = useState<typeof committeesList[number] | null>(null);
   const [selectedEventMeeting, setSelectedEventMeeting] = useState<EventMeeting | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<{ title: string; meta: string[]; sourceSection: AnnouncementDetail } | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<{ title: string; meta: string[]; sourceTitle: string } | null>(null);
   const [profileBackContext, setProfileBackContext] = useState<{ screen: Screen; parent?: string; title?: string } | null>(null);
   const activeMember = roleUser[role];
 
@@ -1201,8 +1203,19 @@ export default function Prototype() {
     setSelectedCommittee(null);
     setSelectedEventMeeting(null);
     setSelectedAnnouncement(null);
+    setSelectedDocument(null);
     setProfileBackContext(null);
     setScreen(nextScreen);
+  }
+
+  function openDocumentDetail(doc: { title: string; meta: string[]; sourceTitle: string }) {
+    setSelectedMember(null);
+    setSelectedUpdate(null);
+    setSelectedCommittee(null);
+    setSelectedEventMeeting(null);
+    setSelectedAnnouncement(null);
+    setSelectedDocument(doc);
+    setScreen("club-document-detail");
   }
 
   function openAnnouncementDetail(announcement: { title: string; meta: string[]; sourceSection: AnnouncementDetail }) {
@@ -1256,6 +1269,7 @@ export default function Prototype() {
     setSelectedCommittee(null);
     setSelectedEventMeeting(null);
     setSelectedAnnouncement(null);
+    setSelectedDocument(null);
     setProfileBackContext(null);
     setScreen("dashboard");
     setExpandedGroups([]);
@@ -1596,7 +1610,11 @@ export default function Prototype() {
               setPeopleSection("Celebrations");
               handleSetScreen("people-module");
             }}
+            onSelectDocument={openDocumentDetail}
           />
+        )}
+        {screen === "club-document-detail" && (
+          <ClubDocumentDetail item={selectedDocument} setScreen={handleSetScreen} />
         )}
         {screen === "committee-detail" && (
           <CommitteeDetail committee={selectedCommittee} setScreen={handleSetScreen} />
@@ -1731,6 +1749,7 @@ function screenTitle(screen: Screen) {
     announcements: "Announcements",
     "announcement-detail": "Announcements",
     "announcement-single-detail": "Announcement Details",
+    "club-document-detail": "Document Details",
     documents: "Documents",
     projects: "Projects / Activities",
     celebrations: "Celebrations",
@@ -2920,7 +2939,8 @@ function NavDetailScreen({
   onSelectMember,
   onSelectUpdate,
   onSelectCommittee,
-  onBackToCelebrations
+  onBackToCelebrations,
+  onSelectDocument
 }: {
   parent: string;
   title: string;
@@ -2930,6 +2950,7 @@ function NavDetailScreen({
   onSelectUpdate?: (update: typeof pendingMemberUpdates[number]) => void;
   onSelectCommittee?: (committee: typeof committeesList[number]) => void;
   onBackToCelebrations?: () => void;
+  onSelectDocument?: (doc: { title: string; meta: string[]; sourceTitle: string }) => void;
 }) {
   if (parent === "Operations" && title === "Draft / Pending") {
     return <DraftPendingAnnouncements setScreen={setScreen} />;
@@ -2938,6 +2959,16 @@ function NavDetailScreen({
   const rows = navDetailCards(parent, title, role);
 
   const handleRowClick = (row: { title: string; action: string }) => {
+    if (parent === "Operations" && ["Club Documents", "Meeting Minutes", "Circulars"].includes(title)) {
+      if (onSelectDocument) {
+        const matched = rows.find((r) => r.title === row.title);
+        if (matched) {
+          onSelectDocument({ title: matched.title, meta: matched.meta, sourceTitle: title });
+        }
+      }
+      return;
+    }
+
     if (parent === "People" && title === "Committee List") {
       if (onSelectCommittee) {
         const foundCommittee = committeesList.find((c) => c.name === row.title);
@@ -8274,6 +8305,78 @@ function AnnouncementSingleDetail({
               <span className="fieldLabel">Content Description</span>
               <p style={{ marginTop: "0.5rem", color: "var(--muted)", lineHeight: 1.5 }}>
                 This is a prototype announcement view. Real announcement body and content attachment support will be configured during the database integration phase.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ClubDocumentDetail({
+  item,
+  setScreen
+}: {
+  item: { title: string; meta: string[]; sourceTitle: string } | null;
+  setScreen: (screen: Screen) => void;
+}) {
+  if (!item) {
+    return (
+      <section className="stack">
+        <div className="compactPanel">
+          <button className="secondaryButton compactBackButton" onClick={() => setScreen("nav-detail")}>← Back to List</button>
+          <div className="notice memberHelperText">No document selected.</div>
+        </div>
+      </section>
+    );
+  }
+
+  const getMetaValue = (prefix: string) => {
+    const found = item.meta.find(m => m.startsWith(prefix));
+    return found ? found.replace(prefix, "").trim() : "N/A";
+  };
+
+  const type = getMetaValue("Type:");
+  const visibility = getMetaValue("Visibility:");
+  const status = getMetaValue("Status:");
+
+  return (
+    <section className="stack">
+      <div className="compactPanel">
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("nav-detail")}>
+          ← {item.sourceTitle}
+        </button>
+        <Toolbar title="Document Details" actionLabel="Operations / Documents" />
+      </div>
+
+      <div className="memberPanel">
+        <div className="toolbar">
+          <h3>Document Metadata</h3>
+          {status !== "N/A" && <span className="statusPill">{status}</span>}
+        </div>
+        <div className="detailGrid">
+          <div className="fieldGrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="field">
+              <span className="fieldLabel">Document Title</span>
+              <strong>{item.title}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Document Type</span>
+              <strong>{type}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Visibility / Access</span>
+              <strong>{visibility}</strong>
+            </div>
+            <div className="field">
+              <span className="fieldLabel">Status</span>
+              <strong>{status}</strong>
+            </div>
+            <div className="field" style={{ gridColumn: "span 2" }}>
+              <span className="fieldLabel">Document Preview Notice</span>
+              <p style={{ marginTop: "0.5rem", color: "var(--muted)", lineHeight: 1.5 }}>
+                This is a secure prototype document viewer. Real document downloads, PDF previews, and role-based storage permissions will be configured during the file system database integration phase.
               </p>
             </div>
           </div>
