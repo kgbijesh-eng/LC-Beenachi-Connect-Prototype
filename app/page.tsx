@@ -1341,6 +1341,37 @@ export default function Prototype() {
 
   return (
     <main className="shell">
+      <style>{`
+        .sidebar {
+          display: flex !important;
+          flex-direction: column !important;
+          height: 100vh !important;
+          overflow: hidden !important;
+          position: sticky !important;
+          top: 0 !important;
+          gap: 18px !important;
+        }
+        .sidebar nav {
+          overflow-y: auto !important;
+          flex: 1 !important;
+          min-height: 0 !important;
+          padding-right: 4px !important;
+          scrollbar-width: thin;
+        }
+        .sidebar nav::-webkit-scrollbar {
+          width: 6px;
+        }
+        .sidebar nav::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .sidebar nav::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 3px;
+        }
+        .sidebar nav::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.4);
+        }
+      `}</style>
       <aside className="sidebar" aria-label="Prototype navigation">
         <div className="brand">
           <div className="brandMark">LC</div>
