@@ -6049,6 +6049,7 @@ function FellowshipDashboard({
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [editingPaymentAmount, setEditingPaymentAmount] = useState<string>("");
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+  const [paymentValidationErrors, setPaymentValidationErrors] = useState<Record<string, string>>({});
 
   const sponsorCardRefs = useRef<Record<string, HTMLElement | null>>({});
   const sponsorInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -6099,6 +6100,16 @@ function FellowshipDashboard({
   const activeSponsors = isFellowshipConfirmed ? confirmedSponsors : selectedSponsors;
   const activeShare = isFellowshipConfirmed ? confirmedSharePerSponsor : amountPerSponsor;
   const totalReceived = activeSponsors.reduce((sum, s) => sum + (sponsorPayments[s] || 0), 0);
+  const validationKey = (sponsor: string) => `${activeMonthLabel}:${sponsor}`;
+  const setSponsorValidationError = (sponsor: string, message: string | null) => {
+    const key = validationKey(sponsor);
+    setPaymentValidationErrors((current) => {
+      if (message) return { ...current, [key]: message };
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
 
   return (
     <section className="stack">
@@ -6133,7 +6144,7 @@ function FellowshipDashboard({
               type="text"
               value={totalFellowshipExpenseInput}
               onChange={(event) => setTotalFellowshipExpenseInput(event.target.value)}
-              disabled={isJulyRotationActive ? false : isFellowshipConfirmed}
+              disabled={isFellowshipConfirmed}
               placeholder={isJulyRotationActive ? "Enter July expense" : "10000"}
               style={{
                 width: "100%",
@@ -6426,7 +6437,20 @@ function FellowshipDashboard({
               );
             })}
           </div>
-          <button onClick={() => setScreen("fellowship-queue")}>Adjust Sponsor Rotation</button>
+          <div className="stack" style={{ gap: "6px" }}>
+            {selectedSponsors.length === 0 && (
+              <div style={{ color: "#5f6368", fontSize: "0.85rem" }}>Select at least one sponsor to continue.</div>
+            )}
+            <button
+              disabled={selectedSponsors.length === 0}
+              onClick={() => {
+                setTab("Selected Sponsors");
+                setScreen("fellowship");
+              }}
+            >
+              Review Selected Sponsors
+            </button>
+          </div>
         </div>
       )}
 
@@ -6682,11 +6706,7 @@ function FellowshipDashboard({
                   }}
                 >
                   <div style={{ fontWeight: "500", fontSize: "0.95rem" }}>
-                    {lastRecordedPayment.type === "partial" ? (
-                      `Payment of ₹${lastRecordedPayment.paymentAmount} recorded for ${lastRecordedPayment.memberName}. Total paid: ₹${lastRecordedPayment.cumulativePaid}. Balance remaining: ₹${lastRecordedPayment.remainingBalance}.`
-                    ) : (
-                      `Full fellowship payment recorded for ${lastRecordedPayment.memberName}. This sponsor has no remaining balance. Payment of ₹${lastRecordedPayment.paymentAmount} recorded, total paid: ₹${lastRecordedPayment.cumulativePaid}.`
-                    )}
+                    {`${formatSponsorShare(lastRecordedPayment.paymentAmount)} recorded for ${lastRecordedPayment.memberName}. Remaining balance: ${formatSponsorShare(lastRecordedPayment.remainingBalance)}.`}
                   </div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {(() => {
@@ -6784,14 +6804,49 @@ function FellowshipDashboard({
             </>
           )}
 
-          {!isFellowshipConfirmed && (!activeMonthClosed || (activeMonthClosed && activeSponsors.length === 0)) ? (
-            <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-              {activeMonthClosed
-                ? "July payment tracking will be available after the July sponsors are confirmed."
-                : `Sponsors must be confirmed before recording payments. Go to the "Selected Sponsors" tab or click "Review & Confirm ${activeMonthLabel} Sponsors" below.`
-              }
+          {!isFellowshipConfirmed && (!activeMonthClosed || (activeMonthClosed && activeSponsors.length === 0)) && (
+            <div className="stack" style={{ gap: "12px", marginBottom: "1rem" }}>
+              <div className="notice" style={{ backgroundColor: "#fff3cd", color: "#664d03" }}>
+                Confirm the selected sponsors before recording payments. Confirmation locks the sponsor list, total expense, and calculated share for this month.
+              </div>
+              <div className="metricsGrid">
+                <Metric label="Active month" value={activeMonthLabel} />
+                <Metric label="Total fellowship expense" value={isValidExpense ? formatSponsorShare(totalFellowshipExpense) : "Not entered"} />
+                <Metric label="Selected sponsors" value={`${selectedSponsors.length}`} />
+                <Metric label="Share per sponsor" value={isValidExpense && selectedSponsors.length > 0 ? formatSponsorShare(amountPerSponsor) : "₹0"} />
+              </div>
+              {selectedSponsors.length > 0 && (
+                <div className="selectedSponsorGrid">
+                  {selectedSponsors.map((sponsor) => (
+                    <article className="selectedSponsorCard" key={`payment-preview-${activeMonthLabel}-${sponsor}`}>
+                      <div>
+                        <strong>{sponsor}</strong>
+                        <span>Fellowship Share: {isValidExpense ? formatSponsorShare(amountPerSponsor) : "₹0"}</span>
+                        <span>Amount Paid: ₹0</span>
+                        <span>Balance Remaining: {isValidExpense ? formatSponsorShare(amountPerSponsor) : "₹0"}</span>
+                        <span>Payment Status: <strong style={{ color: "#b06000" }}>Awaiting confirmation</strong></span>
+                      </div>
+                      <label style={{ fontSize: "0.85rem", color: "#5f6368" }}>
+                        Amount received now (₹):
+                        <input type="text" placeholder="Enter payment received" disabled style={{ width: "100%", padding: "6px", marginTop: "4px", boxSizing: "border-box" }} />
+                      </label>
+                      <button className="filterButton" disabled>Record Payment</button>
+                    </article>
+                  ))}
+                </div>
+              )}
+              <div className="stack" style={{ gap: "6px" }}>
+                {selectedSponsors.length === 0 && <div style={{ color: "#d93025", fontSize: "0.85rem" }}>Select at least one sponsor before confirmation.</div>}
+                {!isValidExpense && <div style={{ color: "#d93025", fontSize: "0.85rem" }}>{`Enter the ${activeMonthLabel} total fellowship expense before confirmation.`}</div>}
+                <button
+                  disabled={isConfirmDisabled}
+                  onClick={() => { setScreen("confirm-sponsors"); setHighlightedSponsor(null); }}
+                >
+                  {`Confirm ${activeMonthLabel} Sponsors and Enable Payment Entry`}
+                </button>
+              </div>
             </div>
-          ) : null}
+          )}
 
           {(isFellowshipConfirmed && activeSponsors.length > 0) && (
             <>
@@ -6811,7 +6866,8 @@ function FellowshipDashboard({
               {isValidExpense && (
                 <div className="selectedSponsorGrid">
                   {activeSponsors.map((sponsor) => {
-                    const paid = sponsorPayments[sponsor] || 0;
+                    const paymentHistory = sponsorPaymentHistories[sponsor] || [];
+                    const paid = Math.round((paymentHistory.reduce((sum, entry) => sum + entry.amount, 0) + Number.EPSILON) * 100) / 100;
                     const balance = Math.max(0, activeShare - paid);
 
                     let pStatus = "Not paid";
@@ -6823,16 +6879,16 @@ function FellowshipDashboard({
                     const isValidPayFormat = /^\d+(\.\d*)?$/.test(payTrimmed) || payTrimmed === "." || payTrimmed === "";
                     const parsedPay = parseFloat(payTrimmed);
 
-                    let inputError: string | null = null;
+                    let inputError: string | null = paymentValidationErrors[validationKey(sponsor)] || null;
                     if (!isValidPayFormat || payTrimmed === ".") {
-                      inputError = "Invalid payment amount.";
+                      inputError = `Enter a valid payment amount for ${sponsor}.`;
                     } else if (payTrimmed !== "") {
                       if (parsedPay <= 0) {
-                        inputError = "Payment amount must be greater than zero.";
+                        inputError = `The payment for ${sponsor} must be greater than zero.`;
                       } else {
                         const newCumulative = Math.round((paid + parsedPay + Number.EPSILON) * 100) / 100;
                         if (newCumulative > activeShare + 0.01) {
-                          inputError = "Amount received would exceed this sponsor’s remaining fellowship balance.";
+                          inputError = `The payment for ${sponsor} cannot exceed the remaining balance of ${formatSponsorShare(balance)}.`;
                         }
                       }
                     }
@@ -6878,7 +6934,11 @@ function FellowshipDashboard({
                               type="text"
                               value={currentInput}
                               placeholder="Enter payment received"
-                              onChange={(e) => setSponsorPaymentInputs(prev => ({ ...prev, [sponsor]: e.target.value }))}
+                              disabled={pStatus === "Paid" || activeMonthClosed}
+                              onChange={(e) => {
+                                setSponsorPaymentInputs(prev => ({ ...prev, [sponsor]: e.target.value }));
+                                setSponsorValidationError(sponsor, null);
+                              }}
                               onFocus={(e) => {
                                 if (e.target.value === "0") {
                                   setSponsorPaymentInputs(prev => ({ ...prev, [sponsor]: "" }));
@@ -6895,7 +6955,7 @@ function FellowshipDashboard({
                             />
                           </label>
                           <div style={{ fontSize: "0.8rem", color: "#5f6368" }}>
-                            Enter only the amount received in this payment. It will be added to the amount already paid.
+                            Enter only the amount received in this transaction. It will be added to the amount already paid.
                           </div>
                           <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "2px" }}>
                             Maximum amount that can now be recorded: {formatSponsorShare(balance)}
@@ -6907,10 +6967,22 @@ function FellowshipDashboard({
                             <button
                               className="filterButton"
                               style={{ padding: "4px 8px", fontSize: "0.8rem", flex: 1, minWidth: "120px" }}
-                              disabled={!!inputError || payTrimmed === "" || payTrimmed === "." || parseFloat(payTrimmed) <= 0}
+                              disabled={pStatus === "Paid" || activeMonthClosed}
                               onClick={() => {
                                 const paymentNow = parseFloat(payTrimmed || "0");
-                                if (isNaN(paymentNow) || paymentNow <= 0) return;
+                                if (payTrimmed === "" || payTrimmed === "." || isNaN(paymentNow)) {
+                                  setSponsorValidationError(sponsor, `Enter a valid payment amount for ${sponsor}.`);
+                                  return;
+                                }
+                                if (paymentNow <= 0) {
+                                  setSponsorValidationError(sponsor, `The payment for ${sponsor} must be greater than zero.`);
+                                  return;
+                                }
+                                const cumulativePaid = Math.round((paid + paymentNow + Number.EPSILON) * 100) / 100;
+                                if (cumulativePaid > activeShare + 0.01) {
+                                  setSponsorValidationError(sponsor, `The payment for ${sponsor} cannot exceed the remaining balance of ${formatSponsorShare(balance)}.`);
+                                  return;
+                                }
 
                                 const now = new Date();
                                 const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -6921,31 +6993,30 @@ function FellowshipDashboard({
                                 };
 
                                 const updatedHistory = [...(sponsorPaymentHistories[sponsor] || []), newEntry];
-                                const cumulativePaid = Math.round((paid + paymentNow + Number.EPSILON) * 100) / 100;
-                                const finalCapped = Math.min(cumulativePaid, activeShare);
-
                                 setSponsorPaymentHistories(prev => ({ ...prev, [sponsor]: updatedHistory }));
-                                setSponsorPayments(prev => ({ ...prev, [sponsor]: finalCapped }));
+                                setSponsorPayments(prev => ({ ...prev, [sponsor]: cumulativePaid }));
                                 setSponsorPaymentInputs(prev => ({ ...prev, [sponsor]: "" }));
+                                setSponsorValidationError(sponsor, null);
 
-                                const newRemaining = Math.max(0, activeShare - finalCapped);
+                                const newRemaining = Math.max(0, activeShare - cumulativePaid);
                                 setLastRecordedPayment({
                                   memberName: sponsor,
                                   paymentAmount: paymentNow,
-                                  cumulativePaid: finalCapped,
+                                  cumulativePaid,
                                   remainingBalance: newRemaining,
                                   type: newRemaining > 0.005 ? "partial" : "full"
                                 });
+                                setHighlightedSponsor(sponsor);
                                 setFellowshipConfirmationMessage(null);
                               }}
                             >
-                              Record New Payment
+                              Record Payment
                             </button>
-                            {paid < activeShare - 0.01 && (
-                              <button
-                                className="filterButton"
-                                style={{ padding: "4px 8px", fontSize: "0.8rem", backgroundColor: "#137333", color: "#fff", flex: 1, minWidth: "160px" }}
-                                onClick={() => {
+                            <button
+                              className="filterButton"
+                              disabled={balance <= 0.005 || pStatus === "Paid" || activeMonthClosed}
+                              style={{ padding: "4px 8px", fontSize: "0.8rem", backgroundColor: "#137333", color: "#fff", flex: 1, minWidth: "160px" }}
+                              onClick={() => {
                                   const remaining = Math.max(0, activeShare - paid);
                                   if (remaining <= 0) return;
 
@@ -6963,6 +7034,7 @@ function FellowshipDashboard({
                                   setSponsorPaymentHistories(prev => ({ ...prev, [sponsor]: updatedHistory }));
                                   setSponsorPayments(prev => ({ ...prev, [sponsor]: newTotal }));
                                   setSponsorPaymentInputs(prev => ({ ...prev, [sponsor]: "" }));
+                                  setSponsorValidationError(sponsor, null);
                                   setLastRecordedPayment({
                                     memberName: sponsor,
                                     paymentAmount: remaining,
@@ -6970,12 +7042,12 @@ function FellowshipDashboard({
                                     remainingBalance: 0,
                                     type: "full"
                                   });
+                                  setHighlightedSponsor(sponsor);
                                   setFellowshipConfirmationMessage(null);
-                                }}
-                              >
-                                Record Remaining Balance
-                              </button>
-                            )}
+                              }}
+                            >
+                              Record Remaining Balance
+                            </button>
                             <button
                               className="filterButton"
                               style={{ padding: "4px 8px", fontSize: "0.8rem" }}
@@ -7017,18 +7089,21 @@ function FellowshipDashboard({
                                 <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
                                   <thead>
                                     <tr style={{ borderBottom: "1px solid #dadce0" }}>
+                                      <th style={{ textAlign: "left", padding: "4px 0" }}>#</th>
                                       <th style={{ textAlign: "left", padding: "4px 0" }}>Date</th>
                                       <th style={{ textAlign: "right", padding: "4px 0" }}>Amount</th>
+                                      <th style={{ textAlign: "center", padding: "4px 0" }}>Status</th>
                                       <th style={{ textAlign: "center", padding: "4px 0" }}>Actions</th>
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {sponsorPaymentHistories[sponsor].map((entry) => {
+                                    {sponsorPaymentHistories[sponsor].map((entry, entryIndex) => {
                                       const isEditing = editingPaymentId === entry.id;
                                       const isConfirmingCancel = confirmCancelId === entry.id;
 
                                       return (
                                         <tr key={entry.id} style={{ borderBottom: "1px solid #f1f3f4" }}>
+                                          <td style={{ padding: "6px 0", color: "#5f6368" }}>{entryIndex + 1}</td>
                                           <td style={{ padding: "6px 0", color: "#5f6368" }}>{entry.date}</td>
                                           <td style={{ padding: "6px 0", textAlign: "right", fontWeight: "bold" }}>
                                             {isEditing ? (
@@ -7042,6 +7117,7 @@ function FellowshipDashboard({
                                               money(entry.amount)
                                             )}
                                           </td>
+                                          <td style={{ padding: "6px 0", textAlign: "center", color: "#137333", fontSize: "0.75rem" }}>Recorded</td>
                                           <td style={{ padding: "6px 0", textAlign: "center" }}>
                                             {isEditing ? (
                                               <div style={{ display: "flex", gap: "4px", justifyContent: "center" }}>
@@ -7052,7 +7128,7 @@ function FellowshipDashboard({
                                                     const trimmedAmount = editingPaymentAmount.trim();
                                                     const parsedAmount = parseFloat(trimmedAmount);
                                                     if (isNaN(parsedAmount) || parsedAmount <= 0) {
-                                                      alert("Please enter a valid amount greater than zero.");
+                                                      setSponsorValidationError(sponsor, `Enter a valid payment amount greater than zero for ${sponsor}.`);
                                                       return;
                                                     }
 
@@ -7062,7 +7138,8 @@ function FellowshipDashboard({
 
                                                     const newTotal = Math.round((otherSum + parsedAmount + Number.EPSILON) * 100) / 100;
                                                     if (newTotal > activeShare + 0.01) {
-                                                      alert("Amount exceeds the sponsor’s remaining fellowship balance.");
+                                                      const maximumForEntry = Math.max(0, activeShare - otherSum);
+                                                      setSponsorValidationError(sponsor, `The payment for ${sponsor} cannot exceed ${formatSponsorShare(maximumForEntry)} for this transaction.`);
                                                       return;
                                                     }
 
@@ -7075,9 +7152,10 @@ function FellowshipDashboard({
 
                                                     setSponsorPaymentHistories(prev => ({ ...prev, [sponsor]: updatedHistory }));
                                                     setSponsorPayments(prev => ({ ...prev, [sponsor]: newTotal }));
+                                                    setSponsorValidationError(sponsor, null);
                                                     setEditingPaymentId(null);
                                                     setLastRecordedPayment(null);
-                                                    setHighlightedSponsor(null);
+                                                    setHighlightedSponsor(sponsor);
                                                     setFellowshipConfirmationMessage(`Payment entry updated to ${money(parsedAmount)} for ${sponsor}. Total paid: ${formatSponsorShare(newTotal)}.`);
                                                   }}
                                                 >
@@ -7105,9 +7183,10 @@ function FellowshipDashboard({
                                                     const newTotal = updatedHistory.reduce((sum, e) => sum + e.amount, 0);
                                                     setSponsorPaymentHistories(prev => ({ ...prev, [sponsor]: updatedHistory }));
                                                     setSponsorPayments(prev => ({ ...prev, [sponsor]: newTotal }));
+                                                    setSponsorValidationError(sponsor, null);
                                                     setConfirmCancelId(null);
                                                     setLastRecordedPayment(null);
-                                                    setHighlightedSponsor(null);
+                                                    setHighlightedSponsor(sponsor);
                                                     setFellowshipConfirmationMessage(`Payment entry cancelled for ${sponsor}. Total paid: ${formatSponsorShare(newTotal)}.`);
                                                   }}
                                                 >
@@ -7433,16 +7512,6 @@ function FellowshipDashboard({
           <button
             className="secondaryButton"
             onClick={() => {
-              setTab("Overview");
-              setScreen("fellowship");
-              setHighlightedSponsor(null);
-            }}
-          >
-            Back to Fellowship Overview
-          </button>
-          <button
-            className="secondaryButton"
-            onClick={() => {
               setTab("Queue");
               setScreen("fellowship");
               setHighlightedSponsor(null);
@@ -7459,6 +7528,14 @@ function FellowshipDashboard({
             }}
           >
             Go to Month Summary
+          </button>
+          <button
+            onClick={() => {
+              setTab("Overview");
+              setScreen("fellowship");
+            }}
+          >
+            Finish and Return to Fellowship Overview
           </button>
         </div>
       )}
