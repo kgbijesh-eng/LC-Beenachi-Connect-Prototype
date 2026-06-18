@@ -104,11 +104,15 @@ class Milestone3buMemberDataImportExcelOnboardingNarrowImplementationTest extend
             'rejected_rows' => 0,
             'duplicate_rows' => 0,
             'possible_existing_match_rows' => 0,
+            'created_rows' => 1,
+            'updated_rows' => 0,
+            'skipped_rows' => 0,
+            'failed_rows' => 0,
         ], $preview['summary']);
         $this->assertSame('create_preview', $preview['rows'][0]['intent']);
         $this->assertSame('MEM-001', $preview['rows'][0]['normalized']['member_code']);
         $this->assertSame('Lion Import Member', $preview['rows'][0]['normalized']['full_name']);
-        $this->assertSame('919876543210', $preview['rows'][0]['normalized']['phone']);
+        $this->assertSame('+919876543210', $preview['rows'][0]['normalized']['phone']);
         $this->assertSame('import@lcbeenachi.test', $preview['rows'][0]['normalized']['email']);
         $this->assertSame('active', $preview['rows'][0]['normalized']['status']);
         $this->assertSame('2026-06-12', $preview['rows'][0]['normalized']['joined_at']);
@@ -192,7 +196,7 @@ class Milestone3buMemberDataImportExcelOnboardingNarrowImplementationTest extend
 
         $this->assertSame(1, $preview['summary']['possible_existing_match_rows']);
         $this->assertTrue($preview['rows'][0]['valid']);
-        $this->assertSame('matched_preview', $preview['rows'][0]['intent']);
+        $this->assertSame('update_preview', $preview['rows'][0]['intent']);
         $this->assertSame($existing->id, $preview['rows'][0]['duplicate_matches']['existing'][0]['member_id']);
         $this->assertSame('MEM-EXISTING', $preview['rows'][0]['duplicate_matches']['existing'][0]['member_code']);
         $this->assertSame([], $preview['rows'][1]['duplicate_matches']['existing']);

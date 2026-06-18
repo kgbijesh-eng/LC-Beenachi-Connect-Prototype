@@ -304,7 +304,7 @@ class Milestone3bzMemberDataImportApiValidationAndClosureTest extends TestCase
             ->assertJsonPath('import_preview.summary.total_rows', 3)
             ->assertJsonPath('import_preview.summary.duplicate_rows', 2)
             ->assertJsonPath('import_preview.summary.possible_existing_match_rows', 1)
-            ->assertJsonPath('import_preview.rows.2.intent', 'matched_preview')
+            ->assertJsonPath('import_preview.rows.2.intent', 'update_preview')
             ->assertJsonPath('import_preview.rows.2.duplicate_matches.existing.0.member_id', $existing->id);
 
         $this->assertContains('The full name field is required.', $response->json('import_preview.rows.0.errors'));

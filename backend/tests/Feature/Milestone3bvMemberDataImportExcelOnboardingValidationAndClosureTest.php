@@ -111,7 +111,7 @@ class Milestone3bvMemberDataImportExcelOnboardingValidationAndClosureTest extend
         $this->assertSame('create_preview', $preview['rows'][0]['intent']);
         $this->assertSame('MEM-3BV-001', $preview['rows'][0]['normalized']['member_code']);
         $this->assertSame('Closure Preview Member', $preview['rows'][0]['normalized']['full_name']);
-        $this->assertSame('919000000001', $preview['rows'][0]['normalized']['phone']);
+        $this->assertSame('+919000000001', $preview['rows'][0]['normalized']['phone']);
         $this->assertSame('closure@example.test', $preview['rows'][0]['normalized']['email']);
         $this->assertSame('active', $preview['rows'][0]['normalized']['status']);
         $this->assertSame('2026-06-12', $preview['rows'][0]['normalized']['joined_at']);
@@ -206,7 +206,7 @@ class Milestone3bvMemberDataImportExcelOnboardingValidationAndClosureTest extend
 
         $this->assertSame($beforeMembers, Member::query()->count());
         $this->assertSame(1, $preview['summary']['possible_existing_match_rows']);
-        $this->assertSame('matched_preview', $preview['rows'][0]['intent']);
+        $this->assertSame('update_preview', $preview['rows'][0]['intent']);
         $this->assertSame($existing->id, $preview['rows'][0]['duplicate_matches']['existing'][0]['member_id']);
         $this->assertSame('MEM-3BV-EXISTING', $preview['rows'][0]['duplicate_matches']['existing'][0]['member_code']);
         $this->assertSame([], $preview['rows'][1]['duplicate_matches']['existing']);

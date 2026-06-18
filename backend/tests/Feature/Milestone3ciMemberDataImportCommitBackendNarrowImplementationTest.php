@@ -248,7 +248,7 @@ class Milestone3ciMemberDataImportCommitBackendNarrowImplementationTest extends 
         $this->assertSame($initialCount, Member::query()->count());
     }
 
-    public function test_existing_member_matches_are_skipped_and_never_updated_or_overwritten(): void
+    public function test_existing_member_code_matches_are_safely_updated_by_the_expanded_contract(): void
     {
         $this->seed(DatabaseSeeder::class);
         $club = Club::where('code', 'LCB')->firstOrFail();
@@ -277,16 +277,16 @@ class Milestone3ciMemberDataImportCommitBackendNarrowImplementationTest extends 
         $response->assertOk()
             ->assertJsonPath('import_commit.summary.total_rows', 1)
             ->assertJsonPath('import_commit.summary.created_rows', 0)
-            ->assertJsonPath('import_commit.summary.skipped_rows', 1)
-            ->assertJsonPath('import_commit.rows.0.status', 'skipped');
-
-        $this->assertContains("Existing member match found: member_code matches member ID {$existing->id}.", $response->json('import_commit.rows.0.warnings'));
+            ->assertJsonPath('import_commit.summary.updated_rows', 1)
+            ->assertJsonPath('import_commit.summary.skipped_rows', 0)
+            ->assertJsonPath('import_commit.rows.0.status', 'updated')
+            ->assertJsonPath('import_commit.rows.0.member_id', $existing->id);
 
         $this->assertSame($initialCount, Member::query()->count());
 
         $this->assertDatabaseHas('members', [
             'id' => $existing->id,
-            'full_name' => 'Original Member Name',
+            'full_name' => 'Attempted Overwrite Name',
             'member_code' => 'MEM-EXIST-3CI',
         ]);
     }

@@ -129,7 +129,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
                 ->assertJsonPath('import_preview.summary.accepted_rows', 1)
                 ->assertJsonPath('import_preview.rows.0.intent', 'create_preview')
                 ->assertJsonPath('import_preview.rows.0.normalized.member_code', 'MEM-3BY-'.strtoupper($roleSlug))
-                ->assertJsonPath('import_preview.rows.0.normalized.phone', '919876543210');
+                ->assertJsonPath('import_preview.rows.0.normalized.phone', '+919876543210');
         }
     }
 
@@ -302,7 +302,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('import_preview.committed', false)
             ->assertJsonPath('import_preview.summary.possible_existing_match_rows', 1)
-            ->assertJsonPath('import_preview.rows.0.intent', 'matched_preview')
+            ->assertJsonPath('import_preview.rows.0.intent', 'update_preview')
             ->assertJsonPath('import_preview.rows.0.duplicate_matches.existing.0.member_id', $existing->id)
             ->assertJsonPath('import_preview.rows.0.duplicate_matches.existing.0.member_code', 'MEM-EXIST-3BY');
 
