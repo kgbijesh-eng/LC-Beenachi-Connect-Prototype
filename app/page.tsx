@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState, useRef } from "react";
+import { createContext, type FormEvent, useContext, useEffect, useMemo, useState, useRef } from "react";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 type FinanceSummaryStatus = "loading" | "ready" | "error";
@@ -110,13 +110,40 @@ type BackendClubMembership = {
 type BackendMemberRecord = {
   id: number;
   club_id: number;
+  user_id?: number | null;
   member_code: string;
   full_name: string;
   status: string;
+  salutation?: string | null;
+  first_name?: string | null;
+  middle_name?: string | null;
+  last_name?: string | null;
+  gender?: string | null;
+  occupation?: string | null;
+  membership_type?: string | null;
+  membership_category?: string | null;
+  membership_program?: string | null;
+  joined_at?: string | null;
+  birth_date?: string | null;
+  spouse_name?: string | null;
+  wedding_anniversary?: string | null;
+  membership_sponsor_name?: string | null;
   phone?: string | null;
+  home_phone?: string | null;
+  alternate_phone?: string | null;
   email?: string | null;
+  address_line_1?: string | null;
+  address_line_2?: string | null;
+  city_locality?: string | null;
+  district?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
   blood_group?: string | null;
+  blood_donor_consent?: boolean | null;
 };
+
+type MemberLoadStatus = "loading" | "ready" | "error";
 
 type PaymentRecordingFormState = {
   amount: string;
@@ -432,6 +459,7 @@ type DashboardDetail =
 
 type Member = {
   id: string;
+  backendId?: number;
   name: string;
   dashboardName: string;
   clubRole: string;
@@ -446,6 +474,17 @@ type Member = {
   consentDob: boolean;
   consentAnniversary: boolean;
   wishStatus: "Pending" | "Sent";
+  joinedAt?: string | null;
+  occupation?: string | null;
+  membershipType?: string | null;
+  membershipCategory?: string | null;
+  membershipProgram?: string | null;
+  birthDate?: string | null;
+  spouseName?: string | null;
+  weddingAnniversary?: string | null;
+  gender?: string | null;
+  email?: string | null;
+  address?: string | null;
 };
 
 type EventMeeting = {
@@ -476,7 +515,7 @@ type Activity = {
   reportDocument: string;
 };
 
-const members: Member[] = [
+const roleTestMembers: Member[] = [
   {
     id: "MEM-001",
     name: "Lion Bijesh",
@@ -546,6 +585,8 @@ const members: Member[] = [
     wishStatus: "Pending"
   }
 ];
+
+const members = roleTestMembers; // Unrelated legacy finance/report demo data only.
 
 const eventsMeetings: EventMeeting[] = [
   {
@@ -676,13 +717,6 @@ const activities: Activity[] = [
   }
 ];
 
-const fellowshipQueue = [
-  { order: 1, member: "Lion Bijesh", status: "Eligible", last: "Jan 2026" },
-  { order: 2, member: "Lion Secretary User", status: "Eligible", last: "Feb 2026" },
-  { order: 3, member: "Lion Treasurer User", status: "Eligible", last: "Mar 2026" },
-  { order: 4, member: "Lion Ajith Kumar - Member", status: "Hold", last: "Apr 2026" },
-  { order: 5, member: "Lion Pradeep", status: "Eligible", last: "May 2026" }
-];
 
 const ledgerRows = [
   { id: "ledger-001", date: "01 Jun", member: "Lion Ajith Kumar - Member", type: "Monthly dues", debit: 500, credit: 0 },
@@ -906,10 +940,10 @@ const reportMenuItems: NavItem[] = [
 ];
 
 const roleUser: Record<Role, Member> = {
-  president: members[0],
-  secretary: members[1],
-  treasurer: members[2],
-  member: members[3]
+  president: roleTestMembers[0],
+  secretary: roleTestMembers[1],
+  treasurer: roleTestMembers[2],
+  member: roleTestMembers[3]
 };
 
 function detailItem(parent: string, label: string): NavItem {
@@ -1130,10 +1164,17 @@ function money(value: number) {
   return `₹${value.toLocaleString("en-IN")}`;
 }
 
+function roundFellowshipAmount(amount: number) {
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
+}
+
 function formatSponsorShare(amount: number) {
-  const rounded = Math.round(amount * 100) / 100;
-  if (rounded === 0) return "₹0";
-  return rounded % 1 === 0 ? money(rounded) : `₹${rounded.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const rounded = roundFellowshipAmount(Number.isFinite(amount) ? amount : 0);
+  return `₹${rounded.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function hasPositiveFellowshipBalance(amount: number) {
+  return roundFellowshipAmount(amount) > 0;
 }
 
 const memberQuickAccess = [
@@ -1171,14 +1212,127 @@ function ContextBack({ parent, onBack }: { parent: string; onBack: () => void })
   );
 }
 
+type MemberDataContextValue = {
+  members: Member[];
+  status: MemberLoadStatus;
+  error: string | null;
+  token: string | null;
+  clubId: number | null;
+  retry: () => void;
+};
+
+const MemberDataContext = createContext<MemberDataContextValue>({
+  members: [],
+  status: "loading",
+  error: null,
+  token: null,
+  clubId: null,
+  retry: () => undefined
+});
+
+function useCurrentMemberData() {
+  return useContext(MemberDataContext);
+}
+function memberFromBackend(record: BackendMemberRecord): Member {
+  const displayName = record.full_name.trim();
+  const address = [record.address_line_1, record.address_line_2, record.city_locality, record.district, record.state, record.postal_code, record.country]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(", ");
+
+  return {
+    id: record.member_code,
+    backendId: record.id,
+    name: displayName,
+    dashboardName: displayName,
+    clubRole: record.membership_category || record.membership_type || "Member",
+    status: record.status.toLowerCase() === "active" ? "Active" : "Inactive",
+    bloodGroup: record.blood_group || "Not provided",
+    phone: record.phone || "",
+    consentContact: false,
+    donorConsent: Boolean(record.blood_donor_consent),
+    dues: 0,
+    birthday: record.birth_date || "",
+    anniversary: record.joined_at || "",
+    consentDob: false,
+    consentAnniversary: false,
+    wishStatus: "Pending",
+    joinedAt: record.joined_at,
+    occupation: record.occupation,
+    membershipType: record.membership_type,
+    membershipCategory: record.membership_category,
+    membershipProgram: record.membership_program,
+    birthDate: record.birth_date,
+    spouseName: record.spouse_name,
+    weddingAnniversary: record.wedding_anniversary,
+    gender: record.gender,
+    email: record.email,
+    address: address || null
+  };
+}
+
+function isImportedCurrentMember(record: BackendMemberRecord) {
+  return /^\d+$/.test(record.member_code);
+}
+
+function normalizeFellowshipMemberName(name: string) {
+  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-IN");
+}
+
+function canonicalFellowshipMembers(currentMembers: Member[]) {
+  return currentMembers
+    .filter((member) => member.status === "Active" && typeof member.backendId === "number" && /^\d+$/.test(member.id))
+    .slice()
+    .sort((left, right) => {
+      const nameOrder = normalizeFellowshipMemberName(left.name).localeCompare(
+        normalizeFellowshipMemberName(right.name),
+        "en-IN",
+        { sensitivity: "base", usage: "sort" }
+      );
+      if (nameOrder !== 0) return nameOrder;
+
+      const memberCodeOrder = Number(left.id) - Number(right.id);
+      if (memberCodeOrder !== 0) return memberCodeOrder;
+
+      return (left.backendId as number) - (right.backendId as number);
+    });
+}
+
+function fellowshipMemberKey(member: Member) {
+  return typeof member.backendId === "number" ? String(member.backendId) : "";
+}
+
+function fellowshipMemberForKey(memberKey: string, currentMembers: Member[]) {
+  const backendId = Number(memberKey);
+  return currentMembers.find((member) => member.backendId === backendId) || null;
+}
+
+function sortFellowshipMemberKeys(memberKeys: string[], currentMembers: Member[]) {
+  const order = new Map(canonicalFellowshipMembers(currentMembers).map((member, index) => [fellowshipMemberKey(member), index]));
+  return [...new Set(memberKeys)].sort((left, right) => {
+    const leftOrder = order.get(left);
+    const rightOrder = order.get(right);
+    if (leftOrder === undefined && rightOrder === undefined) return left.localeCompare(right, "en-IN", { numeric: true });
+    if (leftOrder === undefined) return 1;
+    if (rightOrder === undefined) return -1;
+    return leftOrder - rightOrder;
+  });
+}
+
+function displayMemberName(memberKey: string, currentMembers: Member[]) {
+  return fellowshipMemberForKey(memberKey, currentMembers)?.name || "Legacy / unlinked member";
+}
 export default function Prototype() {
   const [role, setRole] = useState<Role>("president");
   const [screen, setScreen] = useState<Screen>("login");
-  const [selectedSponsors, setSelectedSponsors] = useState<string[]>([
-    "Lion Bijesh",
-    "Lion Secretary User",
-    "Lion Treasurer User"
-  ]);
+  const [currentMembers, setCurrentMembers] = useState<Member[]>([]);
+  const [memberStatus, setMemberStatus] = useState<MemberLoadStatus>("loading");
+  const [memberLoadError, setMemberLoadError] = useState<string | null>(null);
+  const [memberToken, setMemberToken] = useState<string | null>(null);
+  const [memberClubId, setMemberClubId] = useState<number | null>(null);
+  const [memberRefreshKey, setMemberRefreshKey] = useState(0);
+
+  const [selectedSponsors, setSelectedSponsors] = useState<string[]>([]);
+
   const [bloodGroup, setBloodGroup] = useState("O+");
   const [fellowshipTab, setFellowshipTab] = useState<"Overview" | "Queue" | "Selected Sponsors" | "Payments" | "History">("Overview");
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
@@ -1211,8 +1365,8 @@ export default function Prototype() {
     sourceTitle: string;
   } | null>(null);
   const [profileBackContext, setProfileBackContext] = useState<{ screen: Screen; parent?: string; title?: string } | null>(null);
-  const [selectedSponsor, setSelectedSponsor] = useState<{ name: string; amount: number; status: string; source: "Selected Sponsors" | "Payments" } | null>(null);
-  const [selectedSponsorPayment, setSelectedSponsorPayment] = useState<{ name: string; amount: number; status: string; source: "Payments" } | null>(null);
+  const [selectedSponsor, setSelectedSponsor] = useState<{ memberId: string; name: string; amount: number; status: string; source: "Selected Sponsors" | "Payments" } | null>(null);
+  const [selectedSponsorPayment, setSelectedSponsorPayment] = useState<{ memberId: string; name: string; amount: number; status: string; source: "Payments" } | null>(null);
   const [tempQueueStatuses, setTempQueueStatuses] = useState<Record<string, string>>({});
   const [fellowshipConfirmationMessage, setFellowshipConfirmationMessage] = useState<string | null>(null);
   const [totalFellowshipExpenseInput, setTotalFellowshipExpenseInput] = useState<string>("10000");
@@ -1273,6 +1427,79 @@ export default function Prototype() {
   } | null>(null);
   const [highlightedSponsor, setHighlightedSponsor] = useState<string | null>(null);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
+    async function loadCurrentMembers() {
+      setMemberStatus("loading");
+      setMemberLoadError(null);
+      setCurrentMembers([]);
+      setMemberToken(null);
+      setMemberClubId(null);
+
+      try {
+        const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
+        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
+          method: "POST",
+          headers: { Accept: "application/json", "Content-Type": "application/json" },
+          body: JSON.stringify(login),
+          signal: controller.signal
+        });
+        if (!loginResponse.ok) throw new Error("Member authentication failed.");
+        const loginPayload = await loginResponse.json();
+        const token = loginPayload.token as string | undefined;
+        if (!token) throw new Error("Member authentication token is unavailable.");
+
+        const authHeaders = { Accept: "application/json", Authorization: "Bearer " + token };
+        const meResponse = await fetch(API_BASE_URL + "/auth/me", { headers: authHeaders, signal: controller.signal });
+        if (!meResponse.ok) throw new Error("Club context could not be loaded.");
+        const mePayload = await meResponse.json();
+        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
+        const clubId = memberships?.[0]?.club?.id;
+        if (typeof clubId !== "number") throw new Error("No active club context is available.");
+
+        const listResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members", { headers: authHeaders, signal: controller.signal });
+        if (!listResponse.ok) throw new Error("Current member data could not be loaded.");
+        const listPayload = await listResponse.json();
+        const importedRecords = ((listPayload.members as BackendMemberRecord[] | undefined) || []).filter(isImportedCurrentMember);
+        if (importedRecords.length !== 47) throw new Error("The expected 47 imported current members are not safely distinguishable.");
+
+        let records = importedRecords;
+        if (role !== "member") {
+          records = await Promise.all(importedRecords.map(async (record) => {
+            const profileResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members/" + record.id, { headers: authHeaders, signal: controller.signal });
+            if (!profileResponse.ok) throw new Error("An imported member profile could not be loaded.");
+            const profilePayload = await profileResponse.json();
+            return profilePayload.member as BackendMemberRecord;
+          }));
+        }
+
+        if (!cancelled) {
+          const normalized = records.map(memberFromBackend).sort((a, b) => {
+            const joinOrder = (a.joinedAt || "9999-12-31").localeCompare(b.joinedAt || "9999-12-31");
+            return joinOrder || a.id.localeCompare(b.id, undefined, { numeric: true });
+          });
+          setCurrentMembers(normalized);
+          setMemberToken(token);
+          setMemberClubId(clubId);
+          setMemberStatus("ready");
+        }
+      } catch (error) {
+        if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
+          setCurrentMembers([]);
+          setMemberStatus("error");
+          setMemberLoadError(error instanceof Error ? error.message : "Current member data could not be loaded.");
+        }
+      }
+    }
+
+    loadCurrentMembers();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [role, memberRefreshKey]);
   const expenseTrimmed = totalFellowshipExpenseInput.trim();
   const isValidExpenseFormat = /^\d+(\.\d*)?$/.test(expenseTrimmed) || expenseTrimmed === ".";
   const parsedExpense = parseFloat(expenseTrimmed);
@@ -1288,7 +1515,7 @@ export default function Prototype() {
         return next;
       });
     } else {
-      activeSetSelectedSponsors([...activeSelectedSponsors, name]);
+      activeSetSelectedSponsors(sortFellowshipMemberKeys([...activeSelectedSponsors, name], currentMembers));
       activeSetTempQueueStatuses(prev => ({
         ...prev,
         [name]: "Selected"
@@ -1466,10 +1693,10 @@ export default function Prototype() {
     setSelectedUpdate(update);
     setScreen("profile-update-detail");
   }
-  const totalOutstanding = members.reduce((sum, member) => sum + member.dues, 0);
+  const totalOutstanding = currentMembers.reduce((sum, member) => sum + member.dues, 0);
   const allowedDonors = useMemo(
-    () => members.filter((member) => member.donorConsent && member.bloodGroup === bloodGroup),
-    [bloodGroup]
+    () => currentMembers.filter((member) => member.donorConsent && member.bloodGroup === bloodGroup),
+    [bloodGroup, currentMembers]
   );
 
   function switchRole(nextRole: Role) {
@@ -1622,8 +1849,40 @@ export default function Prototype() {
   }
 
   const activeParent = parentGroupForScreen(role, screen);
+  const backendMemberHeaderLabel =
+    screen === "member-profile" && selectedMember?.backendId
+      ? "Club member record"
+      : screen === "members" ||
+          (screen === "nav-detail" && navDetail.parent === "People" && navDetail.title.includes("Member") && navDetail.title !== "Committee Members") ||
+          (screen === "people-module" && peopleSection === "Members")
+        ? "Club member directory"
+        : screen === "celebrations" ||
+            (screen === "nav-detail" && navDetail.parent === "People" && ["Today", "This Week", "Birthdays", "Anniversaries"].includes(navDetail.title)) ||
+            (screen === "people-module" && peopleSection === "Celebrations")
+          ? "Club member celebrations"
+          : screen === "committees" ||
+              screen === "committee-detail" ||
+              (screen === "people-module" && peopleSection === "Board & Committees")
+            ? "Club member selector"
+            : screen === "fellowship" ||
+                screen === "fellowship-queue" ||
+                screen === "confirm-sponsors" ||
+                screen === "fellowship-sponsor-detail" ||
+                (screen === "operations-module" && operationsSection === "Fellowship")
+              ? "Fellowship member records"
+              : ["ledger", "my-dues", "member-dues-detail", "record-member-payment", "receipt-list", "payment-history"].includes(screen) ||
+                  (screen === "finance-module" && ["Member Ledger / Dues", "Payments / Receipts"].includes(financeSection))
+                ? "Member finance records"
+                : screen === "donor-search"
+                  ? "Authorized member search"
+                  : screen === "member-import-preview"
+                    ? "Member import records"
+                    : screen === "club-visibility-module" && ["Members", "Celebrations"].includes(clubVisibilitySection)
+                      ? "Club member records"
+                      : null;
 
   return (
+    <MemberDataContext.Provider value={{ members: currentMembers, status: memberStatus, error: memberLoadError, token: memberToken, clubId: memberClubId, retry: () => setMemberRefreshKey((key) => key + 1) }}>
     <main className="shell">
       <style>{`
         .sidebar {
@@ -1654,6 +1913,57 @@ export default function Prototype() {
         }
         .sidebar nav::-webkit-scrollbar-thumb:hover {
           background: rgba(255, 255, 255, 0.4);
+        }
+        .shell,
+        .workspace,
+        .workspace > * {
+          min-width: 0;
+        }
+        .memberProfileScreen,
+        .memberProfileScreen > *,
+        .memberProfileScreen .detailGrid,
+        .memberProfileScreen .profilePanel,
+        .memberProfileScreen .fieldsPanel,
+        .memberProfileScreen .fieldGrid,
+        .memberProfileScreen .fieldRow,
+        .memberProfileScreen .fieldRow > * {
+          min-width: 0;
+        }
+        .memberProfileScreen .detailGrid {
+          grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+          align-items: start;
+        }
+        .memberProfileScreen .fieldRow strong {
+          max-width: 65%;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+          text-align: right;
+          white-space: normal;
+        }
+        @media (max-width: 1200px) {
+          .memberProfileScreen .detailGrid {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
+        @media (max-width: 980px) {
+          .sidebar {
+            position: static !important;
+            height: auto !important;
+          }
+          .sidebar nav {
+            max-height: 45vh;
+          }
+        }
+        @media (max-width: 640px) {
+          .memberProfileScreen .fieldRow {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 4px;
+          }
+          .memberProfileScreen .fieldRow strong {
+            max-width: none;
+            text-align: left;
+          }
         }
       `}</style>
       <aside className="sidebar" aria-label="Prototype navigation">
@@ -1752,7 +2062,7 @@ export default function Prototype() {
       </aside>
 
       <section className="workspace">
-        <Header role={roleLabels[role]} user={activeMember.dashboardName} screen={screen} reportDetail={reportDetail} navTitle={navDetailTitle(navDetail.parent, navDetail.title)} selectedMember={selectedMember} fellowshipConfirmationTitle={activeConfirmationTitle} />
+        <Header role={roleLabels[role]} user={activeMember.dashboardName} screen={screen} reportDetail={reportDetail} navTitle={navDetailTitle(navDetail.parent, navDetail.title)} selectedMember={selectedMember} fellowshipConfirmationTitle={activeConfirmationTitle} backendMemberLabel={backendMemberHeaderLabel} />
         {screen === "member-profile" && profileBackContext ? (
           <ContextBack
             parent={profileBackContext.screen === "nav-detail" ? (profileBackContext.title === "PST Profiles" ? "PST Profiles" : profileBackContext.title || "Back") : (profileBackContext.screen === "members" ? "Member Directory" : "Back")}
@@ -1891,7 +2201,7 @@ export default function Prototype() {
           <NotificationsReminders role={role} setScreen={handleSetScreen} />
         )}
         {screen === "report-detail" && (
-          <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} amountPerSponsor={amountPerSponsor} />
+          <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} amountPerSponsor={activeAmountPerSponsor} selectedSponsors={activeConfirmedSponsors.length ? activeConfirmedSponsors : activeSelectedSponsors} sponsorPayments={activeSponsorPayments} />
         )}
         {screen === "nav-detail" && (
           <NavDetailScreen
@@ -1952,7 +2262,7 @@ export default function Prototype() {
         )}
         {screen === "members" && <MembersList setScreen={handleSetScreen} role={role} onSelectMember={selectAndOpenMemberProfile} />}
         {screen === "committees" && <Committees />}
-        {screen === "member-profile" && <MemberProfile member={selectedMember ?? activeMember} role={role} />}
+        {screen === "member-profile" && <MemberProfile key={selectedMember?.backendId ?? activeMember.id} member={selectedMember ?? activeMember} role={role} />}
         {screen === "digital-card" && <DigitalCard member={activeMember} />}
         {screen === "fellowship" && (
           <FellowshipDashboard
@@ -2100,6 +2410,7 @@ export default function Prototype() {
         {screen === "settings" && <Settings setScreen={handleSetScreen} />}
       </section>
     </main>
+    </MemberDataContext.Provider>
   );
 }
 
@@ -2110,7 +2421,8 @@ function Header({
   reportDetail,
   navTitle,
   selectedMember,
-  fellowshipConfirmationTitle
+  fellowshipConfirmationTitle,
+  backendMemberLabel
 }: {
   role: string;
   user: string;
@@ -2119,6 +2431,7 @@ function Header({
   navTitle: string;
   selectedMember: Member | null;
   fellowshipConfirmationTitle: string;
+  backendMemberLabel: string | null;
 }) {
   const title = (screen === "my-dues" || (role === "Member" && screen === "ledger"))
     ? "My Dues"
@@ -2134,7 +2447,7 @@ function Header({
   return (
     <header className="topbar">
       <div>
-        <p className="eyebrow">Clickable prototype - dummy data only</p>
+        <p className="eyebrow">{backendMemberLabel || "Clickable prototype - dummy data only"}</p>
         <h1>{title}</h1>
       </div>
       <div className="statusPill">{user} - {role}</div>
@@ -2353,8 +2666,8 @@ function OperationsModule({
   handleSelectSponsor: (name: string) => void;
   handleSkipHoldSponsor: (name: string) => void;
   handleResetSponsor: (name: string) => void;
-  setSelectedSponsor: (sponsor: { name: string; amount: number; amountPaid: number; balanceRemaining: number; paymentStatus: string; status: string; source: "Selected Sponsors" | "Payments" } | null) => void;
-  setSelectedSponsorPayment: (sponsor: { name: string; amount: number; amountPaid: number; balanceRemaining: number; paymentStatus: string; status: string; source: "Payments" } | null) => void;
+  setSelectedSponsor: (sponsor: { memberId: string; name: string; amount: number; amountPaid: number; balanceRemaining: number; paymentStatus: string; status: string; source: "Selected Sponsors" | "Payments" } | null) => void;
+  setSelectedSponsorPayment: (sponsor: { memberId: string; name: string; amount: number; amountPaid: number; balanceRemaining: number; paymentStatus: string; status: string; source: "Payments" } | null) => void;
   fellowshipConfirmationMessage: string | null;
   setFellowshipConfirmationMessage: (msg: string | null) => void;
   totalFellowshipExpense: number;
@@ -3318,24 +3631,30 @@ function ReportDetailScreen({
   section,
   detail,
   setScreen,
-  amountPerSponsor
+  amountPerSponsor,
+  selectedSponsors,
+  sponsorPayments
 }: {
   section: ReportsSection;
   detail: string;
   setScreen: (screen: Screen) => void;
   amountPerSponsor?: number;
+  selectedSponsors: string[];
+  sponsorPayments: Record<string, number>;
 }) {
+  const { members: currentMembers } = useCurrentMemberData();
   if (section === "Finance / Ledger Reports") {
-    return <FinanceLedgerReportDetail detail={detail} setScreen={setScreen} amountPerSponsor={amountPerSponsor} />;
+    return <FinanceLedgerReportDetail detail={detail} setScreen={setScreen} amountPerSponsor={amountPerSponsor} selectedSponsors={selectedSponsors} sponsorPayments={sponsorPayments} />;
   }
   if (section === "Fellowship Reports" && detail === "Current Month Sponsorship") {
-    return <CurrentMonthSponsorshipReport setScreen={setScreen} amountPerSponsor={amountPerSponsor} />;
+    return <CurrentMonthSponsorshipReport setScreen={setScreen} amountPerSponsor={amountPerSponsor} selectedSponsors={selectedSponsors} sponsorPayments={sponsorPayments} />;
   }
   if (section === "Fellowship Reports" && detail === "Sponsor Queue History") {
     return <SponsorQueueHistoryReport setScreen={setScreen} />;
   }
 
-  const cards = reportDetailCards(section, detail, amountPerSponsor);
+
+  const cards = reportDetailCards(section, detail, amountPerSponsor, currentMembers);
   return (
     <section className="stack">
       <div className="compactPanel">
@@ -3356,103 +3675,21 @@ function ReportDetailScreen({
 }
 
 function SponsorQueueHistoryReport({ setScreen }: { setScreen: (screen: Screen) => void }) {
-  const queueMovements = [
-    {
-      month: "June 2026",
-      member: "Lion Bijesh",
-      position: "1",
-      action: "Selected for sponsorship",
-      result: "Completed",
-      note: "Selected for June fellowship sponsor group",
-      nextStatus: "Moved to end of queue"
-    },
-    {
-      month: "June 2026",
-      member: "Lion Secretary User",
-      position: "2",
-      action: "Selected for sponsorship",
-      result: "Pending completion",
-      note: "Selected for June fellowship sponsor group",
-      nextStatus: "Remains active until month is closed"
-    },
-    {
-      month: "May 2026",
-      member: "Lion Rajesh",
-      position: "1",
-      action: "Skipped",
-      result: "Deferred",
-      note: "Temporarily unavailable",
-      nextStatus: "Carried forward to next eligible month"
-    }
-  ];
-
-  return (
-    <section className="stack">
-      <div className="compactPanel">
-        <Toolbar title="Sponsor Queue History" actionLabel="Fellowship Reports" />
-        <button className="secondaryButton compactBackButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button>
-        <div className="notice">Dummy data only. This report shows fellowship sponsor queue movement, not payment status.</div>
-      </div>
-      <div className="financeCardList">
-        {queueMovements.map((movement) => (
-          <article className="financeStackCard" key={`${movement.month}-${movement.member}-${movement.action}`}>
-            <h3>Month: {movement.month}</h3>
-            <span>Member: {movement.member}</span>
-            <span>Queue Position: {movement.position}</span>
-            <span>Queue Action: {movement.action}</span>
-            <span>Queue Result: {movement.result}</span>
-            <span>Reason / Note: {movement.note}</span>
-            <span>Next Queue Status: {movement.nextStatus}</span>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
+  return <section className="stack"><div className="compactPanel"><Toolbar title="Sponsor Queue History" actionLabel="Fellowship Reports" /><button className="secondaryButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button><div className="notice">No historical sponsorship turns were imported. Current members are initialized without invented history.</div></div>
+    <MemberCollectionState>{(currentMembers) => <div className="financeCardList">{currentMembers.map((member, index) => <article className="financeStackCard" key={member.id}><h3>{member.name}</h3><span>Member ID: {member.id}</span><span>Queue Position: {index + 1}</span><span>Last turn: Not yet recorded</span></article>)}</div>}</MemberCollectionState>
+  </section>;
 }
 
-function CurrentMonthSponsorshipReport({ setScreen, amountPerSponsor }: { setScreen: (screen: Screen) => void; amountPerSponsor?: number }) {
-  const finalAmountPerSponsor = amountPerSponsor ?? 2500;
-  const sponsors = [
-    { month: "June 2026", sponsor: "Lion Bijesh", amount: finalAmountPerSponsor, paymentStatus: "Paid" },
-    { month: "June 2026", sponsor: "Lion Secretary User", amount: finalAmountPerSponsor, paymentStatus: "Pending" },
-    { month: "June 2026", sponsor: "Lion Treasurer User", amount: finalAmountPerSponsor, paymentStatus: "Pending" }
-  ];
-  const paidSponsors = sponsors.filter((sponsor) => sponsor.paymentStatus === "Paid").length;
-  const pendingSponsors = sponsors.length - paidSponsors;
-  const totalAmount = sponsors.reduce((sum, sponsor) => sum + sponsor.amount, 0);
-  const collectedAmount = sponsors.filter((sponsor) => sponsor.paymentStatus === "Paid").reduce((sum, sponsor) => sum + sponsor.amount, 0);
-
-  return (
-    <section className="stack">
-      <div className="compactPanel">
-        <Toolbar title="Current Month Sponsorship" actionLabel="Fellowship Reports" />
-        <button className="secondaryButton compactBackButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button>
-        <div className="notice">Dummy data only. Real report generation, filters, export, and approval logic will be implemented in backend phase.</div>
-      </div>
-      <div className="metricsGrid">
-        <Metric label="Required Sponsors" value="3" />
-        <Metric label="Total Sponsors Selected" value={`${sponsors.length}`} />
-        <Metric label="Paid Sponsors" value={`${paidSponsors}`} />
-        <Metric label="Pending Sponsors" value={`${pendingSponsors}`} />
-        <Metric label="Total Sponsorship Amount" value={money(totalAmount)} />
-        <Metric label="Collected" value={money(collectedAmount)} />
-        <Metric label="Pending Collection" value={money(totalAmount - collectedAmount)} />
-      </div>
-      <div className="financeCardList">
-        {sponsors.map((sponsor) => (
-          <article className="financeStackCard" key={`${sponsor.month}-${sponsor.sponsor}`}>
-            <h3>Month: {sponsor.month}</h3>
-            <span>Sponsor: {sponsor.sponsor}</span>
-            <span>Amount: {formatSponsorShare(sponsor.amount)}</span>
-            <span>Payment Status: {sponsor.paymentStatus}</span>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
+function CurrentMonthSponsorshipReport({ setScreen, amountPerSponsor = 0, selectedSponsors, sponsorPayments }: { setScreen: (screen: Screen) => void; amountPerSponsor?: number; selectedSponsors: string[]; sponsorPayments: Record<string, number> }) {
+  const { members: currentMembers } = useCurrentMemberData();
+  const sponsors = selectedSponsors.map((memberId) => ({ memberId, name: displayMemberName(memberId, currentMembers), paid: sponsorPayments[memberId] || 0 }));
+  const collectedAmount = sponsors.reduce((sum, sponsor) => sum + sponsor.paid, 0);
+  return <section className="stack"><div className="compactPanel"><Toolbar title="Current Month Sponsorship" actionLabel="Fellowship Reports" /><button className="secondaryButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button></div>
+    <div className="metricsGrid"><Metric label="Total Sponsors Selected" value={`${sponsors.length}`} /><Metric label="Total Sponsorship Amount" value={formatSponsorShare(sponsors.length * amountPerSponsor)} /><Metric label="Collected" value={formatSponsorShare(collectedAmount)} /><Metric label="Pending Collection" value={formatSponsorShare(Math.max(0, sponsors.length * amountPerSponsor - collectedAmount))} /></div>
+    {sponsors.length ? <div className="financeCardList">{sponsors.map((sponsor) => <article className="financeStackCard" key={sponsor.memberId}><h3>Month: June 2026</h3><span>Sponsor: {sponsor.name}</span><span>Member ID: {sponsor.memberId}</span><span>Amount: {formatSponsorShare(amountPerSponsor)}</span><span>Payment Status: {sponsor.paid >= amountPerSponsor - 0.01 ? "Paid" : sponsor.paid > 0 ? "Partly paid" : "Pending"}</span></article>)}</div> : <div className="notice">No sponsors selected for this month.</div>}
+  </section>;
 }
-
-function FinanceLedgerReportDetail({ detail, setScreen, amountPerSponsor }: { detail: string; setScreen: (screen: Screen) => void; amountPerSponsor?: number }) {
+function FinanceLedgerReportDetail({ detail, setScreen, amountPerSponsor, selectedSponsors, sponsorPayments }: { detail: string; setScreen: (screen: Screen) => void; amountPerSponsor?: number; selectedSponsors: string[]; sponsorPayments: Record<string, number> }) {
   return (
     <section className="stack">
       <div className="compactPanel">
@@ -3463,7 +3700,7 @@ function FinanceLedgerReportDetail({ detail, setScreen, amountPerSponsor }: { de
       {detail === "Monthly Finance Summary" && <MonthlyFinanceSummaryReport />}
       {detail === "Payment Collection Report" && <PaymentCollectionReport />}
       {detail === "Member-wise Outstanding" && <MemberWiseOutstandingReport amountPerSponsor={amountPerSponsor} />}
-      {detail === "Fellowship Payment Report" && <FellowshipPaymentReport amountPerSponsor={amountPerSponsor} />}
+      {detail === "Fellowship Payment Report" && <FellowshipPaymentReport amountPerSponsor={amountPerSponsor} selectedSponsors={selectedSponsors} sponsorPayments={sponsorPayments} />}
     </section>
   );
 }
@@ -3547,29 +3784,14 @@ function MemberWiseOutstandingReport({ amountPerSponsor }: { amountPerSponsor?: 
   );
 }
 
-function FellowshipPaymentReport({ amountPerSponsor }: { amountPerSponsor?: number }) {
-  const finalAmountPerSponsor = amountPerSponsor ?? 2500;
-  const rows = [
-    { sponsor: "Lion Bijesh", month: "June 2026 Fellowship", amount: formatSponsorShare(finalAmountPerSponsor), status: "Paid", receipt: "RCP-010" },
-    { sponsor: "Lion Secretary User", month: "June 2026 Fellowship", amount: formatSponsorShare(finalAmountPerSponsor), status: "Pending", receipt: "Not issued" },
-    { sponsor: "Lion Treasurer User", month: "June 2026 Fellowship", amount: formatSponsorShare(finalAmountPerSponsor), status: "Pending", receipt: "Not issued" }
-  ];
-
-  return (
-    <div className="financeCardList">
-      {rows.map((row) => (
-        <article className="financeStackCard" key={`${row.month}-${row.sponsor}`}>
-          <h3>Sponsor: {row.sponsor}</h3>
-          <span>Fellowship Month: {row.month}</span>
-          <span>Amount: {row.amount}</span>
-          <span>Payment Status: {row.status}</span>
-          <span>Receipt: {row.receipt}</span>
-        </article>
-      ))}
-    </div>
-  );
+function FellowshipPaymentReport({ amountPerSponsor = 0, selectedSponsors, sponsorPayments }: { amountPerSponsor?: number; selectedSponsors: string[]; sponsorPayments: Record<string, number> }) {
+  const { members: currentMembers } = useCurrentMemberData();
+  if (!selectedSponsors.length) return <div className="notice">No confirmed fellowship sponsors are available.</div>;
+  return <div className="financeCardList">{selectedSponsors.map((memberId) => {
+    const paid = sponsorPayments[memberId] || 0;
+    return <article className="financeStackCard" key={memberId}><h3>Sponsor: {displayMemberName(memberId, currentMembers)}</h3><span>Member ID: {memberId}</span><span>Fellowship Month: June 2026 Fellowship</span><span>Amount: {formatSponsorShare(amountPerSponsor)}</span><span>Payment Status: {paid >= amountPerSponsor - 0.01 ? "Paid" : paid > 0 ? "Partly paid" : "Pending"}</span></article>;
+  })}</div>;
 }
-
 function NavDetailScreen({
   parent,
   title,
@@ -3602,13 +3824,15 @@ function NavDetailScreen({
   }) => void;
   amountPerSponsor?: number;
 }) {
+  const { members: currentMembers } = useCurrentMemberData();
   if (parent === "Operations" && title === "Draft / Pending") {
     return <DraftPendingAnnouncements setScreen={setScreen} />;
   }
 
-  const rows = navDetailCards(parent, title, role, amountPerSponsor);
 
-  const handleRowClick = (row: { title: string; action: string }) => {
+  const rows = navDetailCards(parent, title, role, amountPerSponsor, currentMembers);
+
+  const handleRowClick = (row: { title: string; action: string; memberId?: string; memberBackendId?: number }) => {
     if (parent === "Operations" && ["This Month", "Pending Reports", "Completed Activities", "Category-wise Activities"].includes(title)) {
       if (onSelectActivity) {
         const matched = rows.find((r) => r.title === row.title);
@@ -3645,6 +3869,12 @@ function NavDetailScreen({
       return;
     }
 
+    if (parent === "People" && title.includes("Member") && title !== "Committee Members") {
+      if (!onSelectMember || typeof row.memberBackendId !== "number") return;
+      const found = currentMembers.find((member) => member.backendId === row.memberBackendId);
+      if (found) onSelectMember(found);
+      return;
+    }
     if (parent === "People" && title === "Committee List") {
       if (onSelectCommittee) {
         const foundCommittee = committeesList.find((c) => c.name === row.title);
@@ -3663,23 +3893,9 @@ function NavDetailScreen({
       }
     }
 
-    if (onSelectMember && parent === "People") {
-      let target = row.title;
-      if (target.startsWith("Member: ")) {
-        target = target.substring(8);
-      }
-      const cleanName = (n: string) => n.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-      const targetCleaned = cleanName(target);
-
-      const found = members.find((m) => {
-        const mName = cleanName(m.name);
-        const mDash = cleanName(m.dashboardName);
-        return targetCleaned.includes(mName) || mName.includes(targetCleaned) || targetCleaned.includes(mDash) || mDash.includes(targetCleaned);
-      });
-
-      if (found) {
-        onSelectMember(found);
-      }
+    if (onSelectMember && parent === "People" && row.memberId) {
+      const found = currentMembers.find((member) => member.id === row.memberId);
+      if (found) onSelectMember(found);
     }
   };
 
@@ -3825,13 +4041,28 @@ function parentScreen(parent: string): Screen {
 }
 
 function navDetailNote(parent: string, title: string) {
+  if (parent === "People" && title.includes("Member") && title !== "Committee Members") {
+    return "Member information is loaded from the club member records.";
+  }
+  if (parent === "People" && ["Today", "This Week", "Birthdays", "Anniversaries"].includes(title)) {
+    return "Celebration information is loaded from the club member records.";
+  }
   if (parent === "Operations" && title.includes("Documents")) {
     return "Dummy data only. Real document upload, approval, and access control will be implemented in backend phase.";
   }
   return "Dummy data only. This screen validates layout and navigation before backend implementation.";
 }
 
-function navDetailCards(parent: string, title: string, role: Role = "president", amountPerSponsor?: number): { title: string; meta: string[]; action: string }[] {
+function navDetailCards(parent: string, title: string, role: Role = "president", amountPerSponsor?: number, currentMembers: Member[] = []): { title: string; meta: string[]; action: string; memberId?: string; memberBackendId?: number }[] {
+  if (parent === "People" && title.includes("Member") && title !== "Committee Members") {
+    const statusFilter = title === "Inactive Members" ? "Inactive" : "Active";
+    return currentMembers.filter((member) => member.status === statusFilter).map((member) => ({
+      title: member.name,
+      meta: [`Member ID: ${member.id}`, `Membership: ${member.membershipCategory || member.membershipType || "Not provided"}`, `Status: ${member.status}`, `Occupation: ${member.occupation || "Not provided"}`],
+      action: "View",
+      memberBackendId: member.backendId
+    }));
+  }
   if (parent === "People" && title === "Committee List") {
     return committeesList.map((item) => ({
       title: item.name,
@@ -3857,7 +4088,7 @@ function navDetailCards(parent: string, title: string, role: Role = "president",
   }
 
   if (parent === "People" && ["Today", "This Week", "Birthdays", "Anniversaries"].includes(title)) {
-    return peopleCelebrationCards(title);
+    return peopleCelebrationCards(title, currentMembers);
   }
   if (parent === "People" && ["PST Profiles", "President Profile", "Secretary Profile", "Treasurer Profile"].includes(title)) {
     return pstProfileCards(title, role);
@@ -3912,7 +4143,7 @@ function navDetailCards(parent: string, title: string, role: Role = "president",
       { title: "Annual Plan Update Circular", meta: ["Type: Club Circular", "Visibility: All Members", "Status: Published"], action: "View" }
     ];
   }
-  const rows = navDetailRows(parent, title);
+  const rows = navDetailRows(parent, title, currentMembers);
   const labels = parent === "Finance"
     ? ["Due Type", "Due Date", "Amount", "Status"]
     : ["Type", "Date", "Audience", "Status"];
@@ -4008,35 +4239,30 @@ function pstProfileCards(title: string, viewerRole: Role = "president"): { title
   });
 }
 
-function peopleCelebrationCards(title: string): { title: string; meta: string[]; action: string }[] {
-  const items = celebrationsForRole("president").filter((item) => {
-    if (title === "Today") return item.date === "Today";
-    if (title === "This Week") return item.date === "Today" || item.date === "12 Jun";
+function peopleCelebrationCards(title: string, currentMembers: Member[]): { title: string; meta: string[]; action: string; memberId?: string; memberBackendId?: number }[] {
+  const today = new Date();
+  const month = today.getMonth() + 1;
+  const day = today.getDate();
+  const entries = currentMembers.flatMap((member) => {
+    const rows: { title: string; meta: string[]; action: string; memberId: string; sortDate: string; type: string }[] = [];
+    if (member.birthDate) rows.push({ title: `Member: ${member.name}`, meta: ["Type: Birthday", `Date: ${celebrationDayMonth(member.birthDate)}`, "Contact: Hidden", "Status: Pending"], action: "View", memberId: member.id, sortDate: member.birthDate, type: "Birthday" });
+    if (member.joinedAt) rows.push({ title: `Member: ${member.name}`, meta: ["Type: Lions Membership Anniversary", `Date: ${celebrationDayMonth(member.joinedAt)}`, "Contact: Hidden", "Status: Pending"], action: "View", memberId: member.id, sortDate: member.joinedAt, type: "Lions Membership Anniversary" });
+    if (member.weddingAnniversary) rows.push({ title: `Member: ${member.name}`, meta: ["Type: Wedding Anniversary", `Date: ${celebrationDayMonth(member.weddingAnniversary)}`, "Contact: Hidden", "Status: Pending"], action: "View", memberId: member.id, sortDate: member.weddingAnniversary, type: "Wedding Anniversary" });
+    return rows;
+  }).filter((item) => {
+    const [, itemMonth, itemDay] = item.sortDate.split("-").map(Number);
+    if (title === "Today") return itemMonth === month && itemDay === day;
+    if (title === "This Week") return itemMonth === month && itemDay >= day && itemDay <= day + 7;
     if (title === "Birthdays") return item.type === "Birthday";
-    if (title === "Anniversaries") return item.type === "Wedding Anniversary";
+    if (title === "Anniversaries") return item.type !== "Birthday";
     return true;
   });
-
-  if (title === "Today" && items.length === 0) {
-    return [{ title: "No celebrations today", meta: [], action: "View" }];
-  }
-
-  return items.map((item) => ({
-    title: `Member: ${item.name}`,
-    meta: [
-      `Type: ${item.type}`,
-      `Date: ${item.date === "Today" ? "Today, 05 Jun" : item.date}`,
-      `Contact: ${item.contact === "Hidden" ? "Hidden" : item.contact}`,
-      `Status: ${item.wishStatus}`
-    ],
-    action: "View"
-  }));
+  return entries.length ? entries : [{ title: "No celebrations for this period", meta: [], action: "View" }];
 }
-
-function navDetailRows(parent: string, title: string) {
+function navDetailRows(parent: string, title: string, currentMembers: Member[]) {
   if (parent === "People" && title.includes("Member")) {
     const statusFilter = title === "Inactive Members" ? "Inactive" : "Active";
-    return members
+    return currentMembers
       .filter((member) => member.status === statusFilter)
       .map((member) => [member.name, member.clubRole, member.status, member.bloodGroup, member.consentContact ? member.phone : "Contact hidden"]);
   }
@@ -4059,13 +4285,9 @@ function navDetailRows(parent: string, title: string) {
   ];
 }
 
-function reportDetailCards(section: ReportsSection, detail: string, amountPerSponsor?: number) {
+function reportDetailCards(section: ReportsSection, detail: string, amountPerSponsor: number | undefined, currentMembers: Member[]) {
   if (section === "Member Reports") {
-    return [
-      { title: "Member: Lion Bijesh", meta: ["Role: President", "Status: Active", `Report: ${detail}`, "Action: Review"] },
-      { title: "Member: Lion Secretary User", meta: ["Role: Secretary", "Status: Active", `Report: ${detail}`, "Action: Review"] },
-      { title: "Member: Lion Ajith Kumar - Member", meta: ["Role: Member", "Status: Active", `Report: ${detail}`, "Action: Review"] }
-    ];
+    return currentMembers.map((member) => ({ title: `Member: ${member.name}`, meta: [`Member ID: ${member.id}`, `Membership: ${member.membershipCategory || member.membershipType || "Not provided"}`, `Status: ${member.status}`, `Report: ${detail}`] }));
   }
   if (section === "Club Activity / Service Reports") {
     return activities.map((activity) => ({
@@ -4080,23 +4302,15 @@ function reportDetailCards(section: ReportsSection, detail: string, amountPerSpo
     }));
   }
   if (section === "Celebration Reports") {
-    const celebrations = celebrationsForRole("president").filter((item) => {
-      if (detail === "Monthly Birthday Report") return item.type === "Birthday";
-      if (detail === "Monthly Anniversary Report") return item.type === "Wedding Anniversary" && isCurrentPrototypeMonth(item.date);
-      return true;
+    return currentMembers.flatMap((member) => {
+      const rows: { title: string; meta: string[] }[] = [];
+      if (member.birthDate && (detail !== "Monthly Anniversary Report")) rows.push({ title: member.name, meta: ["Celebration Type: Birthday", `Date: ${celebrationDayMonth(member.birthDate)}`, `Member ID: ${member.id}`] });
+      if (member.joinedAt && detail !== "Monthly Birthday Report") rows.push({ title: member.name, meta: ["Celebration Type: Lions Membership Anniversary", `Date: ${celebrationDayMonth(member.joinedAt)}`, `Member ID: ${member.id}`] });
+      if (member.weddingAnniversary && detail !== "Monthly Birthday Report") rows.push({ title: member.name, meta: ["Celebration Type: Wedding Anniversary", `Date: ${celebrationDayMonth(member.weddingAnniversary)}`, `Member ID: ${member.id}`] });
+      return rows;
     });
-    return celebrations.map((item) => ({
-      title: item.name,
-      meta: [
-        `Celebration Type: ${item.type}`,
-        `Date: ${item.date}`,
-        `Contact: ${item.contact}`,
-        `Greeting Status: ${item.wishStatus}`
-      ]
-    }));
-  }
-  if (section === "Blood Donor Consent Report") {
-    return bloodDonorReportCards(detail);
+  }  if (section === "Blood Donor Consent Report") {
+    return bloodDonorReportCards(detail, currentMembers);
   }
   if (section === "Document Reports") {
     return documentReportCards(detail);
@@ -4126,11 +4340,11 @@ function isCurrentPrototypeMonth(date: string) {
   return date === "Today" || date.endsWith("Jun");
 }
 
-function bloodDonorReportCards(detail: string): { title: string; meta: string[] }[] {
+function bloodDonorReportCards(detail: string, currentMembers: Member[]): { title: string; meta: string[] }[] {
   if (detail === "Blood Group Summary") {
-    const groups = [...new Set(members.map((member) => member.bloodGroup))];
+    const groups = [...new Set(currentMembers.map((member) => member.bloodGroup))];
     return groups.map((group) => {
-      const groupMembers = members.filter((member) => member.bloodGroup === group);
+      const groupMembers = currentMembers.filter((member) => member.bloodGroup === group);
       const consented = groupMembers.filter((member) => member.donorConsent);
       const contactVisible = consented.filter((member) => member.consentContact).length;
       const contactHidden = consented.length - contactVisible;
@@ -4147,21 +4361,21 @@ function bloodDonorReportCards(detail: string): { title: string; meta: string[] 
   }
 
   if (detail === "Contact Visibility Report") {
-    const consented = members.filter((member) => member.donorConsent);
+    const consented = currentMembers.filter((member) => member.donorConsent);
     return [
       {
         title: "Contact Visibility Summary",
         meta: [
           `Contact Visible: ${consented.filter((member) => member.consentContact).length}`,
           `Contact Hidden: ${consented.filter((member) => !member.consentContact).length}`,
-          `Consent Pending: ${members.filter((member) => !member.donorConsent).length}`,
+          `Consent Pending: ${currentMembers.filter((member) => !member.donorConsent).length}`,
           "Consent Denied: 0"
         ]
       }
     ];
   }
 
-  return members.filter((member) => member.donorConsent).map((member) => ({
+  return currentMembers.filter((member) => member.donorConsent).map((member) => ({
     title: `Donor Name: ${member.name}`,
     meta: [
       `Blood Group: ${member.bloodGroup}`,
@@ -5175,6 +5389,14 @@ function MemberFellowshipDetail({ member, setScreen }: { member: Member; setScre
   );
 }
 
+function MemberCollectionState({ children }: { children: (members: Member[]) => React.ReactNode }) {
+  const { members, status, error, retry } = useCurrentMemberData();
+  if (status === "loading") return <div className="notice">Loading current members...</div>;
+  if (status === "error") return <div className="notice"><strong>Current member data could not be loaded.</strong>{error && <span> {error}</span>} <button className="filterButton" onClick={retry}>Retry</button></div>;
+  if (members.length === 0) return <div className="notice">No current members are available.</div>;
+  return <>{children(members)}</>;
+}
+
 function MembersList({
   setScreen,
   role,
@@ -5184,55 +5406,63 @@ function MembersList({
   role: Role;
   onSelectMember?: (member: Member) => void;
 }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive">("Active");
+
   return (
     <section className="stack">
       <Toolbar title="Member Directory" actionLabel={role === "member" ? "Consent-approved fields only" : "Role-based management"} />
-      <div className="notice memberHelperText">
-        Select a member to view details, finance summary, and Profile Documents metadata. Create or edit members where authorized through the existing member management flow.
+      <div className="notice memberHelperText">47 genuine current members. Select a member to view the profile fields authorized for this role.</div>
+      <div className="filterBar">
+        <input aria-label="Search current members" placeholder="Search name, Member ID, occupation or membership" value={query} onChange={(event) => setQuery(event.target.value)} />
+        {(["All", "Active", "Inactive"] as const).map((filter) => <button className="filterButton" key={filter} onClick={() => setStatusFilter(filter)}>{filter}</button>)}
       </div>
-      <div className="tableLike">
-        {members.map((member) => (
-          <button
-            key={member.id}
-            className="rowButton"
-            onClick={() => {
-              if (onSelectMember) {
-                onSelectMember(member);
-              } else {
-                setScreen("member-profile");
-              }
-            }}
-          >
+      <MemberCollectionState>{(currentMembers) => {
+        const normalizedQuery = query.trim().toLowerCase();
+        const filtered = currentMembers.filter((member) => {
+          const statusMatches = statusFilter === "All" || member.status === statusFilter;
+          const searchText = [member.name, member.id, member.occupation, member.membershipType, member.membershipCategory].filter(Boolean).join(" ").toLowerCase();
+          return statusMatches && (!normalizedQuery || searchText.includes(normalizedQuery));
+        });
+        if (!filtered.length) return <div className="notice">No current members match this search.</div>;
+        return <div className="tableLike">{filtered.map((member) => (
+          <button key={member.id} className="rowButton" onClick={() => onSelectMember ? onSelectMember(member) : setScreen("member-profile")}>
             <Avatar name={member.name} />
-            <span>
-              <strong>{member.name}</strong>
-              <small>{member.id} - {member.clubRole}</small>
-            </span>
-            <span>{member.bloodGroup}</span>
-            <span>{member.consentContact || role !== "member" ? member.phone : "Hidden"}</span>
+            <span><strong>{member.name}</strong><small>Member ID: {member.id}</small></span>
+            <span>{member.occupation || "Not provided"}</span>
+            <span>{member.membershipCategory || member.membershipType || "Not provided"}</span>
             <span className="tag">{member.status}</span>
           </button>
-        ))}
-      </div>
+        ))}</div>;
+      }}</MemberCollectionState>
     </section>
   );
 }
-
 function Committees() {
+  const [selectedMemberId, setSelectedMemberId] = useState("");
   return (
     <section className="stack">
       <Toolbar title="Board & Committees" actionLabel="Year-wise structure" />
+      <div className="notice">Existing prototype office records remain legacy/unlinked. No imported member is assigned automatically.</div>
+      <MemberCollectionState>{(currentMembers) => (
+        <label className="moduleSelect">Member selector
+          <select value={selectedMemberId} onChange={(event) => setSelectedMemberId(event.target.value)}>
+            <option value="">Select a current member</option>
+            {currentMembers.map((member) => <option key={member.id} value={member.id}>{member.name} — {member.id}</option>)}
+          </select>
+        </label>
+      )}</MemberCollectionState>
       <div className="actionGrid">
-        <Action title="Board 2026" body="President, Secretary, Treasurer and board members." onClick={() => undefined} />
-        <Action title="Education Committee" body="Lead: Lion Secretary User. 4 members." onClick={() => undefined} />
-        <Action title="Health Committee" body="Lead: Lion Treasurer User. 5 members." onClick={() => undefined} />
-        <Action title="Service Committee" body="Lead: Lion Bijesh. 6 members." onClick={() => undefined} />
+        <Action title="Board 2026" body="Legacy office records preserved; member links unassigned." onClick={() => undefined} />
+        <Action title="Education Committee" body="Legacy/unlinked lead. 4 roster positions." onClick={() => undefined} />
+        <Action title="Health Committee" body="Legacy/unlinked lead. 5 roster positions." onClick={() => undefined} />
+        <Action title="Service Committee" body="Legacy/unlinked lead. 6 roster positions." onClick={() => undefined} />
       </div>
     </section>
   );
 }
-
 function MemberProfile({ member, role }: { member: Member; role: Role }) {
+  const { token: sharedToken, clubId: sharedClubId } = useCurrentMemberData();
   const canManageProfileDocumentMetadata = role === "president" || role === "secretary";
   const [documentStatus, setDocumentStatus] = useState<ProfileDocumentStatus>("initializing");
   const [documentMessage, setDocumentMessage] = useState("Loading profile document metadata...");
@@ -5259,7 +5489,8 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
     bloodGroup: "",
     status: ""
   });
-  const [backendMember, setBackendMember] = useState<any | null>(null);
+  const [backendMember, setBackendMember] = useState<BackendMemberRecord | null>(null);
+  const [selectedProfileStatus, setSelectedProfileStatus] = useState<"loading" | "ready" | "error" | "not_linked">(member.backendId ? "loading" : "not_linked");
   const [editStatus, setEditStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [editMessage, setEditMessage] = useState("");
 
@@ -5322,7 +5553,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadProfileDocumentContext() {
+    async function loadSelectedProfile() {
       setDocumentStatus("initializing");
       setDocumentMessage("Loading profile document metadata...");
       setProfileDocuments([]);
@@ -5331,202 +5562,49 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
       setEditStatus("idle");
       setEditMessage("");
       setIsEditingMember(false);
+      setSelectedProfileStatus(member.backendId ? "loading" : "not_linked");
+
+      if (!member.backendId || !sharedToken || !sharedClubId) {
+        setBackendMember(null);
+        setDocumentMemberId(null);
+        setDocumentStatus("not_linked");
+        setDocumentMessage("This role-test identity is not linked to a genuine member record.");
+        return;
+      }
 
       try {
-        const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
-
-        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(login)
-        });
-
-        if (!loginResponse.ok) {
-          throw new Error("Profile document role login failed.");
-        }
-
-        const loginPayload = await loginResponse.json();
-        const token = loginPayload.token as string | undefined;
-
-        if (!token) {
-          throw new Error("Profile document token missing.");
-        }
-
-        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
-          headers: {
-            Accept: "application/json",
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (!meResponse.ok) {
-          throw new Error("Profile document club lookup failed.");
-        }
-
-        const mePayload = await meResponse.json();
-        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
-        const loadedClubId = memberships?.[0]?.club?.id;
-
-        if (typeof loadedClubId !== "number") {
-          throw new Error("No active club context is available for profile document metadata.");
-        }
-
-        const membersResponse = await fetch(API_BASE_URL + "/clubs/" + loadedClubId + "/members", {
-          headers: {
-            Accept: "application/json",
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (!membersResponse.ok) {
-          throw new Error("Member lookup unavailable for profile document metadata.");
-        }
-
-        const membersPayload = await membersResponse.json();
-        const backendMembers = (membersPayload.members as BackendMemberRecord[] | undefined) ?? [];
-
-        const cleanStr = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
-        const cleanDigits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
-
-        let found = backendMembers.find(
-          (b) => b.member_code && cleanStr(b.member_code) === cleanStr(member.id)
-        );
-
-        if (!found) {
-          found = backendMembers.find((b) => {
-            if (!b.member_code || !member.id) return false;
-            const bClean = cleanStr(b.member_code).replace(/[^a-z0-9]/g, "");
-            const mClean = cleanStr(member.id).replace(/[^a-z0-9]/g, "");
-            if (bClean === mClean) return true;
-
-            const bDigits = cleanDigits(b.member_code);
-            const mDigits = cleanDigits(member.id);
-            if (bDigits && mDigits) {
-              return parseInt(bDigits, 10) === parseInt(mDigits, 10);
-            }
-            return false;
-          });
-        }
-
-        if (!found) {
-          found = backendMembers.find(
-            (b) => cleanStr(b.full_name) === cleanStr(member.name) ||
-                   cleanStr(b.full_name) === cleanStr(member.dashboardName)
-          );
-        }
-
-        if (!found && member.phone) {
-          const mPhoneClean = cleanDigits(member.phone);
-          if (mPhoneClean.length >= 7) {
-            found = backendMembers.find((b) => {
-              if (!b.phone) return false;
-              const bPhoneClean = cleanDigits(b.phone);
-              return bPhoneClean === mPhoneClean ||
-                     (bPhoneClean.length >= 7 && (bPhoneClean.endsWith(mPhoneClean) || mPhoneClean.endsWith(bPhoneClean)));
-            });
-          }
-        }
-
-        if (!found) {
-          found = backendMembers.find((b) => {
-            const bName = cleanStr(b.full_name);
-            const bEmail = cleanStr(b.email);
-
-            // Match President (MEM-001 / Lion Bijesh)
-            if (member.id === "MEM-001") {
-              const isPresidentBackend = bName.includes("president") || bEmail.includes("president") || bName.includes("bijesh");
-              if (isPresidentBackend) return true;
-            }
-
-            // Match Secretary (MEM-002 / Lion Secretary User)
-            if (member.id === "MEM-002") {
-              const isSecretaryBackend = bName.includes("secretary") || bEmail.includes("secretary");
-              if (isSecretaryBackend) return true;
-            }
-
-            // Match Treasurer (MEM-003 / Lion Treasurer User)
-            if (member.id === "MEM-003") {
-              const isTreasurerBackend = bName.includes("treasurer") || bEmail.includes("treasurer");
-              if (isTreasurerBackend) return true;
-            }
-
-            // Match Ajith Kumar (MEM-004)
-            if (member.id === "MEM-004") {
-              const isAjithBackend = bName.includes("ajith") || bName.includes("kumar");
-              if (isAjithBackend) return true;
-            }
-
-            // Generic safe name token matching (only if name contains unique parts)
-            const cleanMemberName = cleanStr(member.name);
-            if (cleanMemberName && bName) {
-              const nameTokens = cleanMemberName.split(/\s+/).filter(t => t.length > 3 && t !== "lion" && t !== "user" && t !== "member");
-              if (nameTokens.length > 0 && nameTokens.every(token => bName.includes(token))) {
-                return true;
-              }
-            }
-
-            return false;
-          });
-        }
-
-        let selectedBackendMember = found;
-
-        if (!selectedBackendMember) {
-          if (!cancelled) {
-            setDocumentToken(token);
-            setDocumentClubId(loadedClubId);
-            setDocumentMemberId(null);
-            setBackendMember(null);
-            setProfileDocuments([]);
-            setDocumentStatus("not_linked");
-            setDocumentMessage("Profile document metadata is not linked for this prototype member yet.");
-          }
-          return;
-        }
-
-        const documents = await fetchProfileDocuments(token, loadedClubId, selectedBackendMember.id);
+        const headers = { Accept: "application/json", Authorization: "Bearer " + sharedToken };
+        const profileResponse = await fetch(API_BASE_URL + "/clubs/" + sharedClubId + "/members/" + member.backendId, { headers });
+        if (!profileResponse.ok) throw new Error("The selected member profile is unavailable for this role.");
+        const profilePayload = await profileResponse.json();
+        const selectedBackendMember = profilePayload.member as BackendMemberRecord;
+        if (selectedBackendMember.member_code !== member.id) throw new Error("The selected member identity did not match the requested Member ID.");
+        const documents = await fetchProfileDocuments(sharedToken, sharedClubId, member.backendId);
 
         if (!cancelled) {
-          setDocumentToken(token);
-          setDocumentClubId(loadedClubId);
-          setDocumentMemberId(selectedBackendMember.id);
+          setDocumentToken(sharedToken);
+          setDocumentClubId(sharedClubId);
+          setDocumentMemberId(member.backendId);
           setBackendMember(selectedBackendMember);
+          setSelectedProfileStatus("ready");
           setProfileDocuments(documents);
           setDocumentStatus(documents.length ? "ready" : "empty");
           setDocumentMessage(documents.length ? "Profile document metadata loaded." : "No profile document records added yet.");
-
-          // Sync static member object in memory with backend record
-          member.name = selectedBackendMember.full_name || member.name;
-          member.dashboardName = selectedBackendMember.full_name || member.dashboardName;
-          member.phone = selectedBackendMember.phone || member.phone;
-          member.bloodGroup = selectedBackendMember.blood_group || member.bloodGroup;
-          if (selectedBackendMember.status) {
-            const statusLower = selectedBackendMember.status.toLowerCase();
-            member.status = statusLower === 'active' ? 'Active' : 'Inactive';
-          }
         }
       } catch (error) {
         if (!cancelled) {
-          setDocumentToken(null);
-          setDocumentClubId(null);
-          setDocumentMemberId(null);
           setBackendMember(null);
+          setSelectedProfileStatus("error");
           setProfileDocuments([]);
           setDocumentStatus("error");
-          setDocumentMessage(error instanceof Error ? error.message : "Profile document metadata is unavailable.");
+          setDocumentMessage(error instanceof Error ? error.message : "The selected member profile is unavailable.");
         }
       }
     }
 
-    loadProfileDocumentContext();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [member.dashboardName, member.id, member.name, role]);
+    loadSelectedProfile();
+    return () => { cancelled = true; };
+  }, [member.backendId, member.id, sharedClubId, sharedToken]);
 
   function startMemberEdit() {
     if (!backendMember) return;
@@ -5584,16 +5662,6 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
       const updatedBackendMember = payload.member;
       setBackendMember(updatedBackendMember);
 
-      if (updatedBackendMember) {
-        member.name = updatedBackendMember.full_name || member.name;
-        member.dashboardName = updatedBackendMember.full_name || member.dashboardName;
-        member.phone = updatedBackendMember.phone || member.phone;
-        member.bloodGroup = updatedBackendMember.blood_group || member.bloodGroup;
-        if (updatedBackendMember.status) {
-          const statusLower = updatedBackendMember.status.toLowerCase();
-          member.status = statusLower === 'active' ? 'Active' : 'Inactive';
-        }
-      }
 
       setIsEditingMember(false);
       setEditStatus("success");
@@ -5775,8 +5843,18 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
     );
   }
 
+  if (member.backendId && selectedProfileStatus !== "ready") {
+    return (
+      <section className="stack">
+        <div className="notice memberHelperText">
+          {selectedProfileStatus === "error" ? documentMessage : "Loading the selected member profile..."}
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="stack">
+    <section className="stack memberProfileScreen">
       <div className="detailGrid">
         <div className="profilePanel">
           <Avatar name={member.name} large />
@@ -5855,10 +5933,23 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
           </form>
         ) : (
           <div className="fieldsPanel">
-            <Field label="Phone" value={member.consentContact || role !== "member" ? member.phone : "Hidden by privacy"} />
-            <Field label="Blood group" value={member.bloodGroup} />
-            <Field label="Contact consent" value={member.consentContact ? "Enabled" : "Disabled"} />
-            <Field label="Donor consent" value={member.donorConsent ? "Enabled" : "Disabled"} />
+            <Field label="Salutation" value={backendMember?.salutation || "Not provided"} />
+            <Field label="Full name" value={backendMember?.full_name || member.name} />
+            <Field label="Member ID" value={backendMember?.member_code || member.id} />
+            <Field label="Membership status" value={backendMember?.status || member.status} />
+            <Field label="Membership type" value={backendMember?.membership_type || member.membershipType || "Not provided"} />
+            <Field label="Membership category" value={backendMember?.membership_category || member.membershipCategory || "Not provided"} />
+            <Field label="Membership program" value={backendMember?.membership_program || member.membershipProgram || "Not provided"} />
+            <Field label="Lion Join Date" value={backendMember?.joined_at || member.joinedAt || "Not provided"} />
+            <Field label="Occupation" value={backendMember?.occupation || member.occupation || "Not provided"} />
+            <Field label="Spouse name" value={backendMember?.spouse_name || "Not provided"} />
+            <Field label="Wedding Anniversary" value={backendMember?.wedding_anniversary || "Not provided"} />
+            <Field label="Gender" value={backendMember?.gender || "Not provided"} />
+            <Field label="Phone" value={backendMember?.phone || "Not provided"} />
+            <Field label="Email" value={backendMember?.email || "Not provided"} />
+            <Field label="Address" value={[backendMember?.address_line_1, backendMember?.address_line_2, backendMember?.city_locality, backendMember?.district, backendMember?.state, backendMember?.postal_code, backendMember?.country].filter(Boolean).join(", ") || "Not provided"} />
+            <Field label="Blood group" value={backendMember?.blood_group || member.bloodGroup || "Not provided"} />
+            <Field label="Donor consent" value={backendMember?.blood_donor_consent ? "Enabled" : "Disabled"} />
             <Field label="Financial visibility" value={role === "member" ? "Own dues only" : "Role-based club view"} />
             {editMessage && <div className="notice memberHelperText" style={{ marginTop: "0.5rem" }}>{editMessage}</div>}
             {canEditMember && backendMember && (
@@ -5962,8 +6053,8 @@ function FellowshipDashboard({
   handleSelectSponsor: (name: string) => void;
   handleSkipHoldSponsor: (name: string) => void;
   handleResetSponsor: (name: string) => void;
-  setSelectedSponsor: (sponsor: { name: string; amount: number; amountPaid: number; balanceRemaining: number; paymentStatus: string; status: string; source: "Selected Sponsors" | "Payments" } | null) => void;
-  setSelectedSponsorPayment: (sponsor: { name: string; amount: number; amountPaid: number; balanceRemaining: number; paymentStatus: string; status: string; source: "Payments" } | null) => void;
+  setSelectedSponsor: (sponsor: { memberId: string; name: string; amount: number; amountPaid: number; balanceRemaining: number; paymentStatus: string; status: string; source: "Selected Sponsors" | "Payments" } | null) => void;
+  setSelectedSponsorPayment: (sponsor: { memberId: string; name: string; amount: number; amountPaid: number; balanceRemaining: number; paymentStatus: string; status: string; source: "Payments" } | null) => void;
   fellowshipConfirmationMessage: string | null;
   setFellowshipConfirmationMessage: (msg: string | null) => void;
   totalFellowshipExpense: number;
@@ -6045,6 +6136,27 @@ function FellowshipDashboard({
   highlightedSponsor: string | null;
   setHighlightedSponsor: (val: string | null) => void;
 }) {
+  const { members: currentMembers, status: currentMemberStatus, error: currentMemberError, retry: retryCurrentMembers } = useCurrentMemberData();
+  const canonicalFellowshipSequence = canonicalFellowshipMembers(currentMembers);
+  const completedFellowshipMemberKeys = new Set(juneSnapshot?.confirmedSponsors ?? []);
+  const lastCompletedCanonicalIndex = canonicalFellowshipSequence.reduce(
+    (lastIndex, currentMember, index) => completedFellowshipMemberKeys.has(fellowshipMemberKey(currentMember)) ? index : lastIndex,
+    -1
+  );
+  const nextSuggestedMemberKey = canonicalFellowshipSequence.length
+    ? fellowshipMemberKey(canonicalFellowshipSequence[(lastCompletedCanonicalIndex + 1) % canonicalFellowshipSequence.length])
+    : "";
+  const fellowshipQueue = canonicalFellowshipSequence.map((currentMember, index) => {
+    const member = fellowshipMemberKey(currentMember);
+    return {
+      order: index + 1,
+      member,
+      status: "Eligible",
+      last: completedFellowshipMemberKeys.has(member) ? "June 2026 completed" : "Not yet recorded",
+      suggested: member === nextSuggestedMemberKey
+    };
+  });
+  const sponsorName = (memberId: string) => displayMemberName(memberId, currentMembers);
   const [memberActionMessage, setMemberActionMessage] = useState<string | null>(null);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [editingPaymentAmount, setEditingPaymentAmount] = useState<string>("");
@@ -6064,6 +6176,10 @@ function FellowshipDashboard({
 
     sponsorInputRefs.current[highlightedSponsor]?.focus();
   }, [highlightedSponsor]);
+
+  if (currentMemberStatus === "loading") return <div className="notice">Loading current members...</div>;
+  if (currentMemberStatus === "error") return <div className="notice"><strong>Current member data could not be loaded.</strong>{currentMemberError && <span> {currentMemberError}</span>} <button className="filterButton" onClick={retryCurrentMembers}>Retry</button></div>;
+  if (currentMembers.length === 0) return <div className="notice">No current members are available.</div>;
 
   if (role === "member") {
     return (
@@ -6097,7 +6213,7 @@ function FellowshipDashboard({
       : "Awaiting Sponsor Confirmation";
   const isConfirmDisabled = selectedSponsors.length === 0 || !isValidExpense;
 
-  const activeSponsors = isFellowshipConfirmed ? confirmedSponsors : selectedSponsors;
+  const activeSponsors = sortFellowshipMemberKeys(isFellowshipConfirmed ? confirmedSponsors : selectedSponsors, currentMembers);
   const activeShare = isFellowshipConfirmed ? confirmedSharePerSponsor : amountPerSponsor;
   const totalReceived = activeSponsors.reduce((sum, s) => sum + (sponsorPayments[s] || 0), 0);
   const validationKey = (sponsor: string) => `${activeMonthLabel}:${sponsor}`;
@@ -6224,7 +6340,7 @@ function FellowshipDashboard({
             </h3>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "0.9rem" }}>
-              <div>June Total Expense: <strong>{money(isFellowshipMonthClosed ? (juneSnapshot?.totalExpense || 0) : totalFellowshipExpense)}</strong></div>
+              <div>June Total Expense: <strong>{formatSponsorShare(isFellowshipMonthClosed ? (juneSnapshot?.totalExpense || 0) : totalFellowshipExpense)}</strong></div>
               <div>June Confirmed Sponsors: <strong>{isFellowshipMonthClosed ? `${juneSnapshot?.confirmedSponsors.length || 0} sponsors` : `${confirmedSponsors.length} sponsors`}</strong></div>
               <div>June Share per Sponsor: <strong>{isFellowshipMonthClosed ? formatSponsorShare(juneSnapshot?.sharePerSponsor || 0) : formatSponsorShare(confirmedSharePerSponsor)}</strong></div>
 
@@ -6239,8 +6355,8 @@ function FellowshipDashboard({
 
                 return (
                   <>
-                    <div>June Amount Received: <strong>{money(paidVal)}</strong></div>
-                    <div>June Outstanding Balance: <strong>{money(pendingVal)}</strong></div>
+                    <div>June Amount Received: <strong>{formatSponsorShare(paidVal)}</strong></div>
+                    <div>June Outstanding Balance: <strong>{formatSponsorShare(pendingVal)}</strong></div>
                   </>
                 );
               })()}
@@ -6293,7 +6409,7 @@ function FellowshipDashboard({
             {isJulyRotationActive ? (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "0.9rem" }}>
                 <div>July Selected Members: <strong>{selectedSponsors.length} selected</strong></div>
-                <div>July Total Expense Input: <strong>{totalFellowshipExpenseInput || "Not entered (₹0)"}</strong></div>
+                <div>July Total Expense Input: <strong>{totalFellowshipExpenseInput || "Not entered (₹0.00)"}</strong></div>
                 <div>July Calculated Share: <strong>{formatSponsorShare(amountPerSponsor)}</strong></div>
                 <div>July Status: <span className="tag" style={{ backgroundColor: "#e8f0fe", color: "#1a73e8", padding: "2px 6px", borderRadius: "4px" }}>Active / Open</span></div>
 
@@ -6342,7 +6458,7 @@ function FellowshipDashboard({
           ) : selectedSponsors.length === 0 ? (
             <div className="stack" style={{ gap: "8px", marginBottom: "1rem" }}>
               <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", fontSize: "0.9rem" }}>
-                <strong>Each member's share: ₹0</strong>
+                <strong>Each member's share: ₹0.00</strong>
               </div>
               <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", fontSize: "0.9rem" }}>
                 Select sponsors first to calculate each member’s share.
@@ -6353,7 +6469,7 @@ function FellowshipDashboard({
             </div>
           ) : (
             <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-              <strong>Each member's share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {money(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
+              <strong>Each member's share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
               <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "4px" }}>
                 * Final accounting can apply rounding rules before payment records are created.
               </div>
@@ -6370,12 +6486,14 @@ function FellowshipDashboard({
 
               const displayStatus = isSelected ? "Selected for this month" :
                                     currentStatus === "Deferred for this month" ? "Deferred for this month" :
-                                    currentStatus === "Eligible" ? "Due for sponsorship" : currentStatus;
+                                    item.suggested && currentStatus === "Eligible" ? "Next suggested sponsor" :
+                                currentStatus === "Eligible" ? "Due for sponsorship" : currentStatus;
 
               return (
                 <div
                   className={statusClass}
                   key={item.member}
+                  data-member-id={item.member}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
@@ -6388,7 +6506,7 @@ function FellowshipDashboard({
                   }}
                 >
                   <div>
-                    <strong>{item.order}. {item.member}</strong>
+                    <strong>{item.order}. {sponsorName(item.member)}</strong>
                     <div style={{ fontSize: "0.85rem", opacity: 0.8 }}>
                       Status: <span className="tag">{displayStatus}</span> • Last turn: {item.last}
                     </div>
@@ -6465,7 +6583,7 @@ function FellowshipDashboard({
           ) : activeSponsors.length === 0 ? (
             <div className="stack" style={{ gap: "8px", marginBottom: "1rem" }}>
               <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", fontSize: "0.9rem" }}>
-                <strong>Each member's share: ₹0</strong>
+                <strong>Each member's share: ₹0.00</strong>
               </div>
               <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", fontSize: "0.9rem" }}>
                 Select sponsors first to calculate each member’s share.
@@ -6476,7 +6594,7 @@ function FellowshipDashboard({
             </div>
           ) : (
             <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-              <strong>Each member's share: {formatSponsorShare(activeShare)}</strong> (Total {money(totalFellowshipExpense)} divided among {activeSponsors.length} sponsors).
+              <strong>Each member's share: {formatSponsorShare(activeShare)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {activeSponsors.length} sponsors).
               <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "4px" }}>
                 * Final accounting can apply rounding rules before payment records are created.
               </div>
@@ -6495,10 +6613,10 @@ function FellowshipDashboard({
               }
 
               return (
-                <article className="selectedSponsorCard" key={sponsor}>
+                <article className="selectedSponsorCard" key={sponsor} data-member-id={sponsor}>
                   <div>
-                    <strong>{sponsor}</strong>
-                    <span>Fellowship Share: {isValidExpense ? formatSponsorShare(activeShare) : "₹0"}</span>
+                    <strong>{sponsorName(sponsor)}</strong>
+                    <span>Fellowship Share: {isValidExpense ? formatSponsorShare(activeShare) : "₹0.00"}</span>
                     {isFellowshipConfirmed && (
                       <>
                         <span>Amount Paid: {formatSponsorShare(paid)}</span>
@@ -6511,7 +6629,8 @@ function FellowshipDashboard({
                     className="filterButton"
                     onClick={() => {
                       setSelectedSponsor({
-                        name: sponsor,
+                        memberId: sponsor,
+                        name: sponsorName(sponsor),
                         amount: activeShare,
                         amountPaid: paid,
                         balanceRemaining: balance,
@@ -6561,9 +6680,9 @@ function FellowshipDashboard({
                     const finalStatus = paid >= juneSnapshot.sharePerSponsor - 0.01 ? "Paid" : "Transferred to member dues";
                     const history = juneSnapshot.paymentHistories[sponsor] || [];
                     return (
-                      <article className="selectedSponsorCard" key={sponsor}>
+                      <article className="selectedSponsorCard" key={sponsor} data-member-id={sponsor}>
                         <div>
-                          <strong>{sponsor}</strong>
+                          <strong>{sponsorName(sponsor)}</strong>
                           <span>Fellowship Share: {formatSponsorShare(juneSnapshot.sharePerSponsor)}</span>
                           <span>Amount Received: {formatSponsorShare(paid)}</span>
                           {balance > 0.01 ? (
@@ -6574,7 +6693,7 @@ function FellowshipDashboard({
                               </div>
                             </>
                           ) : (
-                            <span>Outstanding Transferred: ₹0</span>
+                            <span>Outstanding Transferred: ₹0.00</span>
                           )}
                           <span>Status: <strong style={{ color: finalStatus === "Paid" ? "#137333" : "#b06000" }}>{finalStatus}</strong></span>
                         </div>
@@ -6605,7 +6724,7 @@ function FellowshipDashboard({
                                     {history.map((entry) => (
                                       <tr key={entry.id} style={{ borderBottom: "1px solid #f1f3f4" }}>
                                         <td style={{ padding: "6px 0", color: "#5f6368" }}>{entry.date}</td>
-                                        <td style={{ padding: "6px 0", textAlign: "right", fontWeight: "bold" }}>{money(entry.amount)}</td>
+                                        <td style={{ padding: "6px 0", textAlign: "right", fontWeight: "bold" }}>{formatSponsorShare(entry.amount)}</td>
                                         <td style={{ padding: "6px 0", textAlign: "center", color: "#80868b", fontSize: "0.75rem" }}>Locked</td>
                                       </tr>
                                     ))}
@@ -6706,7 +6825,7 @@ function FellowshipDashboard({
                   }}
                 >
                   <div style={{ fontWeight: "500", fontSize: "0.95rem" }}>
-                    {`${formatSponsorShare(lastRecordedPayment.paymentAmount)} recorded for ${lastRecordedPayment.memberName}. Remaining balance: ${formatSponsorShare(lastRecordedPayment.remainingBalance)}.`}
+                    {`${formatSponsorShare(lastRecordedPayment.paymentAmount)} recorded for ${sponsorName(lastRecordedPayment.memberName)}. Remaining balance: ${formatSponsorShare(lastRecordedPayment.remainingBalance)}.`}
                   </div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {(() => {
@@ -6813,17 +6932,17 @@ function FellowshipDashboard({
                 <Metric label="Active month" value={activeMonthLabel} />
                 <Metric label="Total fellowship expense" value={isValidExpense ? formatSponsorShare(totalFellowshipExpense) : "Not entered"} />
                 <Metric label="Selected sponsors" value={`${selectedSponsors.length}`} />
-                <Metric label="Share per sponsor" value={isValidExpense && selectedSponsors.length > 0 ? formatSponsorShare(amountPerSponsor) : "₹0"} />
+                <Metric label="Share per sponsor" value={isValidExpense && selectedSponsors.length > 0 ? formatSponsorShare(amountPerSponsor) : "₹0.00"} />
               </div>
               {selectedSponsors.length > 0 && (
                 <div className="selectedSponsorGrid">
                   {selectedSponsors.map((sponsor) => (
                     <article className="selectedSponsorCard" key={`payment-preview-${activeMonthLabel}-${sponsor}`}>
                       <div>
-                        <strong>{sponsor}</strong>
-                        <span>Fellowship Share: {isValidExpense ? formatSponsorShare(amountPerSponsor) : "₹0"}</span>
-                        <span>Amount Paid: ₹0</span>
-                        <span>Balance Remaining: {isValidExpense ? formatSponsorShare(amountPerSponsor) : "₹0"}</span>
+                        <strong>{sponsorName(sponsor)}</strong>
+                        <span>Fellowship Share: {isValidExpense ? formatSponsorShare(amountPerSponsor) : "₹0.00"}</span>
+                        <span>Amount Paid: ₹0.00</span>
+                        <span>Balance Remaining: {isValidExpense ? formatSponsorShare(amountPerSponsor) : "₹0.00"}</span>
                         <span>Payment Status: <strong style={{ color: "#b06000" }}>Awaiting confirmation</strong></span>
                       </div>
                       <label style={{ fontSize: "0.85rem", color: "#5f6368" }}>
@@ -6856,7 +6975,7 @@ function FellowshipDashboard({
                 </div>
               ) : (
                 <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-                  <strong>Sponsor Share: {formatSponsorShare(activeShare)}</strong> (Total {money(totalFellowshipExpense)} divided among {activeSponsors.length} sponsors).
+                  <strong>Sponsor Share: {formatSponsorShare(activeShare)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {activeSponsors.length} sponsors).
                   <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "4px" }}>
                     * Final accounting can apply rounding rules before payment records are created.
                   </div>
@@ -6881,14 +7000,14 @@ function FellowshipDashboard({
 
                     let inputError: string | null = paymentValidationErrors[validationKey(sponsor)] || null;
                     if (!isValidPayFormat || payTrimmed === ".") {
-                      inputError = `Enter a valid payment amount for ${sponsor}.`;
+                      inputError = `Enter a valid payment amount for ${sponsorName(sponsor)}.`;
                     } else if (payTrimmed !== "") {
                       if (parsedPay <= 0) {
-                        inputError = `The payment for ${sponsor} must be greater than zero.`;
+                        inputError = `The payment for ${sponsorName(sponsor)} must be greater than zero.`;
                       } else {
                         const newCumulative = Math.round((paid + parsedPay + Number.EPSILON) * 100) / 100;
                         if (newCumulative > activeShare + 0.01) {
-                          inputError = `The payment for ${sponsor} cannot exceed the remaining balance of ${formatSponsorShare(balance)}.`;
+                          inputError = `The payment for ${sponsorName(sponsor)} cannot exceed the remaining balance of ${formatSponsorShare(balance)}.`;
                         }
                       }
                     }
@@ -6901,6 +7020,7 @@ function FellowshipDashboard({
                         ref={(el) => { sponsorCardRefs.current[sponsor] = el; }}
                         className="selectedSponsorCard"
                         key={sponsor}
+                        data-member-id={sponsor}
                         style={{
                           display: "flex",
                           flexDirection: "column",
@@ -6912,7 +7032,7 @@ function FellowshipDashboard({
                         }}
                       >
                         <div>
-                          <strong>{sponsor}</strong>
+                          <strong>{sponsorName(sponsor)}</strong>
                           <span>Fellowship Share: {formatSponsorShare(activeShare)}</span>
                           <span>Amount Paid: {formatSponsorShare(paid)}</span>
                           <span>Balance Remaining: {formatSponsorShare(balance)}</span>
@@ -6971,16 +7091,16 @@ function FellowshipDashboard({
                               onClick={() => {
                                 const paymentNow = parseFloat(payTrimmed || "0");
                                 if (payTrimmed === "" || payTrimmed === "." || isNaN(paymentNow)) {
-                                  setSponsorValidationError(sponsor, `Enter a valid payment amount for ${sponsor}.`);
+                                  setSponsorValidationError(sponsor, `Enter a valid payment amount for ${sponsorName(sponsor)}.`);
                                   return;
                                 }
                                 if (paymentNow <= 0) {
-                                  setSponsorValidationError(sponsor, `The payment for ${sponsor} must be greater than zero.`);
+                                  setSponsorValidationError(sponsor, `The payment for ${sponsorName(sponsor)} must be greater than zero.`);
                                   return;
                                 }
                                 const cumulativePaid = Math.round((paid + paymentNow + Number.EPSILON) * 100) / 100;
                                 if (cumulativePaid > activeShare + 0.01) {
-                                  setSponsorValidationError(sponsor, `The payment for ${sponsor} cannot exceed the remaining balance of ${formatSponsorShare(balance)}.`);
+                                  setSponsorValidationError(sponsor, `The payment for ${sponsorName(sponsor)} cannot exceed the remaining balance of ${formatSponsorShare(balance)}.`);
                                   return;
                                 }
 
@@ -7004,7 +7124,7 @@ function FellowshipDashboard({
                                   paymentAmount: paymentNow,
                                   cumulativePaid,
                                   remainingBalance: newRemaining,
-                                  type: newRemaining > 0.005 ? "partial" : "full"
+                                  type: hasPositiveFellowshipBalance(newRemaining) ? "partial" : "full"
                                 });
                                 setHighlightedSponsor(sponsor);
                                 setFellowshipConfirmationMessage(null);
@@ -7014,11 +7134,11 @@ function FellowshipDashboard({
                             </button>
                             <button
                               className="filterButton"
-                              disabled={balance <= 0.005 || pStatus === "Paid" || activeMonthClosed}
+                              disabled={!hasPositiveFellowshipBalance(balance) || pStatus === "Paid" || activeMonthClosed}
                               style={{ padding: "4px 8px", fontSize: "0.8rem", backgroundColor: "#137333", color: "#fff", flex: 1, minWidth: "160px" }}
                               onClick={() => {
                                   const remaining = Math.max(0, activeShare - paid);
-                                  if (remaining <= 0) return;
+                                  if (!hasPositiveFellowshipBalance(remaining)) return;
 
                                   const now = new Date();
                                   const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -7053,7 +7173,8 @@ function FellowshipDashboard({
                               style={{ padding: "4px 8px", fontSize: "0.8rem" }}
                               onClick={() => {
                                 setSelectedSponsor({
-                                  name: sponsor,
+                                  memberId: sponsor,
+                        name: sponsorName(sponsor),
                                   amount: activeShare,
                                   amountPaid: paid,
                                   balanceRemaining: balance,
@@ -7114,7 +7235,7 @@ function FellowshipDashboard({
                                                 style={{ width: "70px", padding: "2px 4px", fontSize: "0.8rem", textAlign: "right" }}
                                               />
                                             ) : (
-                                              money(entry.amount)
+                                              formatSponsorShare(entry.amount)
                                             )}
                                           </td>
                                           <td style={{ padding: "6px 0", textAlign: "center", color: "#137333", fontSize: "0.75rem" }}>Recorded</td>
@@ -7128,7 +7249,7 @@ function FellowshipDashboard({
                                                     const trimmedAmount = editingPaymentAmount.trim();
                                                     const parsedAmount = parseFloat(trimmedAmount);
                                                     if (isNaN(parsedAmount) || parsedAmount <= 0) {
-                                                      setSponsorValidationError(sponsor, `Enter a valid payment amount greater than zero for ${sponsor}.`);
+                                                      setSponsorValidationError(sponsor, `Enter a valid payment amount greater than zero for ${sponsorName(sponsor)}.`);
                                                       return;
                                                     }
 
@@ -7139,7 +7260,7 @@ function FellowshipDashboard({
                                                     const newTotal = Math.round((otherSum + parsedAmount + Number.EPSILON) * 100) / 100;
                                                     if (newTotal > activeShare + 0.01) {
                                                       const maximumForEntry = Math.max(0, activeShare - otherSum);
-                                                      setSponsorValidationError(sponsor, `The payment for ${sponsor} cannot exceed ${formatSponsorShare(maximumForEntry)} for this transaction.`);
+                                                      setSponsorValidationError(sponsor, `The payment for ${sponsorName(sponsor)} cannot exceed ${formatSponsorShare(maximumForEntry)} for this transaction.`);
                                                       return;
                                                     }
 
@@ -7156,7 +7277,7 @@ function FellowshipDashboard({
                                                     setEditingPaymentId(null);
                                                     setLastRecordedPayment(null);
                                                     setHighlightedSponsor(sponsor);
-                                                    setFellowshipConfirmationMessage(`Payment entry updated to ${money(parsedAmount)} for ${sponsor}. Total paid: ${formatSponsorShare(newTotal)}.`);
+                                                    setFellowshipConfirmationMessage(`Payment entry updated to ${formatSponsorShare(parsedAmount)} for ${sponsorName(sponsor)}. Total paid: ${formatSponsorShare(newTotal)}.`);
                                                   }}
                                                 >
                                                   Save
@@ -7187,7 +7308,7 @@ function FellowshipDashboard({
                                                     setConfirmCancelId(null);
                                                     setLastRecordedPayment(null);
                                                     setHighlightedSponsor(sponsor);
-                                                    setFellowshipConfirmationMessage(`Payment entry cancelled for ${sponsor}. Total paid: ${formatSponsorShare(newTotal)}.`);
+                                                    setFellowshipConfirmationMessage(`Payment entry cancelled for ${sponsorName(sponsor)}. Total paid: ${formatSponsorShare(newTotal)}.`);
                                                   }}
                                                 >
                                                   Confirm?
@@ -7259,11 +7380,11 @@ function FellowshipDashboard({
             <Toolbar title="June 2026 Fellowship Accounts" actionLabel={isFellowshipMonthClosed ? "June Accounts — Finalised" : (isFellowshipConfirmed ? "June Accounts — Payment Tracking Open" : "Sponsor Selection In Progress")} />
 
             <div className="fieldGrid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "1rem", marginTop: "1rem" }}>
-              <Field label="Total fellowship expense" value={money(isFellowshipMonthClosed ? (juneSnapshot?.totalExpense || 0) : totalFellowshipExpense)} />
+              <Field label="Total fellowship expense" value={formatSponsorShare(isFellowshipMonthClosed ? (juneSnapshot?.totalExpense || 0) : totalFellowshipExpense)} />
               <Field label="Confirmed sponsors" value={isFellowshipMonthClosed ? `${juneSnapshot?.confirmedSponsors.length || 0} sponsors` : (isFellowshipConfirmed ? `${confirmedSponsors.length} sponsors` : "0 (Not confirmed)")} />
-              <Field label="Share per sponsor" value={isFellowshipMonthClosed ? formatSponsorShare(juneSnapshot?.sharePerSponsor || 0) : (isFellowshipConfirmed ? formatSponsorShare(confirmedSharePerSponsor) : "₹0")} />
+              <Field label="Share per sponsor" value={isFellowshipMonthClosed ? formatSponsorShare(juneSnapshot?.sharePerSponsor || 0) : (isFellowshipConfirmed ? formatSponsorShare(confirmedSharePerSponsor) : "₹0.00")} />
 
-              <Field label="Total amount received" value={money(isFellowshipMonthClosed ? (juneSnapshot?.confirmedSponsors.reduce((sum, s) => sum + (juneSnapshot.payments[s] || 0), 0) || 0) : (isFellowshipConfirmed ? confirmedSponsors.reduce((sum, s) => sum + (sponsorPayments[s] || 0), 0) : 0))} />
+              <Field label="Total amount received" value={formatSponsorShare(isFellowshipMonthClosed ? (juneSnapshot?.confirmedSponsors.reduce((sum, s) => sum + (juneSnapshot.payments[s] || 0), 0) || 0) : (isFellowshipConfirmed ? confirmedSponsors.reduce((sum, s) => sum + (sponsorPayments[s] || 0), 0) : 0))} />
 
               {(() => {
                 const pendingVal = isFellowshipMonthClosed
@@ -7284,12 +7405,12 @@ function FellowshipDashboard({
 
                 return (
                   <>
-                    <Field label={isFellowshipMonthClosed ? "Total balance transferred" : "Outstanding balance"} value={money(pendingVal)} />
+                    <Field label={isFellowshipMonthClosed ? "Total balance transferred" : "Outstanding balance"} value={formatSponsorShare(pendingVal)} />
                     <Field label="Fully paid sponsors" value={`${fullyPaidCount} members`} />
                     <Field label="Partly paid sponsors" value={`${partlyPaidCount} members`} />
                     <Field label="Unpaid sponsors" value={`${unpaidCount} members`} />
                     {!isFellowshipMonthClosed && (
-                      <Field label="Amount to be transferred on finalisation" value={money(pendingVal)} />
+                      <Field label="Amount to be transferred on finalisation" value={formatSponsorShare(pendingVal)} />
                     )}
                   </>
                 );
@@ -7341,7 +7462,7 @@ function FellowshipDashboard({
                               return {
                                 id: `fellowship-2026-06-${sponsor}`,
                                 heading: `Fellowship Sponsorship Due — June 2026`,
-                                memberName: sponsor,
+                                memberName: sponsorName(sponsor),
                                 month: "June 2026",
                                 share: finalShare,
                                 paid: paid,
@@ -7426,8 +7547,8 @@ function FellowshipDashboard({
             <div className="fieldGrid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "1rem", marginTop: "1rem" }}>
               <Field label="Rotation status" value={isJulyRotationActive ? "Active / Open" : "Not Prepared"} />
               <Field label="Selected member count" value={isJulyRotationActive ? `${selectedSponsors.length} selected` : "0 selected"} />
-              <Field label="Total fellowship expense" value={isJulyRotationActive && totalFellowshipExpenseInput ? money(parseFloat(totalFellowshipExpenseInput)) : "Not entered (₹0)"} />
-              <Field label="Share per selected sponsor" value={isJulyRotationActive ? formatSponsorShare(amountPerSponsor) : "₹0"} />
+              <Field label="Total fellowship expense" value={isJulyRotationActive && totalFellowshipExpenseInput ? formatSponsorShare(parseFloat(totalFellowshipExpenseInput)) : "Not entered (₹0.00)"} />
+              <Field label="Share per selected sponsor" value={isJulyRotationActive ? formatSponsorShare(amountPerSponsor) : "₹0.00"} />
             </div>
 
             <div className="stack" style={{ gap: "8px" }}>
@@ -7556,6 +7677,8 @@ function MemberFellowship({
   setMemberActionMessage: (msg: string | null) => void;
   amountPerSponsor: number;
 }) {
+  const { members: currentMembers } = useCurrentMemberData();
+  const sponsorName = (memberId: string) => displayMemberName(memberId, currentMembers);
   const isSponsor = selectedSponsors.includes(member.name) || selectedSponsors.includes(member.dashboardName);
   const coSponsors = selectedSponsors.filter((sponsor) => sponsor !== member.name && sponsor !== member.dashboardName);
   const memberIndex = selectedSponsors.findIndex((s) => s === member.name || s === member.dashboardName);
@@ -7603,7 +7726,7 @@ function MemberFellowship({
                 <div className="memberLedgerCard" key={sponsor}>
                   <div className="memberLedgerDate">LC</div>
                   <div>
-                    <strong>{sponsor}</strong>
+                    <strong>{sponsorName(sponsor)}</strong>
                     <span>Co-sponsor for June Fellowship</span>
                   </div>
                 </div>
@@ -7653,8 +7776,15 @@ function FellowshipQueue({
   isValidExpense: boolean;
   isFellowshipConfirmed: boolean;
 }) {
+  const { members: currentMembers, status: currentMemberStatus, error: currentMemberError, retry: retryCurrentMembers } = useCurrentMemberData();
+  const fellowshipQueue = canonicalFellowshipMembers(currentMembers).map((currentMember, index) => ({ order: index + 1, member: fellowshipMemberKey(currentMember), status: "Eligible", last: "Not yet recorded", suggested: index === 0 }));
+  const sponsorName = (memberId: string) => displayMemberName(memberId, currentMembers);
   const selectedCount = selectedSponsors.length;
   const isConfirmDisabled = selectedCount === 0 || !isValidExpense;
+
+  if (currentMemberStatus === "loading") return <div className="notice">Loading current members...</div>;
+  if (currentMemberStatus === "error") return <div className="notice"><strong>Current member data could not be loaded.</strong>{currentMemberError && <span> {currentMemberError}</span>} <button className="filterButton" onClick={retryCurrentMembers}>Retry</button></div>;
+  if (currentMembers.length === 0) return <div className="notice">No current members are available.</div>;
 
   return (
     <section className="stack">
@@ -7667,7 +7797,7 @@ function FellowshipQueue({
       ) : selectedCount === 0 ? (
         <div className="stack" style={{ gap: "8px", marginBottom: "1rem" }}>
           <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", fontSize: "0.9rem" }}>
-            <strong>Each member's share: ₹0</strong>
+            <strong>Each member's share: ₹0.00</strong>
           </div>
           <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", fontSize: "0.9rem" }}>
             Select sponsors first to calculate each member’s share.
@@ -7678,7 +7808,7 @@ function FellowshipQueue({
         </div>
       ) : (
         <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-          <strong>Each member's share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {money(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
+          <strong>Each member's share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
           <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "4px" }}>
             * Final accounting can apply rounding rules before payment records are created.
           </div>
@@ -7698,6 +7828,7 @@ function FellowshipQueue({
 
           const displayStatus = isSelected ? "Selected for this month" :
                                 currentStatus === "Deferred for this month" ? "Deferred for this month" :
+                                item.suggested && currentStatus === "Eligible" ? "Next suggested sponsor" :
                                 currentStatus === "Eligible" ? "Due for sponsorship" : currentStatus;
 
           return (
@@ -7716,7 +7847,7 @@ function FellowshipQueue({
               }}
             >
               <div>
-                <strong>{item.order}. {item.member}</strong>
+                <strong>{item.order}. {sponsorName(item.member)}</strong>
                 <div style={{ fontSize: "0.85rem", opacity: 0.8, marginTop: "4px" }}>
                   Status: <span className="tag">{displayStatus}</span> • Last turn: {item.last}
                 </div>
@@ -7835,7 +7966,10 @@ function ConfirmSponsors({
   } | null) => void;
   setHighlightedSponsor: (val: string | null) => void;
 }) {
-  const selectedCount = selectedSponsors.length;
+  const { members: currentMembers } = useCurrentMemberData();
+  const sponsorName = (memberId: string) => displayMemberName(memberId, currentMembers);
+  const orderedSelectedSponsors = sortFellowshipMemberKeys(selectedSponsors, currentMembers);
+  const selectedCount = orderedSelectedSponsors.length;
   const expenseTrimmed = totalFellowshipExpenseInput.trim();
   const parsed = parseFloat(expenseTrimmed);
   const isValidExpense = /^\d+(\.\d*)?$/.test(expenseTrimmed) && !isNaN(parsed) && parsed > 0;
@@ -7846,9 +7980,9 @@ function ConfirmSponsors({
       <div className="compactPanel">
         <Toolbar title={title} actionLabel={monthLabel} />
         <div className="metricsGrid" style={{ marginTop: "1rem" }}>
-          <Metric label="Total expense" value={isValidExpense ? money(totalFellowshipExpense) : "Not entered (₹0)"} />
+          <Metric label="Total expense" value={isValidExpense ? formatSponsorShare(totalFellowshipExpense) : "Not entered (₹0.00)"} />
           <Metric label="Sponsor count" value={`${selectedCount}`} />
-          <Metric label="Each sponsor’s share" value={isValidExpense && selectedCount > 0 ? formatSponsorShare(amountPerSponsor) : "₹0"} />
+          <Metric label="Each sponsor’s share" value={isValidExpense && selectedCount > 0 ? formatSponsorShare(amountPerSponsor) : "₹0.00"} />
           <Metric label="Confirmation status" value="Not confirmed" />
         </div>
       </div>
@@ -7858,7 +7992,7 @@ function ConfirmSponsors({
       {selectedCount === 0 ? (
         <div className="stack" style={{ gap: "8px", marginBottom: "1rem" }}>
           <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", fontSize: "0.9rem" }}>
-            <strong>Each member's share: ₹0</strong>
+            <strong>Each member's share: ₹0.00</strong>
           </div>
           <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", fontSize: "0.9rem" }}>
             Select sponsors first to calculate each member’s share.
@@ -7873,7 +8007,7 @@ function ConfirmSponsors({
         </div>
       ) : (
         <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-          <strong>Each member's share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {money(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
+          <strong>Each member's share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
           <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "4px" }}>
             * Final accounting can apply rounding rules before payment records are created.
           </div>
@@ -7884,11 +8018,11 @@ function ConfirmSponsors({
         {selectedSponsors.length === 0 ? (
           <p style={{ padding: "16px", color: "#666", textAlign: "center" }}>No sponsors selected. Please go back to the Rotation and select sponsors.</p>
         ) : (
-          selectedSponsors.map((sponsor, index) => (
+          orderedSelectedSponsors.map((sponsor, index) => (
             <div key={sponsor} className="staticRow">
               <span>{index + 1}</span>
-              <strong>{sponsor}</strong>
-              <span>{isValidExpense ? formatSponsorShare(amountPerSponsor) : "₹0"}</span>
+              <strong>{sponsorName(sponsor)}</strong>
+              <span>{isValidExpense ? formatSponsorShare(amountPerSponsor) : "₹0.00"}</span>
               <span className="tag">Ready to confirm</span>
             </div>
           ))
@@ -7899,7 +8033,7 @@ function ConfirmSponsors({
           disabled={isConfirmDisabled}
           onClick={() => {
             setIsFellowshipConfirmed(true);
-            setConfirmedSponsors([...selectedSponsors]);
+            setConfirmedSponsors([...orderedSelectedSponsors]);
             setConfirmedSharePerSponsor(amountPerSponsor);
             setSponsorPayments({});
             setSponsorPaymentInputs({});
@@ -7951,6 +8085,7 @@ function FellowshipSponsorDetail({
   onBack
 }: {
   sponsor: {
+    memberId: string;
     name: string;
     amount: number;
     status: string;
@@ -8033,8 +8168,8 @@ function ledgerEntryType(row: (typeof ledgerRows)[number]) {
 }
 
 function ledgerBalanceImpact(row: (typeof ledgerRows)[number]) {
-  if (row.credit) return `${money(row.credit)} reduced from dues`;
-  return `+${money(row.debit)} due`;
+  if (row.credit) return `${formatSponsorShare(row.credit)} reduced from dues`;
+  return `+${formatSponsorShare(row.debit)} due`;
 }
 
 function ledgerExtraFields(row: (typeof ledgerRows)[number]) {
@@ -8611,7 +8746,7 @@ function RecordMemberPayment({ role }: { role: Role }) {
 
         const membersPayload = await membersResponse.json();
         const activeMembers = ((membersPayload.members as BackendMemberRecord[] | undefined) ?? [])
-          .filter((member) => member.status === "active");
+          .filter((member) => isImportedCurrentMember(member) && member.status === "active");
 
         if (!activeMembers.length) {
           throw new Error("No active members available for payment recording");
@@ -8995,7 +9130,7 @@ function ReceiptList({ role }: { role: Role }) {
 
           const membersPayload = await membersResponse.json();
           const activeMembers = ((membersPayload.members as BackendMemberRecord[] | undefined) ?? [])
-            .filter((member) => member.status === "active");
+            .filter((member) => isImportedCurrentMember(member) && member.status === "active");
 
           if (!activeMembers.length) {
             throw new Error("No active members available for receipt lookup");
@@ -9381,7 +9516,7 @@ function PaymentHistory({ role }: { role: Role }) {
 
           const membersPayload = await membersResponse.json();
           const activeMembers = ((membersPayload.members as BackendMemberRecord[] | undefined) ?? [])
-            .filter((member) => member.status === "active");
+            .filter((member) => isImportedCurrentMember(member) && member.status === "active");
           const defaultMemberId = activeMembers[0]?.id ?? null;
 
           if (!cancelled) {
@@ -10192,9 +10327,9 @@ function pendingDuesRows(amountPerSponsor?: number) {
 function fellowshipPendingRows(amountPerSponsor?: number) {
   const finalAmountPerSponsor = amountPerSponsor ?? 2500;
   const rows = [
-    ["June 2026", "Lion Secretary User", money(finalAmountPerSponsor), money(0), money(finalAmountPerSponsor), "Pending"],
-    ["June 2026", "Lion Treasurer User", money(finalAmountPerSponsor), money(0), money(finalAmountPerSponsor), "Pending"],
-    ["June 2026", "Lion Bijesh", money(finalAmountPerSponsor), money(finalAmountPerSponsor), money(0), "Paid"]
+    ["June 2026", "Lion Secretary User", formatSponsorShare(finalAmountPerSponsor), formatSponsorShare(0), formatSponsorShare(finalAmountPerSponsor), "Pending"],
+    ["June 2026", "Lion Treasurer User", formatSponsorShare(finalAmountPerSponsor), formatSponsorShare(0), formatSponsorShare(finalAmountPerSponsor), "Pending"],
+    ["June 2026", "Lion Bijesh", formatSponsorShare(finalAmountPerSponsor), formatSponsorShare(finalAmountPerSponsor), formatSponsorShare(0), "Paid"]
   ];
   return rows.map((row) => (
     <div className="staticRow collectionDetailRow" key={`${row[0]}-${row[1]}`}>
@@ -10492,80 +10627,42 @@ function ActivityCard({ activity }: { activity: Activity }) {
   );
 }
 
+const celebrationMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function celebrationDayMonth(value: string) {
+  const [, month, day] = value.split("-");
+  return `${Number(day)} ${celebrationMonths[Number(month) - 1]}`;
+}
+
 function Celebrations({ role, setScreen }: { role: Role; setScreen: (screen: Screen) => void }) {
-  const items = celebrationsForRole(role);
-  const filters = ["Today", "This week", "This month", "Birthdays", "Anniversaries"];
-  if (role === "member") return <MemberCelebrations />;
-
+  const [month, setMonth] = useState(6);
   return (
     <section className="stack">
-      <Toolbar title="Celebrations" actionLabel="Official greeting tracking" />
-      <div className="buttonRow">
-        <button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Greeting Reminder</button>
-      </div>
-      <div className="filterBar">{filters.map((filter) => <button className="filterButton" key={filter}>{filter}</button>)}</div>
-      <div className="tableLike">
-        {items.map((item) => (
-          <div className="staticRow celebrationAdminRow" key={`${item.name}-${item.type}-${item.date}`}>
-            <Avatar name={item.name} />
-            <strong>{item.name}</strong>
-            <span>{item.type}</span>
-            <span>{item.date}</span>
-            <span>{item.contact}</span>
-            <span className="tag">{item.wishStatus}</span>
-            <button className="filterButton">Mark as Sent</button>
-          </div>
-        ))}
-      </div>
+      <Toolbar title="Celebrations" actionLabel={`${celebrationMonths[month - 1]} 2026`} />
+      <div className="buttonRow"><button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Greeting Reminder</button></div>
+      <label className="moduleSelect">Celebration month
+        <select value={month} onChange={(event) => setMonth(Number(event.target.value))}>{celebrationMonths.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}</select>
+      </label>
+      <MemberCollectionState>{(currentMembers) => {
+        const inMonth = (value?: string | null) => value ? Number(value.split("-")[1]) === month : false;
+        const birthdays = currentMembers.filter((member) => inMonth(member.birthDate));
+        const lionsAnniversaries = currentMembers.filter((member) => inMonth(member.joinedAt));
+        const weddingAnniversaries = currentMembers.filter((member) => inMonth(member.weddingAnniversary));
+        return <div className="stack">
+          <section className="compactPanel"><Toolbar title="Birthdays" actionLabel={`${birthdays.length} recorded`} />
+            {birthdays.length ? <div className="tableLike">{birthdays.map((member) => <div className="staticRow" key={`birthday-${member.id}`}><Avatar name={member.name} /><strong>{member.name}</strong><span>Birthday</span><span>{celebrationDayMonth(member.birthDate!)}</span></div>)}</div> : <div className="notice">No birthdays recorded for this period.</div>}
+          </section>
+          <section className="compactPanel"><Toolbar title="Lions Membership Anniversary" actionLabel={`${lionsAnniversaries.length} recorded`} />
+            {lionsAnniversaries.length ? <div className="tableLike">{lionsAnniversaries.map((member) => <div className="staticRow" key={`lions-anniversary-${member.id}`}><Avatar name={member.name} /><strong>{member.name}</strong><span>Lions Membership Anniversary</span><span>{celebrationDayMonth(member.joinedAt!)}</span></div>)}</div> : <div className="notice">No Lions Membership Anniversaries recorded for this period.</div>}
+          </section>
+          <section className="compactPanel"><Toolbar title="Wedding Anniversary" actionLabel={`${weddingAnniversaries.length} recorded`} />
+            {weddingAnniversaries.length ? <div className="tableLike">{weddingAnniversaries.map((member) => <div className="staticRow" key={`wedding-${member.id}`}><Avatar name={member.name} /><strong>{member.name}</strong><span>Wedding Anniversary</span><span>{celebrationDayMonth(member.weddingAnniversary!)}</span></div>)}</div> : <div className="notice">No wedding anniversaries recorded for this period.</div>}
+          </section>
+        </div>;
+      }}</MemberCollectionState>
     </section>
   );
 }
-
-function MemberCelebrations() {
-  const sections = memberCelebrationSections();
-  return (
-    <section className="stack">
-      <Toolbar title="Celebrations" actionLabel="Member wishing" />
-      <section className="compactPanel">
-        <Toolbar title="Today’s Celebrations" actionLabel={`${sections.today.length} today`} />
-        <MemberCelebrationList items={sections.today} emptyText="No celebrations today." />
-      </section>
-      <section className="compactPanel">
-        <Toolbar title="Recently Completed Celebrations" actionLabel="Last 1–2 days" />
-        <MemberCelebrationList items={sections.recent} emptyText="No recent celebrations." />
-      </section>
-    </section>
-  );
-}
-
-function MemberCelebrationList({
-  items,
-  emptyText
-}: {
-  items: { name: string; type: string; status: string; phone?: string }[];
-  emptyText: string;
-}) {
-  if (items.length === 0) return <div className="memberEmptyState">{emptyText}</div>;
-
-  return (
-    <div className="memberCelebrationList">
-      {items.map((item) => (
-        <article className="memberCelebrationCard" key={`${item.name}-${item.type}-${item.status}`}>
-          <div>
-            <strong>{item.name}</strong>
-            <span>{item.type} · {item.status}</span>
-          </div>
-          <div className="miniActions">
-            {item.phone && <button className="filterButton">Call</button>}
-            {item.phone && <button className="filterButton">WhatsApp</button>}
-            <button className="filterButton">Wish</button>
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
-
 function DonorConsent({ member }: { member: Member }) {
   return (
     <section className="formPanel">
@@ -10579,6 +10676,9 @@ function DonorConsent({ member }: { member: Member }) {
 }
 
 function DonorSearch({ bloodGroup, setBloodGroup, allowedDonors }: { bloodGroup: string; setBloodGroup: (group: string) => void; allowedDonors: Member[] }) {
+  const { status, error, retry } = useCurrentMemberData();
+  if (status === "loading") return <div className="notice">Loading current members...</div>;
+  if (status === "error") return <div className="notice"><strong>Current member data could not be loaded.</strong>{error && <span> {error}</span>} <button className="filterButton" onClick={retry}>Retry</button></div>;
   return (
     <section className="stack">
       <div className="notice">Authorized donor search is for President and Secretary in V1. Results include consented donors only.</div>
@@ -10695,94 +10795,24 @@ function Avatar({ name, large = false }: { name: string; large?: boolean }) {
   return <span className={large ? "avatar large" : "avatar"}>{initials}</span>;
 }
 
-function CommitteeDetail({
-  committee,
-  setScreen
-}: {
-  committee: { id: string; name: string; lead: string; count: number; purpose: string } | null;
-  setScreen: (screen: Screen) => void;
-}) {
-  if (!committee) {
-    return (
-      <section className="stack">
-        <div className="compactPanel">
-          <button className="secondaryButton compactBackButton" onClick={() => setScreen("nav-detail")}>← Back to List</button>
-          <div className="notice memberHelperText">No committee selected.</div>
-        </div>
-      </section>
-    );
-  }
-
-  const committeeMembers: Record<string, string[]> = {
-    "COM-001": ["Lion Secretary User (Lead)", "Lion Bijesh", "Lion Treasurer User", "Lion Ajith Kumar"],
-    "COM-002": ["Lion Treasurer User (Lead)", "Lion Bijesh", "Lion Secretary User", "Lion Ajith Kumar", "Lion Member 5"],
-    "COM-003": ["Lion Bijesh (Lead)", "Lion Secretary User", "Lion Treasurer User", "Lion Ajith Kumar", "Lion Member 5", "Lion Member 6"]
-  };
-
-  const membersList = committeeMembers[committee.id] || ["Lion Bijesh", "Lion Secretary User", "Lion Treasurer User"];
-
+function CommitteeDetail({ committee, setScreen }: { committee: { id: string; name: string; lead: string; count: number; purpose: string } | null; setScreen: (screen: Screen) => void; }) {
+  const [selectedMemberId, setSelectedMemberId] = useState("");
+  if (!committee) return <section className="stack"><div className="compactPanel"><button className="secondaryButton" onClick={() => setScreen("nav-detail")}>← Back to List</button><div className="notice">No committee selected.</div></div></section>;
   return (
     <section className="stack">
-      <div className="compactPanel">
-        <button className="secondaryButton compactBackButton" onClick={() => setScreen("nav-detail")}>← Back to List</button>
-        <Toolbar title="Committee Details" actionLabel="Active Committee" />
-      </div>
-
-      <div className="memberPanel">
-        <div className="toolbar">
-          <h3>Committee Information</h3>
-          <span className="statusPill">{committee.id}</span>
-        </div>
-        <div className="detailGrid">
-          <div className="fieldGrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-            <div className="field">
-              <span className="fieldLabel">Committee Name</span>
-              <strong>{committee.name}</strong>
-            </div>
-            <div className="field">
-              <span className="fieldLabel">Lead / Chair</span>
-              <strong>{committee.lead}</strong>
-            </div>
-            <div className="field">
-              <span className="fieldLabel">Total Members</span>
-              <strong>{committee.count} Members</strong>
-            </div>
-            <div className="field">
-              <span className="fieldLabel">Purpose</span>
-              <strong>{committee.purpose}</strong>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="memberPanel">
-        <Toolbar title="Committee Members" actionLabel="Assigned Rosters" />
-        <div style={{ marginTop: "1rem" }}>
-          <ul style={{ listStyleType: "none", padding: 0, margin: 0 }}>
-            {membersList.map((m, idx) => (
-              <li
-                key={idx}
-                style={{
-                  padding: "0.75rem 1rem",
-                  borderBottom: idx < membersList.length - 1 ? "1px solid rgba(255, 255, 255, 0.1)" : "none",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center"
-                }}
-              >
-                <span>{m}</span>
-                <span className="statusPill" style={{ opacity: 0.8, fontSize: "0.75rem" }}>
-                  {m.includes("(Lead)") ? "Chair" : "Member"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+      <div className="compactPanel"><button className="secondaryButton" onClick={() => setScreen("nav-detail")}>← Back to List</button><Toolbar title="Committee Details" actionLabel="Active Committee" /></div>
+      <div className="memberPanel"><div className="fieldGrid">
+        <Field label="Committee Name" value={committee.name} /><Field label="Lead / Chair" value="Legacy / unlinked" /><Field label="Roster positions" value={`${committee.count}`} /><Field label="Purpose" value={committee.purpose} />
+      </div></div>
+      <div className="memberPanel"><Toolbar title="Committee Member Selector" actionLabel="No automatic assignment" />
+        <div className="notice">The existing dummy roster remains legacy/unlinked. Selecting a current member here does not assign an office.</div>
+        <MemberCollectionState>{(currentMembers) => <label className="moduleSelect">Current member
+          <select value={selectedMemberId} onChange={(event) => setSelectedMemberId(event.target.value)}><option value="">Select a current member</option>{currentMembers.map((member) => <option key={member.id} value={member.id}>{member.name} — {member.id}</option>)}</select>
+        </label>}</MemberCollectionState>
       </div>
     </section>
   );
 }
-
 function EventMeetingDetail({
   item,
   setScreen
