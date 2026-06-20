@@ -1321,6 +1321,54 @@ function sortFellowshipMemberKeys(memberKeys: string[], currentMembers: Member[]
 function displayMemberName(memberKey: string, currentMembers: Member[]) {
   return fellowshipMemberForKey(memberKey, currentMembers)?.name || "Legacy / unlinked member";
 }
+
+type FellowshipMonthLifecycle = "unprepared" | "draft" | "payment_tracking" | "finalised";
+type FellowshipPaymentEntry = { id: string; date: string; amount: number };
+type FellowshipMonthRecord = {
+  key: string;
+  lifecycle: FellowshipMonthLifecycle;
+  totalExpenseInput: string;
+  selectedSponsors: string[];
+  queueStatuses: Record<string, string>;
+  confirmedSponsors: string[];
+  confirmedSharePerSponsor: number;
+  payments: Record<string, number>;
+  paymentHistories: Record<string, FellowshipPaymentEntry[]>;
+  paymentInputs: Record<string, string>;
+  expandedHistories: Record<string, boolean>;
+  transferredOutstanding: number;
+  notice: string | null;
+};
+
+function fellowshipMonthLabel(monthKey: string) {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })
+    .format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+function nextFellowshipMonthKey(monthKey: string) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month, 1));
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function emptyFellowshipMonth(key: string, lifecycle: FellowshipMonthLifecycle = "unprepared"): FellowshipMonthRecord {
+  return {
+    key,
+    lifecycle,
+    totalExpenseInput: "",
+    selectedSponsors: [],
+    queueStatuses: {},
+    confirmedSponsors: [],
+    confirmedSharePerSponsor: 0,
+    payments: {},
+    paymentHistories: {},
+    paymentInputs: {},
+    expandedHistories: {},
+    transferredOutstanding: 0,
+    notice: null
+  };
+}
 export default function Prototype() {
   const [role, setRole] = useState<Role>("president");
   const [screen, setScreen] = useState<Screen>("login");
@@ -1332,6 +1380,12 @@ export default function Prototype() {
   const [memberRefreshKey, setMemberRefreshKey] = useState(0);
 
   const [selectedSponsors, setSelectedSponsors] = useState<string[]>([]);
+  // 3FG compatibility initializer: June/July are normalized once into canonical month-key records.
+  const [fellowshipMonths, setFellowshipMonths] = useState<Record<string, FellowshipMonthRecord>>(() => ({
+    "2026-06": { ...emptyFellowshipMonth("2026-06", "draft"), totalExpenseInput: "10000" },
+    "2026-07": emptyFellowshipMonth("2026-07")
+  }));
+  const [selectedFellowshipMonthKey, setSelectedFellowshipMonthKey] = useState("2026-06");
 
   const [bloodGroup, setBloodGroup] = useState("O+");
   const [fellowshipTab, setFellowshipTab] = useState<"Overview" | "Queue" | "Selected Sponsors" | "Payments" | "History">("Overview");
@@ -1582,6 +1636,13 @@ export default function Prototype() {
   const activeMember = roleUser[role];
 
   function handleSetScreen(nextScreen: Screen) {
+    if (nextScreen === "fellowship-queue") {
+      setFellowshipTab("Queue");
+      nextScreen = "fellowship";
+    } else if (nextScreen === "confirm-sponsors") {
+      setFellowshipTab("Selected Sponsors");
+      nextScreen = "fellowship";
+    }
     setSelectedMember(null);
     setSelectedUpdate(null);
     setSelectedCommittee(null);
@@ -1592,8 +1653,6 @@ export default function Prototype() {
     setProfileBackContext(null);
     if (
       nextScreen !== "fellowship" &&
-      nextScreen !== "fellowship-queue" &&
-      nextScreen !== "confirm-sponsors" &&
       nextScreen !== "fellowship-sponsor-detail"
     ) {
       setSelectedSponsor(null);
@@ -2179,6 +2238,10 @@ export default function Prototype() {
             setLastRecordedPayment={activeSetLastRecordedPayment}
             highlightedSponsor={activeHighlightedSponsor}
             setHighlightedSponsor={activeSetHighlightedSponsor}
+            months={fellowshipMonths}
+            setMonths={setFellowshipMonths}
+            selectedMonthKey={selectedFellowshipMonthKey}
+            setSelectedMonthKey={setSelectedFellowshipMonthKey}
           />
         )}
         {screen === "finance-module" && (
@@ -2268,53 +2331,14 @@ export default function Prototype() {
           <FellowshipDashboard
             role={role}
             member={activeMember}
-            setScreen={handleSetScreen}
             tab={fellowshipTab}
             setTab={setFellowshipTab}
-            selectedSponsors={activeSelectedSponsors}
-            setSelectedSponsors={activeSetSelectedSponsors}
-            tempQueueStatuses={activeTempQueueStatuses}
-            setTempQueueStatuses={activeSetTempQueueStatuses}
-            handleSelectSponsor={handleSelectSponsor}
-            handleSkipHoldSponsor={handleSkipHoldSponsor}
-            handleResetSponsor={handleResetSponsor}
-            setSelectedSponsor={setSelectedSponsor}
-            setSelectedSponsorPayment={setSelectedSponsorPayment}
-            fellowshipConfirmationMessage={fellowshipConfirmationMessage}
-            setFellowshipConfirmationMessage={setFellowshipConfirmationMessage}
-            totalFellowshipExpense={activeTotalFellowshipExpense}
-            totalFellowshipExpenseInput={activeTotalFellowshipExpenseInput}
-            setTotalFellowshipExpenseInput={activeSetTotalFellowshipExpenseInput}
-            sponsorPayments={activeSponsorPayments}
-            setSponsorPayments={activeSetSponsorPayments}
-            sponsorPaymentHistories={activeSponsorPaymentHistories}
-            setSponsorPaymentHistories={activeSetSponsorPaymentHistories}
-            sponsorPaymentInputs={activeSponsorPaymentInputs}
-            setSponsorPaymentInputs={activeSetSponsorPaymentInputs}
-            isFellowshipConfirmed={activeIsFellowshipConfirmed}
-            setIsFellowshipConfirmed={activeSetIsFellowshipConfirmed}
-            confirmedSponsors={activeConfirmedSponsors}
-            setConfirmedSponsors={activeSetConfirmedSponsors}
-            confirmedSharePerSponsor={activeConfirmedSharePerSponsor}
-            setConfirmedSharePerSponsor={activeSetConfirmedSharePerSponsor}
-            isFellowshipMonthClosed={isFellowshipMonthClosed}
-            setIsFellowshipMonthClosed={setIsFellowshipMonthClosed}
-            isJulyRotationActive={isJulyRotationActive}
-            setIsJulyRotationActive={setIsJulyRotationActive}
-            juneSnapshot={juneSnapshot}
-            setJuneSnapshot={setJuneSnapshot}
-            fellowshipOutstandingDues={fellowshipOutstandingDues}
-            setFellowshipOutstandingDues={setFellowshipOutstandingDues}
-            amountPerSponsor={activeAmountPerSponsor}
-            expandedHistories={activeExpandedHistories}
-            setExpandedHistories={activeSetExpandedHistories}
-            lastRecordedPayment={activeLastRecordedPayment}
-            setLastRecordedPayment={activeSetLastRecordedPayment}
-            highlightedSponsor={activeHighlightedSponsor}
-            setHighlightedSponsor={activeSetHighlightedSponsor}
+            months={fellowshipMonths}
+            setMonths={setFellowshipMonths}
+            selectedMonthKey={selectedFellowshipMonthKey}
+            setSelectedMonthKey={setSelectedFellowshipMonthKey}
           />
-        )}
-        {screen === "fellowship-queue" && (
+        )}        {screen === "fellowship-queue" && (
           <FellowshipQueue
             selectedSponsors={activeSelectedSponsors}
             confirmationTitle={activeConfirmationTitle}
@@ -2352,6 +2376,7 @@ export default function Prototype() {
             setExpandedHistories={activeSetExpandedHistories}
             setLastRecordedPayment={activeSetLastRecordedPayment}
             setHighlightedSponsor={activeSetHighlightedSponsor}
+
           />
         )}
         {screen === "fellowship-sponsor-detail" && (
@@ -2650,7 +2675,11 @@ function OperationsModule({
   lastRecordedPayment,
   setLastRecordedPayment,
   highlightedSponsor,
-  setHighlightedSponsor
+  setHighlightedSponsor,
+  months,
+  setMonths,
+  selectedMonthKey,
+  setSelectedMonthKey
 }: {
   section: OperationsSection | null;
   setSection: (section: OperationsSection | null) => void;
@@ -2748,6 +2777,10 @@ function OperationsModule({
   } | null) => void;
   highlightedSponsor: string | null;
   setHighlightedSponsor: (val: string | null) => void;
+  months: Record<string, FellowshipMonthRecord>;
+  setMonths: React.Dispatch<React.SetStateAction<Record<string, FellowshipMonthRecord>>>;
+  selectedMonthKey: string;
+  setSelectedMonthKey: (key: string) => void;
 }) {
   const options: OperationsSection[] = ["Events & Meetings", "Announcements", "Documents", "Projects / Activities", "Fellowship"];
   return (
@@ -2770,50 +2803,12 @@ function OperationsModule({
         <FellowshipDashboard
           role={role}
           member={member}
-          setScreen={setScreen}
           tab={tab}
           setTab={setTab}
-          selectedSponsors={selectedSponsors}
-          setSelectedSponsors={setSelectedSponsors}
-          tempQueueStatuses={tempQueueStatuses}
-          setTempQueueStatuses={setTempQueueStatuses}
-          handleSelectSponsor={handleSelectSponsor}
-          handleSkipHoldSponsor={handleSkipHoldSponsor}
-          handleResetSponsor={handleResetSponsor}
-          setSelectedSponsor={setSelectedSponsor}
-          setSelectedSponsorPayment={setSelectedSponsorPayment}
-          fellowshipConfirmationMessage={fellowshipConfirmationMessage}
-          setFellowshipConfirmationMessage={setFellowshipConfirmationMessage}
-          totalFellowshipExpense={totalFellowshipExpense}
-          totalFellowshipExpenseInput={totalFellowshipExpenseInput}
-          setTotalFellowshipExpenseInput={setTotalFellowshipExpenseInput}
-          sponsorPayments={sponsorPayments}
-          setSponsorPayments={setSponsorPayments}
-          sponsorPaymentHistories={sponsorPaymentHistories}
-          setSponsorPaymentHistories={setSponsorPaymentHistories}
-          sponsorPaymentInputs={sponsorPaymentInputs}
-          setSponsorPaymentInputs={setSponsorPaymentInputs}
-          isFellowshipConfirmed={isFellowshipConfirmed}
-          setIsFellowshipConfirmed={setIsFellowshipConfirmed}
-          confirmedSponsors={confirmedSponsors}
-          setConfirmedSponsors={setConfirmedSponsors}
-          confirmedSharePerSponsor={confirmedSharePerSponsor}
-          setConfirmedSharePerSponsor={setConfirmedSharePerSponsor}
-          isFellowshipMonthClosed={isFellowshipMonthClosed}
-          setIsFellowshipMonthClosed={setIsFellowshipMonthClosed}
-          isJulyRotationActive={isJulyRotationActive}
-          setIsJulyRotationActive={setIsJulyRotationActive}
-          juneSnapshot={juneSnapshot}
-          setJuneSnapshot={setJuneSnapshot}
-          fellowshipOutstandingDues={fellowshipOutstandingDues}
-          setFellowshipOutstandingDues={setFellowshipOutstandingDues}
-          amountPerSponsor={amountPerSponsor}
-          expandedHistories={expandedHistories}
-          setExpandedHistories={setExpandedHistories}
-          lastRecordedPayment={lastRecordedPayment}
-          setLastRecordedPayment={setLastRecordedPayment}
-          highlightedSponsor={highlightedSponsor}
-          setHighlightedSponsor={setHighlightedSponsor}
+          months={months}
+          setMonths={setMonths}
+          selectedMonthKey={selectedMonthKey}
+          setSelectedMonthKey={setSelectedMonthKey}
         />
       )}
     </section>
@@ -5996,1674 +5991,248 @@ function DigitalCard({ member }: { member: Member }) {
 function FellowshipDashboard({
   role,
   member,
-  setScreen,
   tab,
   setTab,
-  selectedSponsors,
-  setSelectedSponsors,
-  tempQueueStatuses,
-  setTempQueueStatuses,
-  handleSelectSponsor,
-  handleSkipHoldSponsor,
-  handleResetSponsor,
-  setSelectedSponsor,
-  setSelectedSponsorPayment,
-  fellowshipConfirmationMessage,
-  setFellowshipConfirmationMessage,
-  totalFellowshipExpense,
-  totalFellowshipExpenseInput,
-  setTotalFellowshipExpenseInput,
-  sponsorPayments,
-  setSponsorPayments,
-  sponsorPaymentHistories,
-  setSponsorPaymentHistories,
-  sponsorPaymentInputs,
-  setSponsorPaymentInputs,
-  isFellowshipConfirmed,
-  setIsFellowshipConfirmed,
-  confirmedSponsors,
-  setConfirmedSponsors,
-  confirmedSharePerSponsor,
-  setConfirmedSharePerSponsor,
-  isFellowshipMonthClosed,
-  setIsFellowshipMonthClosed,
-  isJulyRotationActive,
-  setIsJulyRotationActive,
-  juneSnapshot,
-  setJuneSnapshot,
-  fellowshipOutstandingDues,
-  setFellowshipOutstandingDues,
-  amountPerSponsor,
-  expandedHistories,
-  setExpandedHistories,
-  lastRecordedPayment,
-  setLastRecordedPayment,
-  highlightedSponsor,
-  setHighlightedSponsor
+  months,
+  setMonths,
+  selectedMonthKey,
+  setSelectedMonthKey
 }: {
   role: Role;
   member: Member;
-  setScreen: (screen: Screen) => void;
   tab: FellowshipTab;
   setTab: (tab: FellowshipTab) => void;
-  selectedSponsors: string[];
-  setSelectedSponsors: React.Dispatch<React.SetStateAction<string[]>>;
-  tempQueueStatuses: Record<string, string>;
-  setTempQueueStatuses: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  handleSelectSponsor: (name: string) => void;
-  handleSkipHoldSponsor: (name: string) => void;
-  handleResetSponsor: (name: string) => void;
-  setSelectedSponsor: (sponsor: { memberId: string; name: string; amount: number; amountPaid: number; balanceRemaining: number; paymentStatus: string; status: string; source: "Selected Sponsors" | "Payments" } | null) => void;
-  setSelectedSponsorPayment: (sponsor: { memberId: string; name: string; amount: number; amountPaid: number; balanceRemaining: number; paymentStatus: string; status: string; source: "Payments" } | null) => void;
-  fellowshipConfirmationMessage: string | null;
-  setFellowshipConfirmationMessage: (msg: string | null) => void;
-  totalFellowshipExpense: number;
-  totalFellowshipExpenseInput: string;
-  setTotalFellowshipExpenseInput: (val: string) => void;
-  sponsorPayments: Record<string, number>;
-  setSponsorPayments: React.Dispatch<React.SetStateAction<Record<string, number>>>;
-  sponsorPaymentHistories: Record<string, Array<{ id: string; date: string; amount: number }>>;
-  setSponsorPaymentHistories: React.Dispatch<React.SetStateAction<Record<string, Array<{ id: string; date: string; amount: number }>>>>;
-  sponsorPaymentInputs: Record<string, string>;
-  setSponsorPaymentInputs: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  isFellowshipConfirmed: boolean;
-  setIsFellowshipConfirmed: (val: boolean) => void;
-  confirmedSponsors: string[];
-  setConfirmedSponsors: (val: string[]) => void;
-  confirmedSharePerSponsor: number;
-  setConfirmedSharePerSponsor: (val: number) => void;
-  isFellowshipMonthClosed: boolean;
-  setIsFellowshipMonthClosed: (val: boolean) => void;
-  isJulyRotationActive: boolean;
-  setIsJulyRotationActive: (val: boolean) => void;
-  juneSnapshot: {
-    totalExpense: number;
-    confirmedSponsors: string[];
-    sharePerSponsor: number;
-    payments: Record<string, number>;
-    paymentHistories: Record<string, Array<{ id: string; date: string; amount: number }>>;
-    isClosed: boolean;
-  } | null;
-  setJuneSnapshot: React.Dispatch<React.SetStateAction<{
-    totalExpense: number;
-    confirmedSponsors: string[];
-    sharePerSponsor: number;
-    payments: Record<string, number>;
-    paymentHistories: Record<string, Array<{ id: string; date: string; amount: number }>>;
-    isClosed: boolean;
-  } | null>>;
-  fellowshipOutstandingDues: Array<{
-    id: string;
-    heading: string;
-    memberName: string;
-    month: string;
-    share: number;
-    paid: number;
-    balance: number;
-    source: string;
-    status: string;
-    transferDate: string;
-  }>;
-  setFellowshipOutstandingDues: React.Dispatch<React.SetStateAction<Array<{
-    id: string;
-    heading: string;
-    memberName: string;
-    month: string;
-    share: number;
-    paid: number;
-    balance: number;
-    source: string;
-    status: string;
-    transferDate: string;
-  }>>>;
-  amountPerSponsor: number;
-  expandedHistories: Record<string, boolean>;
-  setExpandedHistories: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  lastRecordedPayment: {
-    memberName: string;
-    paymentAmount: number;
-    cumulativePaid: number;
-    remainingBalance: number;
-    type: "partial" | "full";
-  } | null;
-  setLastRecordedPayment: (val: {
-    memberName: string;
-    paymentAmount: number;
-    cumulativePaid: number;
-    remainingBalance: number;
-    type: "partial" | "full";
-  } | null) => void;
-  highlightedSponsor: string | null;
-  setHighlightedSponsor: (val: string | null) => void;
+  months: Record<string, FellowshipMonthRecord>;
+  setMonths: React.Dispatch<React.SetStateAction<Record<string, FellowshipMonthRecord>>>;
+  selectedMonthKey: string;
+  setSelectedMonthKey: (key: string) => void;
 }) {
-  const { members: currentMembers, status: currentMemberStatus, error: currentMemberError, retry: retryCurrentMembers } = useCurrentMemberData();
-  const canonicalFellowshipSequence = canonicalFellowshipMembers(currentMembers);
-  const completedFellowshipMemberKeys = new Set(juneSnapshot?.confirmedSponsors ?? []);
-  const lastCompletedCanonicalIndex = canonicalFellowshipSequence.reduce(
-    (lastIndex, currentMember, index) => completedFellowshipMemberKeys.has(fellowshipMemberKey(currentMember)) ? index : lastIndex,
-    -1
-  );
-  const nextSuggestedMemberKey = canonicalFellowshipSequence.length
-    ? fellowshipMemberKey(canonicalFellowshipSequence[(lastCompletedCanonicalIndex + 1) % canonicalFellowshipSequence.length])
+  const { members: currentMembers, status, error, retry } = useCurrentMemberData();
+  const [cancelDraftKey, setCancelDraftKey] = useState<string | null>(null);
+  const [cancelPayment, setCancelPayment] = useState<{ memberId: string; paymentId: string } | null>(null);
+  const [editingPayment, setEditingPayment] = useState<{ memberId: string; paymentId: string; amount: string } | null>(null);
+  const [confirmFinalise, setConfirmFinalise] = useState(false);
+  const monthKeys = Object.keys(months).sort();
+  const latestMonthKey = monthKeys[monthKeys.length - 1];
+  const month = months[selectedMonthKey] || months[monthKeys[0]];
+  const monthLabel = fellowshipMonthLabel(month.key);
+  const canonicalSequence = canonicalFellowshipMembers(currentMembers);
+  const confirmedMonths = monthKeys.filter((key) => ["payment_tracking", "finalised"].includes(months[key].lifecycle));
+  const completedByMember = new Map<string, string>();
+  confirmedMonths.forEach((key) => months[key].confirmedSponsors.forEach((memberId) => completedByMember.set(memberId, key)));
+  const latestConfirmed = confirmedMonths.length ? months[confirmedMonths[confirmedMonths.length - 1]] : null;
+  const lastConfirmedId = latestConfirmed?.confirmedSponsors[latestConfirmed.confirmedSponsors.length - 1];
+  const lastConfirmedIndex = canonicalSequence.findIndex((item) => fellowshipMemberKey(item) === lastConfirmedId);
+  const nextSuggestedId = canonicalSequence.length
+    ? fellowshipMemberKey(canonicalSequence[(lastConfirmedIndex + 1 + canonicalSequence.length) % canonicalSequence.length])
     : "";
-  const fellowshipQueue = canonicalFellowshipSequence.map((currentMember, index) => {
-    const member = fellowshipMemberKey(currentMember);
-    return {
-      order: index + 1,
-      member,
-      status: "Eligible",
-      last: completedFellowshipMemberKeys.has(member) ? "June 2026 completed" : "Not yet recorded",
-      suggested: member === nextSuggestedMemberKey
-    };
-  });
-  const sponsorName = (memberId: string) => displayMemberName(memberId, currentMembers);
-  const [memberActionMessage, setMemberActionMessage] = useState<string | null>(null);
-  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
-  const [editingPaymentAmount, setEditingPaymentAmount] = useState<string>("");
-  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
-  const [paymentValidationErrors, setPaymentValidationErrors] = useState<Record<string, string>>({});
+  const parsedExpense = Number(month.totalExpenseInput);
+  const validExpense = /^\d+(\.\d*)?$/.test(month.totalExpenseInput.trim()) && Number.isFinite(parsedExpense) && parsedExpense > 0;
+  const draftShare = validExpense && month.selectedSponsors.length ? parsedExpense / month.selectedSponsors.length : 0;
+  const activeSponsors = month.lifecycle === "draft" ? month.selectedSponsors : month.confirmedSponsors;
+  const share = month.lifecycle === "draft" ? draftShare : month.confirmedSharePerSponsor;
+  const totalPaid = month.confirmedSponsors.reduce((sum, memberId) => sum + (month.payments[memberId] || 0), 0);
+  const hasTransactions = Object.values(month.payments).some((amount) => amount > 0)
+    || Object.values(month.paymentHistories).some((history) => history.length > 0);
+  const canCancelDraft = month.lifecycle === "draft" && month.confirmedSponsors.length === 0 && !hasTransactions;
+  const cancellationExplanation = month.lifecycle === "finalised"
+    ? "Finalised Fellowship accounts cannot be changed."
+    : month.lifecycle === "payment_tracking" && hasTransactions
+      ? "This month cannot be cancelled after payment recording has started."
+      : month.lifecycle === "payment_tracking"
+        ? "This month cannot be cancelled because sponsor confirmation is complete."
+        : month.lifecycle === "unprepared"
+          ? "This month has not been prepared, so there is no draft to cancel."
+          : "Draft cancellation is unavailable while confirmed or payment data exists.";
 
-  const sponsorCardRefs = useRef<Record<string, HTMLElement | null>>({});
-  const sponsorInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  useEffect(() => {
-    if (!highlightedSponsor) return;
-
-    sponsorCardRefs.current[highlightedSponsor]?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-
-    sponsorInputRefs.current[highlightedSponsor]?.focus();
-  }, [highlightedSponsor]);
-
-  if (currentMemberStatus === "loading") return <div className="notice">Loading current members...</div>;
-  if (currentMemberStatus === "error") return <div className="notice"><strong>Current member data could not be loaded.</strong>{currentMemberError && <span> {currentMemberError}</span>} <button className="filterButton" onClick={retryCurrentMembers}>Retry</button></div>;
-  if (currentMembers.length === 0) return <div className="notice">No current members are available.</div>;
-
-  if (role === "member") {
-    return (
-      <MemberFellowship
-        member={member}
-        selectedSponsors={selectedSponsors}
-        memberActionMessage={memberActionMessage}
-        setMemberActionMessage={setMemberActionMessage}
-        amountPerSponsor={amountPerSponsor}
-      />
-    );
+  function updateMonth(key: string, updater: (current: FellowshipMonthRecord) => FellowshipMonthRecord) {
+    setMonths((current) => ({ ...current, [key]: updater(current[key]) }));
   }
 
-  const tabs: typeof tab[] = ["Overview", "Queue", "Selected Sponsors", "Payments", "History"];
-  const activeMonthClosed = isJulyRotationActive ? false : isFellowshipMonthClosed;
-  const activeMonthLabel = isJulyRotationActive ? "July 2026" : "June 2026";
-  const progressByTab: Record<typeof tab, string> = {
-    Overview: activeMonthClosed ? "Step 7 — Accounts Finalised" : isFellowshipConfirmed ? "Step 5 — Record payments" : "Step 4 — Review & confirm",
-    Queue: activeMonthClosed ? "Step 7 — Accounts Finalised" : "Step 2 — Select members responsible",
-    "Selected Sponsors": activeMonthClosed ? "Step 7 — Accounts Finalised" : "Step 3 — Review sponsor selection",
-    Payments: activeMonthClosed ? "Step 7 — Accounts Finalised" : "Step 5 — Record sponsor payments",
-    History: isFellowshipMonthClosed ? "Step 7 — Accounts Finalised" : "Step 6 — Finalise Accounts"
-  };
+  function prepareSelectedMonth() {
+    if (month.key !== latestMonthKey || month.lifecycle !== "unprepared" || monthKeys.some((key) => months[key].lifecycle === "draft")) return;
+    updateMonth(month.key, (current) => ({ ...emptyFellowshipMonth(current.key, "draft"), notice: `Success: ${monthLabel} sponsor rotation is prepared.` }));
+  }
 
-  const parsed = parseFloat(totalFellowshipExpenseInput);
-  const isValidExpense = !isNaN(parsed) && parsed > 0 && /^\d+(\.\d*)?$/.test(totalFellowshipExpenseInput.trim());
-  const displayStatus = activeMonthClosed
-    ? "June Accounts — Finalised"
-    : isFellowshipConfirmed
-      ? `${activeMonthLabel} Payment Tracking Open`
-      : "Awaiting Sponsor Confirmation";
-  const isConfirmDisabled = selectedSponsors.length === 0 || !isValidExpense;
+  function cancelSelectedDraft() {
+    if (!canCancelDraft || cancelDraftKey !== month.key) return;
+    updateMonth(month.key, (current) => ({ ...emptyFellowshipMonth(current.key), notice: `Success: ${monthLabel} draft was cancelled. The same month is available to prepare again.` }));
+    setCancelDraftKey(null);
+    setTab("Overview");
+  }
 
-  const activeSponsors = sortFellowshipMemberKeys(isFellowshipConfirmed ? confirmedSponsors : selectedSponsors, currentMembers);
-  const activeShare = isFellowshipConfirmed ? confirmedSharePerSponsor : amountPerSponsor;
-  const totalReceived = activeSponsors.reduce((sum, s) => sum + (sponsorPayments[s] || 0), 0);
-  const validationKey = (sponsor: string) => `${activeMonthLabel}:${sponsor}`;
-  const setSponsorValidationError = (sponsor: string, message: string | null) => {
-    const key = validationKey(sponsor);
-    setPaymentValidationErrors((current) => {
-      if (message) return { ...current, [key]: message };
-      const next = { ...current };
-      delete next[key];
-      return next;
+  function confirmSponsors() {
+    if (month.lifecycle !== "draft" || !validExpense || month.selectedSponsors.length === 0) return;
+    const ordered = sortFellowshipMemberKeys(month.selectedSponsors, currentMembers);
+    const nextKey = nextFellowshipMonthKey(month.key);
+    setMonths((current) => {
+      const confirmed = {
+        ...current[month.key],
+        lifecycle: "payment_tracking" as FellowshipMonthLifecycle,
+        selectedSponsors: ordered,
+        confirmedSponsors: ordered,
+        confirmedSharePerSponsor: parsedExpense / ordered.length,
+        payments: {},
+        paymentHistories: {},
+        paymentInputs: {},
+        notice: `Success: ${monthLabel} sponsors are confirmed. Payment tracking is open.`
+      };
+      return current[nextKey] ? { ...current, [month.key]: confirmed } : { ...current, [month.key]: confirmed, [nextKey]: emptyFellowshipMonth(nextKey) };
     });
+    setTab("Payments");
+  }
+
+  function setSponsorSelected(memberId: string) {
+    if (month.lifecycle !== "draft") return;
+    updateMonth(month.key, (current) => {
+      const selected = current.selectedSponsors.includes(memberId)
+        ? current.selectedSponsors.filter((id) => id !== memberId)
+        : sortFellowshipMemberKeys([...current.selectedSponsors, memberId], currentMembers);
+      const queueStatuses = { ...current.queueStatuses };
+      if (selected.includes(memberId)) queueStatuses[memberId] = "Selected";
+      else delete queueStatuses[memberId];
+      return { ...current, selectedSponsors: selected, queueStatuses };
+    });
+  }
+
+  function deferSponsor(memberId: string) {
+    if (month.lifecycle !== "draft") return;
+    updateMonth(month.key, (current) => ({
+      ...current,
+      selectedSponsors: current.selectedSponsors.filter((id) => id !== memberId),
+      queueStatuses: { ...current.queueStatuses, [memberId]: "Deferred for this month" }
+    }));
+  }
+
+  function recordPayment(memberId: string, requestedAmount?: number) {
+    if (month.lifecycle !== "payment_tracking") return;
+    const paid = month.payments[memberId] || 0;
+    const balance = roundFellowshipAmount(month.confirmedSharePerSponsor - paid);
+    const amount = requestedAmount ?? Number(month.paymentInputs[memberId]);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > balance + 0.001) return;
+    const entry = { id: `${month.key}-${memberId}-${Date.now()}`, date: new Date().toLocaleDateString("en-IN"), amount: roundFellowshipAmount(amount) };
+    updateMonth(month.key, (current) => ({
+      ...current,
+      payments: { ...current.payments, [memberId]: roundFellowshipAmount((current.payments[memberId] || 0) + entry.amount) },
+      paymentHistories: { ...current.paymentHistories, [memberId]: [...(current.paymentHistories[memberId] || []), entry] },
+      paymentInputs: { ...current.paymentInputs, [memberId]: "" },
+      notice: `Success: ${formatSponsorShare(entry.amount)} recorded for ${displayMemberName(memberId, currentMembers)} in ${monthLabel}.`
+    }));
+  }
+
+  function replacePayment(memberId: string, paymentId: string, amount: number) {
+    if (month.lifecycle !== "payment_tracking" || !Number.isFinite(amount) || amount <= 0) return;
+    const history = month.paymentHistories[memberId] || [];
+    const old = history.find((entry) => entry.id === paymentId);
+    if (!old) return;
+    const otherTotal = history.filter((entry) => entry.id !== paymentId).reduce((sum, entry) => sum + entry.amount, 0);
+    if (otherTotal + amount > month.confirmedSharePerSponsor + 0.001) return;
+    updateMonth(month.key, (current) => ({
+      ...current,
+      payments: { ...current.payments, [memberId]: roundFellowshipAmount(otherTotal + amount) },
+      paymentHistories: { ...current.paymentHistories, [memberId]: history.map((entry) => entry.id === paymentId ? { ...entry, amount: roundFellowshipAmount(amount) } : entry) },
+      notice: `Success: the selected ${monthLabel} payment was updated.`
+    }));
+    setEditingPayment(null);
+  }
+
+  function removePayment(memberId: string, paymentId: string) {
+    if (month.lifecycle !== "payment_tracking" || cancelPayment?.paymentId !== paymentId) return;
+    const history = (month.paymentHistories[memberId] || []).filter((entry) => entry.id !== paymentId);
+    updateMonth(month.key, (current) => ({
+      ...current,
+      payments: { ...current.payments, [memberId]: roundFellowshipAmount(history.reduce((sum, entry) => sum + entry.amount, 0)) },
+      paymentHistories: { ...current.paymentHistories, [memberId]: history },
+      notice: `Success: only the selected ${monthLabel} payment transaction was cancelled.`
+    }));
+    setCancelPayment(null);
+  }
+
+  function finaliseMonth() {
+    if (month.lifecycle !== "payment_tracking" || !confirmFinalise) return;
+    const outstanding = month.confirmedSponsors.reduce((sum, memberId) => sum + Math.max(0, month.confirmedSharePerSponsor - (month.payments[memberId] || 0)), 0);
+    updateMonth(month.key, (current) => ({
+      ...current,
+      lifecycle: "finalised",
+      transferredOutstanding: roundFellowshipAmount(outstanding),
+      notice: `Success: ${monthLabel} Fellowship accounts are finalised and read-only.`
+    }));
+    setConfirmFinalise(false);
+  }
+
+  if (status === "loading") return <div className="notice">Loading current members...</div>;
+  if (status === "error") return <div className="notice"><strong>Current member data could not be loaded.</strong> {error} <button className="filterButton" onClick={retry}>Retry</button></div>;
+  if (!month) return <div className="notice">Fellowship month state is unavailable.</div>;
+  if (role === "member") return <MemberFellowship member={member} selectedSponsors={activeSponsors} memberActionMessage={month.notice} setMemberActionMessage={() => undefined} amountPerSponsor={share} />;
+
+  const lifecycleLabel: Record<FellowshipMonthLifecycle, string> = {
+    unprepared: "Unprepared",
+    draft: "Draft — Sponsor Selection",
+    payment_tracking: "Payment Tracking Open",
+    finalised: "Finalised — Read-only"
   };
 
   return (
-    <section className="stack">
+    <section className="stack" style={{ minWidth: 0 }}>
       <div className="compactPanel">
-        <div className="toolbar">
-          <div>
-            <p className="eyebrow">{`Fellowship Sponsorship - ${activeMonthLabel}`}</p>
-            <h2>Guided sponsor workflow</h2>
-          </div>
-          <span className="statusPill">{isJulyRotationActive && !isFellowshipConfirmed ? "July Rotation — Active / Open" : displayStatus}</span>
+        <div className="toolbar" style={{ gap: "12px", flexWrap: "wrap" }}>
+          <div><p className="eyebrow">Fellowship Sponsorship — {monthLabel}</p><h2>Month lifecycle</h2></div>
+          <span className="statusPill">{lifecycleLabel[month.lifecycle]}</span>
         </div>
         <div className="metricsGrid">
-          <Metric label="Month" value={activeMonthLabel} />
-          <Metric label="Status" value={isJulyRotationActive && !isFellowshipConfirmed ? "July Rotation — Active / Open" : displayStatus} />
-          <Metric label="Progress" value={progressByTab[tab]} />
-          <Metric label="Current section" value={tab === "History" ? "Month Summary" : tab === "Queue" ? "Sponsor Rotation" : tab} />
+          <Metric label="Selected month" value={monthLabel} />
+          <Metric label="Month key" value={month.key} />
+          <Metric label="Lifecycle" value={lifecycleLabel[month.lifecycle]} />
+          <Metric label="Next chronological month" value={fellowshipMonthLabel(nextFellowshipMonthKey(latestMonthKey))} />
         </div>
-        <div style={{ display: "flex", gap: "16px", marginTop: "12px", alignItems: "flex-end" }}>
-          <label className="moduleSelect" style={{ margin: 0, flex: 1 }}>
-            Fellowship section
-            <select value={tab} onChange={(event) => { setTab(event.target.value as typeof tab); setHighlightedSponsor(null); }}>
-              {tabs.map((item) => (
-                <option key={item} value={item}>
-                  {item === "History" ? "Month Summary" : item === "Queue" ? "Sponsor Rotation" : item}
-                </option>
-              ))}
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "12px" }}>
+          <label className="moduleSelect" style={{ flex: "1 1 220px", margin: 0 }}>Fellowship month
+            <select value={month.key} onChange={(event) => { setSelectedMonthKey(event.target.value); setConfirmFinalise(false); setCancelDraftKey(null); }}>
+              {monthKeys.map((key) => <option key={key} value={key}>{fellowshipMonthLabel(key)} — {lifecycleLabel[months[key].lifecycle]}</option>)}
             </select>
           </label>
-          <label className="moduleSelect" style={{ margin: 0, flex: 1 }}>
-            {isJulyRotationActive ? "July fellowship expense (₹)" : "Total fellowship expense (₹)"}
-            <input
-              type="text"
-              value={totalFellowshipExpenseInput}
-              onChange={(event) => setTotalFellowshipExpenseInput(event.target.value)}
-              disabled={isFellowshipConfirmed}
-              placeholder={isJulyRotationActive ? "Enter July expense" : "10000"}
-              style={{
-                width: "100%",
-                padding: "8px",
-                border: "1px solid #ccc",
-                borderRadius: "4px",
-                boxSizing: "border-box",
-                fontSize: "0.95rem"
-              }}
-            />
+          <label className="moduleSelect" style={{ flex: "1 1 220px", margin: 0 }}>Fellowship section
+            <select value={tab} onChange={(event) => setTab(event.target.value as FellowshipTab)}>
+              <option value="Overview">Overview</option><option value="Queue">Sponsor Rotation</option><option value="Selected Sponsors">Selected Sponsors / Review</option><option value="Payments">Payments & History</option><option value="History">Month Summary</option>
+            </select>
           </label>
         </div>
       </div>
 
-      {isFellowshipConfirmed && !activeMonthClosed && (
-        totalReceived === 0 ? (
-          <div className="notice" style={{ backgroundColor: "#e8f0fe", color: "#1a73e8", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>This month’s sponsors are confirmed. Reopen the selection before changing the expense or sponsors.</span>
-            <button
-              style={{ padding: "6px 12px", fontSize: "0.85rem", whiteSpace: "nowrap" }}
-              onClick={() => {
-                setIsFellowshipConfirmed(false);
-                setConfirmedSponsors([]);
-                setConfirmedSharePerSponsor(0);
-                setHighlightedSponsor(null);
-                setLastRecordedPayment(null);
-                setFellowshipConfirmationMessage("Sponsor selection has been reopened for editing.");
-              }}
-            >
-              Reopen Sponsor Selection
-            </button>
-          </div>
-        ) : (
-          <div className="notice" style={{ backgroundColor: "#fce8e6", color: "#c5221f" }}>
-            Sponsor selection cannot be changed after payment recording has started.
-          </div>
-        )
-      )}
+      {month.notice && <div className="notice" style={{ backgroundColor: "#e6f4ea", color: "#137333" }}>{month.notice}</div>}
 
-      {fellowshipConfirmationMessage && (
-        <div
-          className="notice"
-          style={{
-            backgroundColor: "#e6f4ea",
-            color: "#137333",
-            borderColor: "#34a853",
-            padding: "12px 16px",
-            borderRadius: "8px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center"
-          }}
-        >
-          <span>{fellowshipConfirmationMessage}</span>
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              color: "#137333",
-              cursor: "pointer",
-              fontWeight: "bold",
-              fontSize: "1.1rem"
-            }}
-            onClick={() => setFellowshipConfirmationMessage(null)}
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {tab === "Overview" && (
-        <div className="stack" style={{ gap: "1.5rem" }}>
-          {/* Section 1: June 2026 Fellowship Accounts */}
-          <div className="compactPanel" style={{ border: "1px solid #dadce0", borderRadius: "8px", padding: "16px", backgroundColor: "#fff" }}>
-            <h3 style={{ margin: "0 0 12px 0", fontSize: "1.1rem", color: isFellowshipMonthClosed ? "#137333" : "#1a73e8" }}>
-              June 2026 Fellowship Accounts — {isFellowshipMonthClosed ? "Finalised" : (isFellowshipConfirmed ? "Payment Tracking Open" : "Sponsor Selection In Progress")}
-            </h3>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "0.9rem" }}>
-              <div>June Total Expense: <strong>{formatSponsorShare(isFellowshipMonthClosed ? (juneSnapshot?.totalExpense || 0) : totalFellowshipExpense)}</strong></div>
-              <div>June Confirmed Sponsors: <strong>{isFellowshipMonthClosed ? `${juneSnapshot?.confirmedSponsors.length || 0} sponsors` : `${confirmedSponsors.length} sponsors`}</strong></div>
-              <div>June Share per Sponsor: <strong>{isFellowshipMonthClosed ? formatSponsorShare(juneSnapshot?.sharePerSponsor || 0) : formatSponsorShare(confirmedSharePerSponsor)}</strong></div>
-
-              {(() => {
-                const paidVal = isFellowshipMonthClosed
-                  ? (juneSnapshot?.confirmedSponsors.reduce((sum, s) => sum + (juneSnapshot.payments[s] || 0), 0) || 0)
-                  : (isFellowshipConfirmed ? confirmedSponsors.reduce((sum, s) => sum + (sponsorPayments[s] || 0), 0) : 0);
-
-                const pendingVal = isFellowshipMonthClosed
-                  ? (juneSnapshot?.confirmedSponsors.reduce((sum, s) => sum + Math.max(0, juneSnapshot.sharePerSponsor - (juneSnapshot.payments[s] || 0)), 0) || 0)
-                  : (isFellowshipConfirmed ? confirmedSponsors.reduce((sum, s) => sum + Math.max(0, confirmedSharePerSponsor - (sponsorPayments[s] || 0)), 0) : 0);
-
-                return (
-                  <>
-                    <div>June Amount Received: <strong>{formatSponsorShare(paidVal)}</strong></div>
-                    <div>June Outstanding Balance: <strong>{formatSponsorShare(pendingVal)}</strong></div>
-                  </>
-                );
-              })()}
-              <div>June Accounts Status: <span className="tag" style={{ backgroundColor: isFellowshipMonthClosed ? "#e6f4ea" : "#fff3cd", color: isFellowshipMonthClosed ? "#137333" : "#664d03", padding: "2px 6px", borderRadius: "4px" }}>
-                {isFellowshipMonthClosed ? "June Accounts — Finalised" : (isFellowshipConfirmed ? "June Accounts — Payment Tracking Open" : "Sponsor Selection In Progress")}
-              </span></div>
-            </div>
-
-            {!isFellowshipMonthClosed && (
-              <div style={{ marginTop: "12px", borderTop: "1px dashed #dadce0", paddingTop: "12px" }}>
-                <p style={{ margin: "0 0 10px 0", fontSize: "0.85rem", color: "#5f6368", lineHeight: "1.4" }}>
-                  “Finalising the month completes June’s fellowship payment tracking. Any unpaid fellowship balance will be transferred to the concerned member’s outstanding dues. This does not affect the July sponsor rotation.”
-                </p>
-                {isFellowshipConfirmed && confirmedSponsors.length > 0 && totalFellowshipExpense > 0 ? (
-                  <button
-                    className="filterButton"
-                    onClick={() => setTab("History")}
-                  >
-                    Go to Month Summary to Finalise June Accounts
-                  </button>
-                ) : (
-                  <div className="notice" style={{ margin: 0, backgroundColor: "#fff3cd", color: "#664d03" }}>
-                    Complete and confirm the June sponsor selection before June accounts can be finalised.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {isFellowshipMonthClosed && fellowshipOutstandingDues.length > 0 && (
-              <div style={{ marginTop: "12px", borderTop: "1px dashed #dadce0", paddingTop: "12px" }}>
-                <strong>June Transferred Outstanding Dues:</strong>
-                <div className="stack" style={{ gap: "6px", marginTop: "6px" }}>
-                  {fellowshipOutstandingDues.map(due => (
-                    <div key={due.id} style={{ fontSize: "0.85rem", padding: "6px", backgroundColor: "#fdf8e2", border: "1px solid #f0c36d", borderRadius: "4px", display: "flex", justifyContent: "space-between" }}>
-                      <span>{due.memberName}</span>
-                      <strong style={{ color: "#b06000" }}>{formatSponsorShare(due.balance)}</strong>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Section 2: July 2026 Sponsor Rotation */}
-          <div className="compactPanel" style={{ border: "1px solid #dadce0", borderRadius: "8px", padding: "16px", backgroundColor: "#fff" }}>
-            <h3 style={{ margin: "0 0 12px 0", fontSize: "1.1rem", color: isJulyRotationActive ? "#137333" : "#5f6368" }}>
-              July 2026 Sponsor Rotation — {isJulyRotationActive ? "Active / Open" : "Not Prepared"}
-            </h3>
-
-            {isJulyRotationActive ? (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "0.9rem" }}>
-                <div>July Selected Members: <strong>{selectedSponsors.length} selected</strong></div>
-                <div>July Total Expense Input: <strong>{totalFellowshipExpenseInput || "Not entered (₹0.00)"}</strong></div>
-                <div>July Calculated Share: <strong>{formatSponsorShare(amountPerSponsor)}</strong></div>
-                <div>July Status: <span className="tag" style={{ backgroundColor: "#e8f0fe", color: "#1a73e8", padding: "2px 6px", borderRadius: "4px" }}>Active / Open</span></div>
-
-                <div style={{ gridColumn: "span 2", marginTop: "12px" }}>
-                  <button className="filterButton" onClick={() => setTab("Queue")}>Open July Sponsor Rotation</button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <p style={{ margin: "0 0 12px 0", fontSize: "0.9rem", color: "#5f6368" }}>
-                  Prepare July sponsor rotation independently of June payments completion.
-                </p>
-                <button
-                  className="secondaryButton"
-                  onClick={() => {
-                    setIsJulyRotationActive(true);
-                    setHighlightedSponsor(null);
-                    setLastRecordedPayment(null);
-                    setFellowshipConfirmationMessage("Success: July 2026 sponsor rotation is now active and ready for configuration.");
-                  }}
-                >
-                  Prepare July 2026 Sponsor Rotation
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* How to read this workflow instructions */}
-          <div className="compactPanel" style={{ backgroundColor: "#f8f9fa", border: "1px solid #dadce0", borderRadius: "8px", padding: "16px" }}>
-            <h3 style={{ margin: "0 0 12px 0", fontSize: "1rem", color: "#202124" }}>Fellowship sponsorship guidelines</h3>
-            <p style={{ margin: 0, fontSize: "0.85rem", color: "#5f6368", lineHeight: "1.4" }}>
-              Configure member rotations, review selected sponsors, start payment tracking, record payments with collapsible audit trails, and finalize accounts at the end of the billing period.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {tab === "Queue" && (
+      {canCancelDraft ? (
         <div className="compactPanel">
-          <Toolbar title={isJulyRotationActive ? "July Sponsor Rotation" : "Members Due for Sponsorship"} actionLabel="System suggests next members" />
-
-          {!isValidExpense ? (
-            <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-              Enter the total fellowship expense.
-            </div>
-          ) : selectedSponsors.length === 0 ? (
-            <div className="stack" style={{ gap: "8px", marginBottom: "1rem" }}>
-              <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", fontSize: "0.9rem" }}>
-                <strong>Each member's share: ₹0.00</strong>
-              </div>
-              <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", fontSize: "0.9rem" }}>
-                Select sponsors first to calculate each member’s share.
-              </div>
-              <div style={{ fontSize: "0.8rem", color: "#5f6368", padding: "0 12px" }}>
-                * Final accounting can apply rounding rules before payment records are created.
-              </div>
-            </div>
-          ) : (
-            <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-              <strong>Each member's share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
-              <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "4px" }}>
-                * Final accounting can apply rounding rules before payment records are created.
-              </div>
-            </div>
-          )}
-
-          <div className="stack" style={{ gap: "0.75rem", marginBottom: "1rem" }}>
-            {fellowshipQueue.map((item) => {
-              const isSelected = selectedSponsors.includes(item.member);
-              const currentStatus = tempQueueStatuses[item.member] || item.status;
-              let statusClass = "queueItem";
-              if (isSelected) statusClass = "queueItem selected";
-              else if (currentStatus === "Deferred for this month") statusClass = "queueItem skipped";
-
-              const displayStatus = isSelected ? "Selected for this month" :
-                                    currentStatus === "Deferred for this month" ? "Deferred for this month" :
-                                    item.suggested && currentStatus === "Eligible" ? "Next suggested sponsor" :
-                                currentStatus === "Eligible" ? "Due for sponsorship" : currentStatus;
-
-              return (
-                <div
-                  className={statusClass}
-                  key={item.member}
-                  data-member-id={item.member}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "10px 14px",
-                    border: "1px solid #dadce0",
-                    borderRadius: "6px",
-                    backgroundColor: isSelected ? "#e8f0fe" : currentStatus === "Deferred for this month" ? "#fce8e6" : "#fff",
-                    borderColor: isSelected ? "#1a73e8" : currentStatus === "Deferred for this month" ? "#d93025" : "#dadce0"
-                  }}
-                >
-                  <div>
-                    <strong>{item.order}. {sponsorName(item.member)}</strong>
-                    <div style={{ fontSize: "0.85rem", opacity: 0.8 }}>
-                      Status: <span className="tag">{displayStatus}</span> • Last turn: {item.last}
-                    </div>
-                  </div>
-                  <div className="buttonRow" style={{ margin: 0, gap: "6px" }}>
-                    {isSelected ? (
-                      <button
-                        className="filterButton"
-                        style={{ padding: "4px 8px", fontSize: "0.8rem" }}
-                        onClick={() => handleSelectSponsor(item.member)}
-                        disabled={isFellowshipConfirmed}
-                      >
-                        Deselect
-                      </button>
-                    ) : currentStatus === "Deferred for this month" ? (
-                      <button
-                        className="filterButton secondaryButton"
-                        style={{ padding: "4px 8px", fontSize: "0.8rem" }}
-                        onClick={() => handleResetSponsor(item.member)}
-                        disabled={isFellowshipConfirmed}
-                      >
-                        Restore to Rotation
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          className="filterButton"
-                          style={{ padding: "4px 8px", fontSize: "0.8rem" }}
-                          onClick={() => handleSelectSponsor(item.member)}
-                          disabled={isFellowshipConfirmed}
-                        >
-                          Select
-                        </button>
-                        <button
-                          className="filterButton secondaryButton"
-                          style={{ padding: "4px 8px", fontSize: "0.8rem", color: "#d93025", borderColor: "#fce8e6" }}
-                        onClick={() => handleSkipHoldSponsor(item.member)}
-                        disabled={isFellowshipConfirmed}
-                      >
-                          Defer This Month
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="stack" style={{ gap: "6px" }}>
-            {selectedSponsors.length === 0 && (
-              <div style={{ color: "#5f6368", fontSize: "0.85rem" }}>Select at least one sponsor to continue.</div>
-            )}
-            <button
-              disabled={selectedSponsors.length === 0}
-              onClick={() => {
-                setTab("Selected Sponsors");
-                setScreen("fellowship");
-              }}
-            >
-              Review Selected Sponsors
-            </button>
-          </div>
+          {cancelDraftKey === month.key ? <div className="stack"><strong>Cancel {monthLabel} Draft?</strong><span>This removes only {monthLabel} draft selections, defer decisions and draft calculations. Confirmed history and every other month stay unchanged.</span><div className="buttonRow"><button className="secondaryButton" onClick={cancelSelectedDraft}>Confirm Cancel {monthLabel} Draft</button><button onClick={() => setCancelDraftKey(null)}>Return Without Cancelling</button></div></div>
+            : <button className="secondaryButton" onClick={() => setCancelDraftKey(month.key)}>Cancel {monthLabel} Draft</button>}
         </div>
-      )}
+      ) : <div className="notice">{cancellationExplanation}</div>}
 
-      {tab === "Selected Sponsors" && (
-        <div className="compactPanel">
-          <Toolbar title={isJulyRotationActive ? "July Selected Sponsors" : "Selected Sponsors"} actionLabel={isFellowshipConfirmed ? "Confirmed" : `${activeSponsors.length} selected`} />
+      {tab === "Overview" && <div className="stack">
+        <div className="compactPanel"><Toolbar title={`${monthLabel} Fellowship Overview`} actionLabel={lifecycleLabel[month.lifecycle]} /><div className="metricsGrid"><Metric label="Total expense" value={validExpense ? formatSponsorShare(parsedExpense) : "₹0.00"} /><Metric label="Selected sponsors" value={`${month.selectedSponsors.length}`} /><Metric label="Confirmed sponsors" value={`${month.confirmedSponsors.length}`} /><Metric label="Amount received" value={formatSponsorShare(totalPaid)} /></div></div>
+        {month.lifecycle === "unprepared" && <div className="compactPanel"><p>Only the immediate next chronological month can be prepared. No payments, history, balances or finalisation state are copied.</p><button disabled={month.key !== latestMonthKey || monthKeys.some((key) => months[key].lifecycle === "draft")} onClick={prepareSelectedMonth}>Prepare {monthLabel} Sponsor Rotation</button></div>}
+        {month.lifecycle !== "unprepared" && <button onClick={() => setTab("Queue")}>Open {monthLabel} Sponsor Rotation</button>}
+      </div>}
 
-          {!isValidExpense ? (
-            <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-              Enter the total fellowship expense.
-            </div>
-          ) : activeSponsors.length === 0 ? (
-            <div className="stack" style={{ gap: "8px", marginBottom: "1rem" }}>
-              <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", fontSize: "0.9rem" }}>
-                <strong>Each member's share: ₹0.00</strong>
-              </div>
-              <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", fontSize: "0.9rem" }}>
-                Select sponsors first to calculate each member’s share.
-              </div>
-              <div style={{ fontSize: "0.8rem", color: "#5f6368", padding: "0 12px" }}>
-                * Final accounting can apply rounding rules before payment records are created.
-              </div>
-            </div>
-          ) : (
-            <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-              <strong>Each member's share: {formatSponsorShare(activeShare)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {activeSponsors.length} sponsors).
-              <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "4px" }}>
-                * Final accounting can apply rounding rules before payment records are created.
-              </div>
-            </div>
-          )}
+      {tab === "Queue" && <div className="stack">
+        <div className="compactPanel"><Toolbar title={`${monthLabel} Sponsor Rotation`} actionLabel={lifecycleLabel[month.lifecycle]} /><label className="moduleSelect">{monthLabel} total Fellowship expense (₹)<input value={month.totalExpenseInput} disabled={month.lifecycle !== "draft"} onChange={(event) => updateMonth(month.key, (current) => ({ ...current, totalExpenseInput: event.target.value }))} /></label><div className="notice">Next suggested member: <strong>{nextSuggestedId ? displayMemberName(nextSuggestedId, currentMembers) : "Unavailable"}</strong>. Drafts and cancellations do not consume turns.</div></div>
+        {month.lifecycle === "unprepared" ? <div className="notice">Prepare {monthLabel} before selecting sponsors.</div> : <div className="financeCardList">{canonicalSequence.map((currentMember, index) => { const memberId=fellowshipMemberKey(currentMember); const queueStatus=month.queueStatuses[memberId]; const editable=month.lifecycle === "draft"; return <article className="financeStackCard" key={memberId}><div className="toolbar"><div><strong>{index + 1}. {currentMember.name}</strong><small>{completedByMember.has(memberId) ? `${fellowshipMonthLabel(completedByMember.get(memberId)!)} confirmed` : "No confirmed turn recorded"}</small></div><span className="tag">{memberId === nextSuggestedId ? "Next suggested" : queueStatus || "Eligible"}</span></div>{editable && <div className="buttonRow"><button onClick={() => setSponsorSelected(memberId)}>{month.selectedSponsors.includes(memberId) ? "Remove Selection" : "Select Sponsor"}</button><button className="secondaryButton" onClick={() => deferSponsor(memberId)}>Defer This Month</button>{queueStatus && <button className="secondaryButton" onClick={() => updateMonth(month.key,(current)=>{const statuses={...current.queueStatuses}; delete statuses[memberId]; return {...current,queueStatuses:statuses,selectedSponsors:current.selectedSponsors.filter((id)=>id!==memberId)};})}>Reset</button>}</div>}</article>; })}</div>}
+      </div>}
 
-          <div className="selectedSponsorGrid">
-            {activeSponsors.map((sponsor) => {
-              const paid = sponsorPayments[sponsor] || 0;
-              const balance = activeShare - paid;
-              let pStatus = "Selected for this month";
-              if (isFellowshipConfirmed) {
-                if (paid === 0) pStatus = "Not paid";
-                else if (paid > 0 && paid < activeShare - 0.01) pStatus = "Partly paid";
-                else pStatus = "Paid";
-              }
+      {tab === "Selected Sponsors" && <div className="stack">
+        <div className="compactPanel"><Toolbar title={`Review & Confirm ${monthLabel} Sponsors`} actionLabel={lifecycleLabel[month.lifecycle]} /><div className="metricsGrid"><Metric label="Expense" value={validExpense ? formatSponsorShare(parsedExpense) : "₹0.00"} /><Metric label="Sponsor count" value={`${activeSponsors.length}`} /><Metric label="Share per sponsor" value={formatSponsorShare(share)} /><Metric label="State" value={lifecycleLabel[month.lifecycle]} /></div></div>
+        {activeSponsors.length ? <div className="tableLike">{sortFellowshipMemberKeys(activeSponsors,currentMembers).map((memberId,index)=><div className="staticRow" key={memberId}><span>{index+1}</span><strong>{displayMemberName(memberId,currentMembers)}</strong><span>{formatSponsorShare(share)}</span><span className="tag">{month.lifecycle === "draft" ? "Ready to confirm" : "Confirmed"}</span></div>)}</div> : <div className="notice">No sponsors selected for {monthLabel}.</div>}
+        {month.lifecycle === "draft" && <button disabled={!validExpense || month.selectedSponsors.length === 0} onClick={confirmSponsors}>Confirm {monthLabel} Sponsors & Start Payment Tracking</button>}
+        {month.lifecycle === "payment_tracking" && !hasTransactions && <div className="notice" style={{ display:"flex",gap:"12px",flexWrap:"wrap",justifyContent:"space-between" }}><span>Sponsors are confirmed. Reopening is permitted only before payment recording starts.</span><button onClick={() => updateMonth(month.key,(current)=>({...current,lifecycle:"draft",confirmedSponsors:[],confirmedSharePerSponsor:0,notice:`${monthLabel} sponsor selection reopened before payments started.`}))}>Reopen Sponsor Selection</button></div>}
+        {month.lifecycle === "payment_tracking" && hasTransactions && <div className="notice">Sponsor selection cannot be changed after payment recording has started.</div>}
+      </div>}
 
-              return (
-                <article className="selectedSponsorCard" key={sponsor} data-member-id={sponsor}>
-                  <div>
-                    <strong>{sponsorName(sponsor)}</strong>
-                    <span>Fellowship Share: {isValidExpense ? formatSponsorShare(activeShare) : "₹0.00"}</span>
-                    {isFellowshipConfirmed && (
-                      <>
-                        <span>Amount Paid: {formatSponsorShare(paid)}</span>
-                        <span>Balance Remaining: {formatSponsorShare(balance)}</span>
-                      </>
-                    )}
-                    <span>Status: {pStatus}</span>
-                  </div>
-                  <button
-                    className="filterButton"
-                    onClick={() => {
-                      setSelectedSponsor({
-                        memberId: sponsor,
-                        name: sponsorName(sponsor),
-                        amount: activeShare,
-                        amountPaid: paid,
-                        balanceRemaining: balance,
-                        paymentStatus: pStatus,
-                        status: pStatus,
-                        source: "Selected Sponsors"
-                      });
-                      setScreen("fellowship-sponsor-detail");
-                      setHighlightedSponsor(null);
-                    }}
-                  >
-                    Review
-                  </button>
-                </article>
-              );
-            })}
-          </div>
-          {isFellowshipConfirmed ? (
-            <button onClick={() => setTab("Payments")}>
-              View Payment Recording
-            </button>
-          ) : (
-            <div className="stack" style={{ gap: "6px" }}>
-              {isJulyRotationActive && !isValidExpense && (
-                <div className="notice" style={{ margin: 0, backgroundColor: "#fff3cd", color: "#664d03" }}>
-                  Enter the July 2026 total fellowship expense before reviewing and confirming sponsors.
-                </div>
-              )}
-              <button onClick={() => { setScreen("confirm-sponsors"); setHighlightedSponsor(null); }} disabled={isConfirmDisabled}>
-                {`Review & Confirm ${activeMonthLabel} Sponsors`}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+      {tab === "Payments" && <div className="stack"><div className="compactPanel"><Toolbar title={`${monthLabel} Payments`} actionLabel={lifecycleLabel[month.lifecycle]} /><div className="metricsGrid"><Metric label="Share per sponsor" value={formatSponsorShare(month.confirmedSharePerSponsor)} /><Metric label="Received" value={formatSponsorShare(totalPaid)} /><Metric label="Outstanding" value={formatSponsorShare(Math.max(0,month.confirmedSharePerSponsor*month.confirmedSponsors.length-totalPaid))} /><Metric label="Transactions" value={`${Object.values(month.paymentHistories).reduce((sum,history)=>sum+history.length,0)}`} /></div></div>{month.lifecycle === "draft" || month.lifecycle === "unprepared" ? <div className="notice">Confirm {monthLabel} sponsors before recording payments.</div> : month.confirmedSponsors.map((memberId)=>{const paid=month.payments[memberId]||0; const balance=roundFellowshipAmount(month.confirmedSharePerSponsor-paid); const history=month.paymentHistories[memberId]||[]; return <article className="financeStackCard" key={memberId}><div className="toolbar"><div><strong>{displayMemberName(memberId,currentMembers)}</strong><small>{formatSponsorShare(paid)} paid · {formatSponsorShare(balance)} remaining</small></div><span className="tag">{hasPositiveFellowshipBalance(balance)?(paid>0?"Part-paid":"Pending"):"Paid"}</span></div>{month.lifecycle === "payment_tracking" && <div className="buttonRow" style={{flexWrap:"wrap"}}><input aria-label={`Payment for ${displayMemberName(memberId,currentMembers)}`} value={month.paymentInputs[memberId]||""} onChange={(event)=>updateMonth(month.key,(current)=>({...current,paymentInputs:{...current.paymentInputs,[memberId]:event.target.value}}))} /><button disabled={!hasPositiveFellowshipBalance(balance)} onClick={()=>recordPayment(memberId)}>Record Payment</button><button disabled={!hasPositiveFellowshipBalance(balance)} onClick={()=>recordPayment(memberId,balance)}>Record Remaining Balance</button></div>}<div className="stack">{history.map((entry)=><div className="staticRow" key={entry.id}><span>{entry.date}</span><strong>{formatSponsorShare(entry.amount)}</strong>{editingPayment?.paymentId===entry.id?<><input value={editingPayment.amount} onChange={(event)=>setEditingPayment({...editingPayment,amount:event.target.value})}/><button onClick={()=>replacePayment(memberId,entry.id,Number(editingPayment.amount))}>Save</button><button onClick={()=>setEditingPayment(null)}>Return</button></>:cancelPayment?.paymentId===entry.id?<><span>Cancel this exact transaction?</span><button onClick={()=>removePayment(memberId,entry.id)}>Confirm Cancel</button><button onClick={()=>setCancelPayment(null)}>Return</button></>:month.lifecycle === "payment_tracking"?<><button onClick={()=>setEditingPayment({memberId,paymentId:entry.id,amount:String(entry.amount)})}>Edit</button><button onClick={()=>setCancelPayment({memberId,paymentId:entry.id})}>Cancel</button></>:<span className="tag">Read-only</span>}</div>)}</div></article>})}</div>}
 
-      {tab === "Payments" && (
-        <div className="compactPanel">
-          {isFellowshipMonthClosed && (
-            <>
-              <Toolbar title="June 2026 Payment Summary — Closed" actionLabel="Read-only" />
-              {juneSnapshot && (
-                <div className="selectedSponsorGrid" style={{ marginBottom: "1.5rem" }}>
-                  {juneSnapshot.confirmedSponsors.map((sponsor) => {
-                    const paid = juneSnapshot.payments[sponsor] || 0;
-                    const balance = juneSnapshot.sharePerSponsor - paid;
-                    const finalStatus = paid >= juneSnapshot.sharePerSponsor - 0.01 ? "Paid" : "Transferred to member dues";
-                    const history = juneSnapshot.paymentHistories[sponsor] || [];
-                    return (
-                      <article className="selectedSponsorCard" key={sponsor} data-member-id={sponsor}>
-                        <div>
-                          <strong>{sponsorName(sponsor)}</strong>
-                          <span>Fellowship Share: {formatSponsorShare(juneSnapshot.sharePerSponsor)}</span>
-                          <span>Amount Received: {formatSponsorShare(paid)}</span>
-                          {balance > 0.01 ? (
-                            <>
-                              <span>Outstanding Transferred: {formatSponsorShare(balance)}</span>
-                              <div style={{ fontSize: "0.8rem", color: "#b06000", marginTop: "4px" }}>
-                                <strong>Fellowship Sponsorship Due — June 2026</strong> (Transfer: Outstanding)
-                              </div>
-                            </>
-                          ) : (
-                            <span>Outstanding Transferred: ₹0.00</span>
-                          )}
-                          <span>Status: <strong style={{ color: finalStatus === "Paid" ? "#137333" : "#b06000" }}>{finalStatus}</strong></span>
-                        </div>
-
-                        <div style={{ marginTop: "8px", borderTop: "1px dashed #dadce0", paddingTop: "8px" }}>
-                          <button
-                            className="secondaryButton"
-                            style={{ width: "100%", padding: "4px 8px", fontSize: "0.8rem", textAlign: "left", display: "flex", justifyContent: "space-between" }}
-                            onClick={() => setExpandedHistories(prev => ({ ...prev, [sponsor + "-snap"]: !prev[sponsor + "-snap"] }))}
-                          >
-                            <span>View Payment History ({ history.length })</span>
-                            <span>{ expandedHistories[sponsor + "-snap"] ? "▲" : "▼" }</span>
-                          </button>
-                          {expandedHistories[sponsor + "-snap"] && (
-                            <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                              {history.length === 0 ? (
-                                <span style={{ fontSize: "0.85rem", color: "#80868b", fontStyle: "italic" }}>No payment entries recorded.</span>
-                              ) : (
-                                <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
-                                  <thead>
-                                    <tr style={{ borderBottom: "1px solid #dadce0" }}>
-                                      <th style={{ textAlign: "left", padding: "4px 0" }}>Date</th>
-                                      <th style={{ textAlign: "right", padding: "4px 0" }}>Amount</th>
-                                      <th style={{ textAlign: "center", padding: "4px 0" }}>Status</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {history.map((entry) => (
-                                      <tr key={entry.id} style={{ borderBottom: "1px solid #f1f3f4" }}>
-                                        <td style={{ padding: "6px 0", color: "#5f6368" }}>{entry.date}</td>
-                                        <td style={{ padding: "6px 0", textAlign: "right", fontWeight: "bold" }}>{formatSponsorShare(entry.amount)}</td>
-                                        <td style={{ padding: "6px 0", textAlign: "center", color: "#80868b", fontSize: "0.75rem" }}>Locked</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-              <Toolbar title="July 2026 Payment Tracking" actionLabel="July Active Month" />
-            </>
-          )}
-
-          {!activeMonthClosed && (
-            <>
-              <Toolbar title="Record Sponsor Payments" actionLabel="Payment recording mode" />
-
-              <div
-                className="notice"
-                style={{
-                  backgroundColor: "#f8f9fa",
-                  color: "#3c4043",
-                  border: "1px solid #dadce0",
-                  padding: "12px 16px",
-                  borderRadius: "8px",
-                  marginBottom: "1rem",
-                  fontSize: "0.9rem",
-                  lineHeight: "1.4"
-                }}
-              >
-                Record each payment received from the confirmed sponsors. Partial payments are added to the sponsor’s previous payments. Use Month Summary to review the overall collection and outstanding balance.
-              </div>
-
-              {isFellowshipConfirmed && activeSponsors.length > 0 && (() => {
-                const pendingCount = activeSponsors.filter(s => {
-                  const paid = sponsorPayments[s] || 0;
-                  return activeShare - paid > 0.005;
-                }).length;
-
-                if (pendingCount === 0) {
-                  return (
-                    <div
-                      className="notice"
-                      style={{
-                        backgroundColor: "#e6f4ea",
-                        color: "#137333",
-                        border: "1px solid #34a853",
-                        padding: "12px 16px",
-                        borderRadius: "8px",
-                        marginBottom: "1rem",
-                        fontSize: "0.9rem"
-                      }}
-                    >
-                      All confirmed sponsors have fully paid their fellowship shares. You may review the Month Summary or finalise the June fellowship accounts.
-                    </div>
-                  );
-                } else {
-                  return (
-                    <div
-                      className="notice"
-                      style={{
-                        backgroundColor: "#e8f0fe",
-                        color: "#1a73e8",
-                        border: "1px solid #1a73e8",
-                        padding: "12px 16px",
-                        borderRadius: "8px",
-                        marginBottom: "1rem",
-                        fontSize: "0.9rem"
-                      }}
-                    >
-                      {pendingCount === 1
-                        ? "1 sponsor payment still has an outstanding balance. You may continue recording payments or prepare the next month’s sponsor rotation independently."
-                        : `${pendingCount} sponsor payments still have an outstanding balance. You may continue recording payments or prepare the next month’s sponsor rotation independently.`
-                      }
-                    </div>
-                  );
-                }
-              })()}
-
-              {lastRecordedPayment && (
-                <div
-                  className="notice"
-                  style={{
-                    backgroundColor: "#e6f4ea",
-                    color: "#137333",
-                    border: "1px solid #34a853",
-                    padding: "16px",
-                    borderRadius: "8px",
-                    marginBottom: "1rem",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "12px"
-                  }}
-                >
-                  <div style={{ fontWeight: "500", fontSize: "0.95rem" }}>
-                    {`${formatSponsorShare(lastRecordedPayment.paymentAmount)} recorded for ${sponsorName(lastRecordedPayment.memberName)}. Remaining balance: ${formatSponsorShare(lastRecordedPayment.remainingBalance)}.`}
-                  </div>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    {(() => {
-                      const currentSponsorIndex = activeSponsors.indexOf(lastRecordedPayment.memberName);
-                      let nextSponsorExists = false;
-                      for (let i = 1; i < activeSponsors.length; i++) {
-                        const checkIndex = (currentSponsorIndex + i) % activeSponsors.length;
-                        const s = activeSponsors[checkIndex];
-                        const sPaid = sponsorPayments[s] || 0;
-                        if (activeShare - sPaid > 0.005) {
-                          nextSponsorExists = true;
-                          break;
-                        }
-                      }
-
-                      return (
-                        <>
-                          {nextSponsorExists && (
-                            lastRecordedPayment.type === "partial" ? (
-                              <button
-                                className="filterButton"
-                                style={{ backgroundColor: "#137333", color: "#fff", border: "1px solid #137333" }}
-                                onClick={() => {
-                                  let nextSponsorName: string | null = null;
-                                  for (let i = 1; i <= activeSponsors.length; i++) {
-                                    const checkIndex = (currentSponsorIndex + i) % activeSponsors.length;
-                                    const s = activeSponsors[checkIndex];
-                                    const sPaid = sponsorPayments[s] || 0;
-                                    if (activeShare - sPaid > 0.005) {
-                                      nextSponsorName = s;
-                                      break;
-                                    }
-                                  }
-                                  setHighlightedSponsor(nextSponsorName);
-                                  setLastRecordedPayment(null);
-                                }}
-                              >
-                                Record Another Payment
-                              </button>
-                            ) : (
-                              <button
-                                className="filterButton"
-                                style={{ backgroundColor: "#137333", color: "#fff", border: "1px solid #137333" }}
-                                onClick={() => {
-                                  let nextSponsorName: string | null = null;
-                                  for (let i = 1; i <= activeSponsors.length; i++) {
-                                    const checkIndex = (currentSponsorIndex + i) % activeSponsors.length;
-                                    const s = activeSponsors[checkIndex];
-                                    const sPaid = sponsorPayments[s] || 0;
-                                    if (activeShare - sPaid > 0.005) {
-                                      nextSponsorName = s;
-                                      break;
-                                    }
-                                  }
-                                  setHighlightedSponsor(nextSponsorName);
-                                  setLastRecordedPayment(null);
-                                }}
-                              >
-                                Continue to Next Sponsor
-                              </button>
-                            )
-                          )}
-                          <button
-                            className="filterButton"
-                            onClick={() => {
-                              setExpandedHistories(prev => ({ ...prev, [lastRecordedPayment.memberName]: true }));
-                              setLastRecordedPayment(null);
-                              setTimeout(() => {
-                                sponsorCardRefs.current[lastRecordedPayment.memberName]?.scrollIntoView({
-                                  behavior: "smooth",
-                                  block: "center"
-                                });
-                                setHighlightedSponsor(null);
-                              }, 100);
-                            }}
-                          >
-                            View Payment History
-                          </button>
-                          <button
-                            className="filterButton"
-                            onClick={() => {
-                              setTab("History");
-                              setLastRecordedPayment(null);
-                              setHighlightedSponsor(null);
-                            }}
-                          >
-                            Go to Month Summary
-                          </button>
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {!isFellowshipConfirmed && (!activeMonthClosed || (activeMonthClosed && activeSponsors.length === 0)) && (
-            <div className="stack" style={{ gap: "12px", marginBottom: "1rem" }}>
-              <div className="notice" style={{ backgroundColor: "#fff3cd", color: "#664d03" }}>
-                Confirm the selected sponsors before recording payments. Confirmation locks the sponsor list, total expense, and calculated share for this month.
-              </div>
-              <div className="metricsGrid">
-                <Metric label="Active month" value={activeMonthLabel} />
-                <Metric label="Total fellowship expense" value={isValidExpense ? formatSponsorShare(totalFellowshipExpense) : "Not entered"} />
-                <Metric label="Selected sponsors" value={`${selectedSponsors.length}`} />
-                <Metric label="Share per sponsor" value={isValidExpense && selectedSponsors.length > 0 ? formatSponsorShare(amountPerSponsor) : "₹0.00"} />
-              </div>
-              {selectedSponsors.length > 0 && (
-                <div className="selectedSponsorGrid">
-                  {selectedSponsors.map((sponsor) => (
-                    <article className="selectedSponsorCard" key={`payment-preview-${activeMonthLabel}-${sponsor}`}>
-                      <div>
-                        <strong>{sponsorName(sponsor)}</strong>
-                        <span>Fellowship Share: {isValidExpense ? formatSponsorShare(amountPerSponsor) : "₹0.00"}</span>
-                        <span>Amount Paid: ₹0.00</span>
-                        <span>Balance Remaining: {isValidExpense ? formatSponsorShare(amountPerSponsor) : "₹0.00"}</span>
-                        <span>Payment Status: <strong style={{ color: "#b06000" }}>Awaiting confirmation</strong></span>
-                      </div>
-                      <label style={{ fontSize: "0.85rem", color: "#5f6368" }}>
-                        Amount received now (₹):
-                        <input type="text" placeholder="Enter payment received" disabled style={{ width: "100%", padding: "6px", marginTop: "4px", boxSizing: "border-box" }} />
-                      </label>
-                      <button className="filterButton" disabled>Record Payment</button>
-                    </article>
-                  ))}
-                </div>
-              )}
-              <div className="stack" style={{ gap: "6px" }}>
-                {selectedSponsors.length === 0 && <div style={{ color: "#d93025", fontSize: "0.85rem" }}>Select at least one sponsor before confirmation.</div>}
-                {!isValidExpense && <div style={{ color: "#d93025", fontSize: "0.85rem" }}>{`Enter the ${activeMonthLabel} total fellowship expense before confirmation.`}</div>}
-                <button
-                  disabled={isConfirmDisabled}
-                  onClick={() => { setScreen("confirm-sponsors"); setHighlightedSponsor(null); }}
-                >
-                  {`Confirm ${activeMonthLabel} Sponsors and Enable Payment Entry`}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {(isFellowshipConfirmed && activeSponsors.length > 0) && (
-            <>
-              {!isValidExpense ? (
-                <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-                   Enter the total fellowship expense.
-                </div>
-              ) : (
-                <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-                  <strong>Sponsor Share: {formatSponsorShare(activeShare)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {activeSponsors.length} sponsors).
-                  <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "4px" }}>
-                    * Final accounting can apply rounding rules before payment records are created.
-                  </div>
-                </div>
-              )}
-
-              {isValidExpense && (
-                <div className="selectedSponsorGrid">
-                  {activeSponsors.map((sponsor) => {
-                    const paymentHistory = sponsorPaymentHistories[sponsor] || [];
-                    const paid = Math.round((paymentHistory.reduce((sum, entry) => sum + entry.amount, 0) + Number.EPSILON) * 100) / 100;
-                    const balance = Math.max(0, activeShare - paid);
-
-                    let pStatus = "Not paid";
-                    if (paid > 0 && paid < activeShare - 0.01) pStatus = "Partly paid";
-                    else if (paid >= activeShare - 0.01) pStatus = "Paid";
-
-                    const currentInput = sponsorPaymentInputs[sponsor] ?? "";
-                    const payTrimmed = currentInput.trim();
-                    const isValidPayFormat = /^\d+(\.\d*)?$/.test(payTrimmed) || payTrimmed === "." || payTrimmed === "";
-                    const parsedPay = parseFloat(payTrimmed);
-
-                    let inputError: string | null = paymentValidationErrors[validationKey(sponsor)] || null;
-                    if (!isValidPayFormat || payTrimmed === ".") {
-                      inputError = `Enter a valid payment amount for ${sponsorName(sponsor)}.`;
-                    } else if (payTrimmed !== "") {
-                      if (parsedPay <= 0) {
-                        inputError = `The payment for ${sponsorName(sponsor)} must be greater than zero.`;
-                      } else {
-                        const newCumulative = Math.round((paid + parsedPay + Number.EPSILON) * 100) / 100;
-                        if (newCumulative > activeShare + 0.01) {
-                          inputError = `The payment for ${sponsorName(sponsor)} cannot exceed the remaining balance of ${formatSponsorShare(balance)}.`;
-                        }
-                      }
-                    }
-
-                    const isOverpaid = paid > activeShare;
-
-                    const isHighlighted = sponsor === highlightedSponsor;
-                    return (
-                      <article
-                        ref={(el) => { sponsorCardRefs.current[sponsor] = el; }}
-                        className="selectedSponsorCard"
-                        key={sponsor}
-                        data-member-id={sponsor}
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "10px",
-                          border: isHighlighted ? "2px solid #1a73e8" : "1px solid #dadce0",
-                          boxShadow: isHighlighted ? "0 0 10px rgba(26, 115, 232, 0.4)" : "none",
-                          backgroundColor: isHighlighted ? "#e8f0fe" : "#fff",
-                          transition: "all 0.3s ease"
-                        }}
-                      >
-                        <div>
-                          <strong>{sponsorName(sponsor)}</strong>
-                          <span>Fellowship Share: {formatSponsorShare(activeShare)}</span>
-                          <span>Amount Paid: {formatSponsorShare(paid)}</span>
-                          <span>Balance Remaining: {formatSponsorShare(balance)}</span>
-                          <span>Payment Status: <strong style={{ color: pStatus === "Paid" ? "#137333" : pStatus === "Partly paid" ? "#b06000" : "#d93025" }}>{pStatus}</strong></span>
-                        </div>
-
-                        {isOverpaid && (
-                          <div style={{ color: "#c5221f", fontSize: "0.85rem", backgroundColor: "#fce8e6", padding: "6px 8px", borderRadius: "4px" }}>
-                            ⚠️ Warning: Paid amount ({formatSponsorShare(paid)}) exceeds the new fellowship share ({formatSponsorShare(activeShare)}).
-                          </div>
-                        )}
-
-                        <div className="stack" style={{ gap: "6px", width: "100%" }}>
-                          <label style={{ fontSize: "0.85rem", color: "#5f6368" }}>
-                            Amount received now (₹):
-                            <input
-                              ref={(el) => { sponsorInputRefs.current[sponsor] = el; }}
-                              id={`sponsor-input-${sponsor}`}
-                              type="text"
-                              value={currentInput}
-                              placeholder="Enter payment received"
-                              disabled={pStatus === "Paid" || activeMonthClosed}
-                              onChange={(e) => {
-                                setSponsorPaymentInputs(prev => ({ ...prev, [sponsor]: e.target.value }));
-                                setSponsorValidationError(sponsor, null);
-                              }}
-                              onFocus={(e) => {
-                                if (e.target.value === "0") {
-                                  setSponsorPaymentInputs(prev => ({ ...prev, [sponsor]: "" }));
-                                }
-                              }}
-                              style={{
-                                width: "100%",
-                                padding: "6px",
-                                marginTop: "4px",
-                                border: inputError ? "1px solid #d93025" : "1px solid #ccc",
-                                borderRadius: "4px",
-                                fontSize: "0.9rem"
-                              }}
-                            />
-                          </label>
-                          <div style={{ fontSize: "0.8rem", color: "#5f6368" }}>
-                            Enter only the amount received in this transaction. It will be added to the amount already paid.
-                          </div>
-                          <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "2px" }}>
-                            Maximum amount that can now be recorded: {formatSponsorShare(balance)}
-                          </div>
-                          {inputError && (
-                            <div style={{ color: "#d93025", fontSize: "0.8rem" }}>{inputError}</div>
-                          )}
-                          <div style={{ display: "flex", gap: "8px", marginTop: "4px", flexWrap: "wrap" }}>
-                            <button
-                              className="filterButton"
-                              style={{ padding: "4px 8px", fontSize: "0.8rem", flex: 1, minWidth: "120px" }}
-                              disabled={pStatus === "Paid" || activeMonthClosed}
-                              onClick={() => {
-                                const paymentNow = parseFloat(payTrimmed || "0");
-                                if (payTrimmed === "" || payTrimmed === "." || isNaN(paymentNow)) {
-                                  setSponsorValidationError(sponsor, `Enter a valid payment amount for ${sponsorName(sponsor)}.`);
-                                  return;
-                                }
-                                if (paymentNow <= 0) {
-                                  setSponsorValidationError(sponsor, `The payment for ${sponsorName(sponsor)} must be greater than zero.`);
-                                  return;
-                                }
-                                const cumulativePaid = Math.round((paid + paymentNow + Number.EPSILON) * 100) / 100;
-                                if (cumulativePaid > activeShare + 0.01) {
-                                  setSponsorValidationError(sponsor, `The payment for ${sponsorName(sponsor)} cannot exceed the remaining balance of ${formatSponsorShare(balance)}.`);
-                                  return;
-                                }
-
-                                const now = new Date();
-                                const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-                                const newEntry = {
-                                  id: `pay-${Date.now()}-${Math.random()}`,
-                                  date: dateStr,
-                                  amount: paymentNow
-                                };
-
-                                const updatedHistory = [...(sponsorPaymentHistories[sponsor] || []), newEntry];
-                                setSponsorPaymentHistories(prev => ({ ...prev, [sponsor]: updatedHistory }));
-                                setSponsorPayments(prev => ({ ...prev, [sponsor]: cumulativePaid }));
-                                setSponsorPaymentInputs(prev => ({ ...prev, [sponsor]: "" }));
-                                setSponsorValidationError(sponsor, null);
-
-                                const newRemaining = Math.max(0, activeShare - cumulativePaid);
-                                setLastRecordedPayment({
-                                  memberName: sponsor,
-                                  paymentAmount: paymentNow,
-                                  cumulativePaid,
-                                  remainingBalance: newRemaining,
-                                  type: hasPositiveFellowshipBalance(newRemaining) ? "partial" : "full"
-                                });
-                                setHighlightedSponsor(sponsor);
-                                setFellowshipConfirmationMessage(null);
-                              }}
-                            >
-                              Record Payment
-                            </button>
-                            <button
-                              className="filterButton"
-                              disabled={!hasPositiveFellowshipBalance(balance) || pStatus === "Paid" || activeMonthClosed}
-                              style={{ padding: "4px 8px", fontSize: "0.8rem", backgroundColor: "#137333", color: "#fff", flex: 1, minWidth: "160px" }}
-                              onClick={() => {
-                                  const remaining = Math.max(0, activeShare - paid);
-                                  if (!hasPositiveFellowshipBalance(remaining)) return;
-
-                                  const now = new Date();
-                                  const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-                                  const newEntry = {
-                                    id: `pay-${Date.now()}-${Math.random()}`,
-                                    date: dateStr,
-                                    amount: remaining
-                                  };
-
-                                  const updatedHistory = [...(sponsorPaymentHistories[sponsor] || []), newEntry];
-                                  const newTotal = activeShare;
-
-                                  setSponsorPaymentHistories(prev => ({ ...prev, [sponsor]: updatedHistory }));
-                                  setSponsorPayments(prev => ({ ...prev, [sponsor]: newTotal }));
-                                  setSponsorPaymentInputs(prev => ({ ...prev, [sponsor]: "" }));
-                                  setSponsorValidationError(sponsor, null);
-                                  setLastRecordedPayment({
-                                    memberName: sponsor,
-                                    paymentAmount: remaining,
-                                    cumulativePaid: newTotal,
-                                    remainingBalance: 0,
-                                    type: "full"
-                                  });
-                                  setHighlightedSponsor(sponsor);
-                                  setFellowshipConfirmationMessage(null);
-                              }}
-                            >
-                              Record Remaining Balance
-                            </button>
-                            <button
-                              className="filterButton"
-                              style={{ padding: "4px 8px", fontSize: "0.8rem" }}
-                              onClick={() => {
-                                setSelectedSponsor({
-                                  memberId: sponsor,
-                        name: sponsorName(sponsor),
-                                  amount: activeShare,
-                                  amountPaid: paid,
-                                  balanceRemaining: balance,
-                                  paymentStatus: pStatus,
-                                  status: pStatus,
-                                  source: "Payments"
-                                });
-                                setScreen("fellowship-sponsor-detail");
-                                setHighlightedSponsor(null);
-                              }}
-                            >
-                              Review
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Collapsible Payment History */}
-                        <div style={{ marginTop: "8px", borderTop: "1px dashed #dadce0", paddingTop: "8px" }}>
-                          <button
-                            className="secondaryButton"
-                            style={{ width: "100%", padding: "4px 8px", fontSize: "0.8rem", textAlign: "left", display: "flex", justifyContent: "space-between" }}
-                            onClick={() => setExpandedHistories(prev => ({ ...prev, [sponsor]: !prev[sponsor] }))}
-                          >
-                            <span>View Payment History ({ (sponsorPaymentHistories[sponsor] || []).length })</span>
-                            <span>{ expandedHistories[sponsor] ? "▲" : "▼" }</span>
-                          </button>
-
-                          {expandedHistories[sponsor] && (
-                            <div id={`sponsor-history-${sponsor}`} style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                              {(!sponsorPaymentHistories[sponsor] || sponsorPaymentHistories[sponsor].length === 0) ? (
-                                <span style={{ fontSize: "0.85rem", color: "#80868b", fontStyle: "italic" }}>No payment entries recorded.</span>
-                              ) : (
-                                <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
-                                  <thead>
-                                    <tr style={{ borderBottom: "1px solid #dadce0" }}>
-                                      <th style={{ textAlign: "left", padding: "4px 0" }}>#</th>
-                                      <th style={{ textAlign: "left", padding: "4px 0" }}>Date</th>
-                                      <th style={{ textAlign: "right", padding: "4px 0" }}>Amount</th>
-                                      <th style={{ textAlign: "center", padding: "4px 0" }}>Status</th>
-                                      <th style={{ textAlign: "center", padding: "4px 0" }}>Actions</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {sponsorPaymentHistories[sponsor].map((entry, entryIndex) => {
-                                      const isEditing = editingPaymentId === entry.id;
-                                      const isConfirmingCancel = confirmCancelId === entry.id;
-
-                                      return (
-                                        <tr key={entry.id} style={{ borderBottom: "1px solid #f1f3f4" }}>
-                                          <td style={{ padding: "6px 0", color: "#5f6368" }}>{entryIndex + 1}</td>
-                                          <td style={{ padding: "6px 0", color: "#5f6368" }}>{entry.date}</td>
-                                          <td style={{ padding: "6px 0", textAlign: "right", fontWeight: "bold" }}>
-                                            {isEditing ? (
-                                              <input
-                                                type="text"
-                                                value={editingPaymentAmount}
-                                                onChange={(e) => setEditingPaymentAmount(e.target.value)}
-                                                style={{ width: "70px", padding: "2px 4px", fontSize: "0.8rem", textAlign: "right" }}
-                                              />
-                                            ) : (
-                                              formatSponsorShare(entry.amount)
-                                            )}
-                                          </td>
-                                          <td style={{ padding: "6px 0", textAlign: "center", color: "#137333", fontSize: "0.75rem" }}>Recorded</td>
-                                          <td style={{ padding: "6px 0", textAlign: "center" }}>
-                                            {isEditing ? (
-                                              <div style={{ display: "flex", gap: "4px", justifyContent: "center" }}>
-                                                <button
-                                                  className="filterButton"
-                                                  style={{ padding: "2px 4px", fontSize: "0.75rem", backgroundColor: "#137333", color: "#fff" }}
-                                                  onClick={() => {
-                                                    const trimmedAmount = editingPaymentAmount.trim();
-                                                    const parsedAmount = parseFloat(trimmedAmount);
-                                                    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-                                                      setSponsorValidationError(sponsor, `Enter a valid payment amount greater than zero for ${sponsorName(sponsor)}.`);
-                                                      return;
-                                                    }
-
-                                                    const otherSum = (sponsorPaymentHistories[sponsor] || [])
-                                                      .filter(e => e.id !== entry.id)
-                                                      .reduce((sum, e) => sum + e.amount, 0);
-
-                                                    const newTotal = Math.round((otherSum + parsedAmount + Number.EPSILON) * 100) / 100;
-                                                    if (newTotal > activeShare + 0.01) {
-                                                      const maximumForEntry = Math.max(0, activeShare - otherSum);
-                                                      setSponsorValidationError(sponsor, `The payment for ${sponsorName(sponsor)} cannot exceed ${formatSponsorShare(maximumForEntry)} for this transaction.`);
-                                                      return;
-                                                    }
-
-                                                    const updatedHistory = sponsorPaymentHistories[sponsor].map(e => {
-                                                      if (e.id === entry.id) {
-                                                        return { ...e, amount: parsedAmount };
-                                                      }
-                                                      return e;
-                                                    });
-
-                                                    setSponsorPaymentHistories(prev => ({ ...prev, [sponsor]: updatedHistory }));
-                                                    setSponsorPayments(prev => ({ ...prev, [sponsor]: newTotal }));
-                                                    setSponsorValidationError(sponsor, null);
-                                                    setEditingPaymentId(null);
-                                                    setLastRecordedPayment(null);
-                                                    setHighlightedSponsor(sponsor);
-                                                    setFellowshipConfirmationMessage(`Payment entry updated to ${formatSponsorShare(parsedAmount)} for ${sponsorName(sponsor)}. Total paid: ${formatSponsorShare(newTotal)}.`);
-                                                  }}
-                                                >
-                                                  Save
-                                                </button>
-                                                <button
-                                                  className="filterButton"
-                                                  style={{ padding: "2px 4px", fontSize: "0.75rem" }}
-                                                  onClick={() => {
-                                                    setEditingPaymentId(null);
-                                                    setLastRecordedPayment(null);
-                                                    setHighlightedSponsor(null);
-                                                  }}
-                                                >
-                                                  Cancel
-                                                </button>
-                                              </div>
-                                            ) : isConfirmingCancel ? (
-                                              <div style={{ display: "flex", gap: "4px", justifyContent: "center" }}>
-                                                <button
-                                                  className="filterButton"
-                                                  style={{ padding: "2px 4px", fontSize: "0.75rem", backgroundColor: "#d93025", color: "#fff" }}
-                                                  onClick={() => {
-                                                    const updatedHistory = (sponsorPaymentHistories[sponsor] || []).filter(e => e.id !== entry.id);
-                                                    const newTotal = updatedHistory.reduce((sum, e) => sum + e.amount, 0);
-                                                    setSponsorPaymentHistories(prev => ({ ...prev, [sponsor]: updatedHistory }));
-                                                    setSponsorPayments(prev => ({ ...prev, [sponsor]: newTotal }));
-                                                    setSponsorValidationError(sponsor, null);
-                                                    setConfirmCancelId(null);
-                                                    setLastRecordedPayment(null);
-                                                    setHighlightedSponsor(sponsor);
-                                                    setFellowshipConfirmationMessage(`Payment entry cancelled for ${sponsorName(sponsor)}. Total paid: ${formatSponsorShare(newTotal)}.`);
-                                                  }}
-                                                >
-                                                  Confirm?
-                                                </button>
-                                                <button
-                                                  className="filterButton"
-                                                  style={{ padding: "2px 4px", fontSize: "0.75rem" }}
-                                                  onClick={() => {
-                                                    setConfirmCancelId(null);
-                                                    setLastRecordedPayment(null);
-                                                    setHighlightedSponsor(null);
-                                                  }}
-                                                >
-                                                  Back
-                                                </button>
-                                              </div>
-                                            ) : (
-                                              <div style={{ display: "flex", gap: "6px", justifyContent: "center" }}>
-                                                <button
-                                                  style={{ border: "none", background: "none", color: "#1a73e8", cursor: "pointer", fontSize: "0.8rem", padding: 0 }}
-                                                  onClick={() => {
-                                                    setEditingPaymentId(entry.id);
-                                                    setEditingPaymentAmount(entry.amount.toString());
-                                                    setConfirmCancelId(null);
-                                                    setLastRecordedPayment(null);
-                                                    setHighlightedSponsor(null);
-                                                  }}
-                                                >
-                                                  Edit
-                                                </button>
-                                                <span style={{ color: "#dadce0" }}>|</span>
-                                                <button
-                                                  style={{ border: "none", background: "none", color: "#d93025", cursor: "pointer", fontSize: "0.8rem", padding: 0 }}
-                                                  onClick={() => {
-                                                    setConfirmCancelId(entry.id);
-                                                    setEditingPaymentId(null);
-                                                    setLastRecordedPayment(null);
-                                                    setHighlightedSponsor(null);
-                                                  }}
-                                                >
-                                                  Cancel
-                                                </button>
-                                              </div>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {tab === "History" && (
-        <div className="stack" style={{ gap: "1.5rem" }}>
-          {/* Section 1: June 2026 Fellowship Accounts */}
-          <div className="compactPanel" style={{ border: "1px solid #dadce0", borderRadius: "8px", padding: "16px", backgroundColor: "#fff" }}>
-            <Toolbar title="June 2026 Fellowship Accounts" actionLabel={isFellowshipMonthClosed ? "June Accounts — Finalised" : (isFellowshipConfirmed ? "June Accounts — Payment Tracking Open" : "Sponsor Selection In Progress")} />
-
-            <div className="fieldGrid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "1rem", marginTop: "1rem" }}>
-              <Field label="Total fellowship expense" value={formatSponsorShare(isFellowshipMonthClosed ? (juneSnapshot?.totalExpense || 0) : totalFellowshipExpense)} />
-              <Field label="Confirmed sponsors" value={isFellowshipMonthClosed ? `${juneSnapshot?.confirmedSponsors.length || 0} sponsors` : (isFellowshipConfirmed ? `${confirmedSponsors.length} sponsors` : "0 (Not confirmed)")} />
-              <Field label="Share per sponsor" value={isFellowshipMonthClosed ? formatSponsorShare(juneSnapshot?.sharePerSponsor || 0) : (isFellowshipConfirmed ? formatSponsorShare(confirmedSharePerSponsor) : "₹0.00")} />
-
-              <Field label="Total amount received" value={formatSponsorShare(isFellowshipMonthClosed ? (juneSnapshot?.confirmedSponsors.reduce((sum, s) => sum + (juneSnapshot.payments[s] || 0), 0) || 0) : (isFellowshipConfirmed ? confirmedSponsors.reduce((sum, s) => sum + (sponsorPayments[s] || 0), 0) : 0))} />
-
-              {(() => {
-                const pendingVal = isFellowshipMonthClosed
-                  ? (juneSnapshot?.confirmedSponsors.reduce((sum, s) => sum + Math.max(0, juneSnapshot.sharePerSponsor - (juneSnapshot.payments[s] || 0)), 0) || 0)
-                  : (isFellowshipConfirmed ? confirmedSponsors.reduce((sum, s) => sum + Math.max(0, confirmedSharePerSponsor - (sponsorPayments[s] || 0)), 0) : 0);
-
-                const fullyPaidCount = isFellowshipMonthClosed
-                  ? (juneSnapshot?.confirmedSponsors.filter(s => (juneSnapshot.payments[s] || 0) >= juneSnapshot.sharePerSponsor - 0.01).length || 0)
-                  : (isFellowshipConfirmed ? confirmedSponsors.filter(s => (sponsorPayments[s] || 0) >= confirmedSharePerSponsor - 0.01).length : 0);
-
-                const partlyPaidCount = isFellowshipMonthClosed
-                  ? (juneSnapshot?.confirmedSponsors.filter(s => (juneSnapshot.payments[s] || 0) > 0 && (juneSnapshot.payments[s] || 0) < juneSnapshot.sharePerSponsor - 0.01).length || 0)
-                  : (isFellowshipConfirmed ? confirmedSponsors.filter(s => (sponsorPayments[s] || 0) > 0 && (sponsorPayments[s] || 0) < confirmedSharePerSponsor - 0.01).length : 0);
-
-                const unpaidCount = isFellowshipMonthClosed
-                  ? (juneSnapshot?.confirmedSponsors.filter(s => (juneSnapshot.payments[s] || 0) === 0).length || 0)
-                  : (isFellowshipConfirmed ? confirmedSponsors.filter(s => (sponsorPayments[s] || 0) === 0).length : 0);
-
-                return (
-                  <>
-                    <Field label={isFellowshipMonthClosed ? "Total balance transferred" : "Outstanding balance"} value={formatSponsorShare(pendingVal)} />
-                    <Field label="Fully paid sponsors" value={`${fullyPaidCount} members`} />
-                    <Field label="Partly paid sponsors" value={`${partlyPaidCount} members`} />
-                    <Field label="Unpaid sponsors" value={`${unpaidCount} members`} />
-                    {!isFellowshipMonthClosed && (
-                      <Field label="Amount to be transferred on finalisation" value={formatSponsorShare(pendingVal)} />
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-
-            <div style={{ padding: "12px", backgroundColor: "#f8f9fa", border: "1px solid #dadce0", borderRadius: "8px", marginBottom: "1rem" }}>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "#5f6368", lineHeight: "1.4" }}>
-                {isFellowshipMonthClosed
-                  ? "June 2026 fellowship accounts are finalised. Unpaid balances have been transferred to member outstanding dues."
-                  : "“Finalising the month closes June’s fellowship payment tracking. Any unpaid fellowship balance will be transferred to the concerned member’s outstanding dues. This does not affect the July sponsor rotation.”"
-                }
-              </p>
-            </div>
-
-            {(() => {
-              const isFinaliseDisabled = !isFellowshipConfirmed || !isValidExpense || confirmedSponsors.length === 0;
-
-              return (
-                <div className="stack" style={{ gap: "8px" }}>
-                  {isFellowshipMonthClosed ? (
-                    <button
-                      className="secondaryButton"
-                      disabled={true}
-                      style={{ backgroundColor: "#e8eaed", color: "#5f6368", borderColor: "#dadce0" }}
-                    >
-                      June Accounts — Finalised
-                    </button>
-                  ) : (
-                    <>
-                      {isFinaliseDisabled && (
-                        <div style={{ color: "#d93025", fontSize: "0.85rem", padding: "0 4px" }}>
-                          {!isFellowshipConfirmed
-                            ? "June accounts can be finalised after June sponsors are confirmed."
-                            : "Please enter a valid fellowship expense for June."}
-                        </div>
-                      )}
-                      <button
-                        className="secondaryButton"
-                        disabled={isFinaliseDisabled}
-                        onClick={() => {
-                          if (isFellowshipMonthClosed) return; // Prevent duplicate transfers
-
-                          const finalShare = confirmedSharePerSponsor;
-                          const duesToTransfer = confirmedSponsors.map(sponsor => {
-                            const paid = sponsorPayments[sponsor] || 0;
-                            const balance = finalShare - paid;
-                            if (balance > 0.01) {
-                              return {
-                                id: `fellowship-2026-06-${sponsor}`,
-                                heading: `Fellowship Sponsorship Due — June 2026`,
-                                memberName: sponsorName(sponsor),
-                                month: "June 2026",
-                                share: finalShare,
-                                paid: paid,
-                                balance: balance,
-                                source: `Fellowship Sponsorship`,
-                                status: `Outstanding`,
-                                transferDate: new Date().toLocaleDateString()
-                              };
-                            }
-                            return null;
-                          }).filter(Boolean) as typeof fellowshipOutstandingDues;
-
-                          setFellowshipOutstandingDues(prev => {
-                            const existingIds = new Set(prev.map(d => d.id));
-                            const filtered = duesToTransfer.filter(d => !existingIds.has(d.id));
-                            return [...prev, ...filtered];
-                          });
-
-                          setJuneSnapshot({
-                            totalExpense: totalFellowshipExpense,
-                            confirmedSponsors: [...confirmedSponsors],
-                            sharePerSponsor: confirmedSharePerSponsor,
-                            payments: { ...sponsorPayments },
-                            paymentHistories: { ...sponsorPaymentHistories },
-                            isClosed: true
-                          });
-
-                          setIsFellowshipMonthClosed(true);
-                          setHighlightedSponsor(null);
-                          setLastRecordedPayment(null);
-
-                          if (duesToTransfer.length > 0) {
-                            setFellowshipConfirmationMessage("Success: June 2026 fellowship accounts have been finalised. Pending sponsor balances have been transferred to the concerned member accounts.");
-                          } else {
-                            setFellowshipConfirmationMessage("Success: June 2026 fellowship accounts have been finalised. All sponsors fully paid, no balance was transferred.");
-                          }
-                          setTab("History");
-                        }}
-                      >
-                        Finalise June 2026 Fellowship Accounts
-                      </button>
-                    </>
-                  )}
-                </div>
-              );
-            })()}
-
-            {isFellowshipMonthClosed && fellowshipOutstandingDues.length > 0 && (
-              <div className="compactPanel" style={{ marginTop: "1.5rem", border: "1px solid #f0c36d" }}>
-                <Toolbar title="Outstanding Fellowship Dues" actionLabel="June Transferred Balances" />
-                <div className="stack" style={{ gap: "0.75rem", marginTop: "1rem" }}>
-                  {fellowshipOutstandingDues.map((due) => (
-                    <div key={due.id} style={{ padding: "12px 14px", border: "1px solid #dadce0", borderRadius: "6px", backgroundColor: "#fdf8e2", borderColor: "#f0c36d" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <strong>{due.heading}</strong>
-                        <span className="tag" style={{ backgroundColor: "#f0c36d", color: "#664d03", padding: "2px 6px", borderRadius: "4px" }}>{due.status}</span>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "8px", fontSize: "0.85rem", color: "#5f6368" }}>
-                        <div>Member: <strong>{due.memberName}</strong></div>
-                        <div>Transfer Date: {due.transferDate}</div>
-                        <div>Original Share: {formatSponsorShare(due.share)}</div>
-                        <div>Amount Paid: {formatSponsorShare(due.paid)}</div>
-                        <div style={{ gridColumn: "span 2", color: "#b06000", fontWeight: "bold" }}>Transferred Balance: {formatSponsorShare(due.balance)}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {isFellowshipMonthClosed && fellowshipOutstandingDues.length === 0 && (
-              <div style={{ padding: "12px", backgroundColor: "#e6f4ea", color: "#137333", borderRadius: "8px", marginTop: "1rem", textAlign: "center" }}>
-                All sponsors have fully paid. No balance was transferred.
-              </div>
-            )}
-          </div>
-
-          {/* Section 2: July 2026 Sponsor Rotation */}
-          <div className="compactPanel" style={{ border: "1px solid #dadce0", borderRadius: "8px", padding: "16px", backgroundColor: "#fff" }}>
-            <Toolbar title="July 2026 Sponsor Rotation" actionLabel={isJulyRotationActive ? "July Rotation — Active / Open" : "July Rotation — Not Prepared"} />
-
-            <div className="fieldGrid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "1rem", marginTop: "1rem" }}>
-              <Field label="Rotation status" value={isJulyRotationActive ? "Active / Open" : "Not Prepared"} />
-              <Field label="Selected member count" value={isJulyRotationActive ? `${selectedSponsors.length} selected` : "0 selected"} />
-              <Field label="Total fellowship expense" value={isJulyRotationActive && totalFellowshipExpenseInput ? formatSponsorShare(parseFloat(totalFellowshipExpenseInput)) : "Not entered (₹0.00)"} />
-              <Field label="Share per selected sponsor" value={isJulyRotationActive ? formatSponsorShare(amountPerSponsor) : "₹0.00"} />
-            </div>
-
-            <div className="stack" style={{ gap: "8px" }}>
-              {isJulyRotationActive ? (
-                <button
-                  className="secondaryButton"
-                  onClick={() => setTab("Queue")}
-                >
-                  Open July Sponsor Rotation
-                </button>
-              ) : (
-                <button
-                  className="secondaryButton"
-                  onClick={() => {
-                    setIsJulyRotationActive(true);
-                    setHighlightedSponsor(null);
-                    setLastRecordedPayment(null);
-                    setFellowshipConfirmationMessage("Success: July 2026 sponsor rotation is now active and ready for configuration.");
-                  }}
-                >
-                  Prepare July 2026 Sponsor Rotation
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {tab !== "Queue" && tab !== "Payments" && (
-        <div className="buttonRow">
-          <button
-            onClick={() => {
-              setTab("Queue");
-              setScreen("fellowship");
-            }}
-          >
-            Edit Sponsor Rotation
-          </button>
-
-          {isFellowshipConfirmed ? (
-            <>
-              <button
-                className="secondaryButton"
-                onClick={() => {
-                  setTab("Selected Sponsors");
-                  setScreen("fellowship");
-                }}
-              >
-                View This Month’s Sponsors
-              </button>
-              <button
-                className="secondaryButton"
-                onClick={() => {
-                  setTab("Payments");
-                  setScreen("fellowship");
-                }}
-              >
-                Review Payments
-              </button>
-            </>
-          ) : (
-            <div className="stack" style={{ gap: "6px" }}>
-              {isJulyRotationActive && !isValidExpense && (
-                <div className="notice" style={{ margin: 0, backgroundColor: "#fff3cd", color: "#664d03" }}>
-                  Enter the July 2026 total fellowship expense before reviewing and confirming sponsors.
-                </div>
-              )}
-              <button
-                className="secondaryButton"
-                onClick={() => setScreen("confirm-sponsors")}
-                disabled={isConfirmDisabled}
-              >
-                {`Review & Confirm ${activeMonthLabel} Sponsors`}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {tab === "Payments" && (
-        <div className="buttonRow">
-          <button
-            className="secondaryButton"
-            onClick={() => {
-              setTab("Queue");
-              setScreen("fellowship");
-              setHighlightedSponsor(null);
-            }}
-          >
-            Open Sponsor Rotation
-          </button>
-          <button
-            className="secondaryButton"
-            onClick={() => {
-              setTab("History");
-              setScreen("fellowship");
-              setHighlightedSponsor(null);
-            }}
-          >
-            Go to Month Summary
-          </button>
-          <button
-            onClick={() => {
-              setTab("Overview");
-              setScreen("fellowship");
-            }}
-          >
-            Finish and Return to Fellowship Overview
-          </button>
-        </div>
-      )}
+      {tab === "History" && <div className="stack"><div className="compactPanel"><Toolbar title={`${monthLabel} Month Summary`} actionLabel={lifecycleLabel[month.lifecycle]} /><div className="metricsGrid"><Metric label="Sponsors" value={`${month.confirmedSponsors.length}`} /><Metric label="Total expense" value={validExpense?formatSponsorShare(parsedExpense):"₹0.00"} /><Metric label="Amount received" value={formatSponsorShare(totalPaid)} /><Metric label="Transferred on finalisation" value={formatSponsorShare(month.transferredOutstanding)} /></div></div>{month.lifecycle === "payment_tracking" && (confirmFinalise?<div className="compactPanel"><strong>Finalise {monthLabel} Fellowship Accounts?</strong><p>The month becomes immutable and outstanding balances are retained as the transfer result.</p><div className="buttonRow"><button onClick={finaliseMonth}>Confirm Finalisation</button><button className="secondaryButton" onClick={()=>setConfirmFinalise(false)}>Return Without Finalising</button></div></div>:<button onClick={()=>setConfirmFinalise(true)}>Finalise {monthLabel} Fellowship Accounts</button>)}{month.lifecycle === "finalised" && <div className="notice">{monthLabel} is finalised, immutable and retained for viewing. Sponsors, payments and payment history remain attached to this month key.</div>}</div>}
     </section>
   );
 }
-
 function MemberFellowship({
   member,
   selectedSponsors,
@@ -7965,6 +6534,7 @@ function ConfirmSponsors({
     type: "partial" | "full";
   } | null) => void;
   setHighlightedSponsor: (val: string | null) => void;
+
 }) {
   const { members: currentMembers } = useCurrentMemberData();
   const sponsorName = (memberId: string) => displayMemberName(memberId, currentMembers);
