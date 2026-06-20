@@ -2014,6 +2014,21 @@ export default function Prototype() {
           }
         }
         @media (max-width: 640px) {
+          .dashboardStack,
+          .dashboardIntro,
+          .dashboardIntro > *,
+          .dashboardStack .compactPanel,
+          .dashboardStack .memberPanel {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+          }
+          .dashboardIntro .statusPill,
+          .topbar .statusPill {
+            white-space: normal;
+            overflow-wrap: anywhere;
+          }
           .memberProfileScreen .fieldRow {
             display: grid;
             grid-template-columns: minmax(0, 1fr);
@@ -2036,7 +2051,7 @@ export default function Prototype() {
 
         <div className="prototypeSwitcher">
           <span>Developer testing role switcher</span>
-          <small>Hidden in production login flow</small>
+          <small>Local development control only</small>
           <select
             aria-label="Prototype-only role switcher"
             value={role}
@@ -2167,6 +2182,9 @@ export default function Prototype() {
             setScreen={handleSetScreen}
             openDashboardDetail={openDashboardDetail}
             totalOutstanding={totalOutstanding}
+            months={fellowshipMonths}
+            selectedMonthKey={selectedFellowshipMonthKey}
+            setSelectedMonthKey={setSelectedFellowshipMonthKey}
           />
         )}
         {screen === "dashboard-detail" && dashboardDetail && (
@@ -2469,20 +2487,26 @@ function Header({
           : screen === "confirm-sponsors"
             ? fellowshipConfirmationTitle
           : screenTitle(screen);
+  const sourceLabel = screen === "login"
+    ? "DEVELOPMENT ROLE SWITCHER"
+    : screen === "dashboard"
+      ? "CLUB OPERATIONS DASHBOARD"
+      : backendMemberLabel || "LOCAL PROTOTYPE WORKFLOW";
+  const testRoleLabel = role === "Member" ? "Normal Member" : role;
   return (
     <header className="topbar">
       <div>
-        <p className="eyebrow">{backendMemberLabel || "Clickable prototype - dummy data only"}</p>
+        <p className="eyebrow">{sourceLabel}</p>
         <h1>{title}</h1>
       </div>
-      <div className="statusPill">{user} - {role}</div>
+      <div className="statusPill">{screen === "login" ? `Selected local test role: ${user} — ${testRoleLabel}` : `Signed in as ${user} — ${testRoleLabel} Test Role`}</div>
     </header>
   );
 }
 
 function screenTitle(screen: Screen) {
   const names: Record<Screen, string> = {
-    login: "Prototype Entry",
+    login: "Local Prototype Access",
     dashboard: "Dashboard",
     "people-module": "People",
     "operations-module": "Operations",
@@ -2534,38 +2558,32 @@ function screenTitle(screen: Screen) {
 }
 
 function LoginScreen({ switchRole }: { switchRole: (role: Role) => void }) {
+  const testRoles: Array<{ role: Role; label: string; description: string }> = [
+    { role: "president", label: "President / Admin", description: "Open the local President test workflow" },
+    { role: "secretary", label: "Secretary", description: "Open the local Secretary test workflow" },
+    { role: "treasurer", label: "Treasurer", description: "Open the local Treasurer test workflow" },
+    { role: "member", label: "Normal Member", description: "Open the privacy-limited Member test workflow" }
+  ];
   return (
     <section className="loginGrid">
       <div className="loginPanel">
-        <p className="eyebrow">LC Beenachi Connect</p>
-        <h2>Mobile-first club management PWA</h2>
-        <div className="formGrid">
-          <label>
-            Email or mobile
-            <input value="prototype@lcbeenachi.local" readOnly />
-          </label>
-          <label>
-            Password or OTP
-            <input value="prototype-only" readOnly type="password" />
-          </label>
-        </div>
-        <div className="buttonRow">
-          <button onClick={() => switchRole("president")}>Enter as President</button>
-          <button onClick={() => switchRole("member")} className="secondaryButton">Enter as Member</button>
-        </div>
+        <p className="eyebrow">DEVELOPMENT ROLE SWITCHER</p>
+        <h2>Local prototype access</h2>
+        <p>Choose a test role to inspect permissions and workflows.</p>
+        <div className="notice">This is not the production sign-in screen. These controls switch local test roles; they do not authenticate a real club member.</div>
+        <div className="notice memberHelperText"><strong>Local test credentials:</strong> handled internally by the existing prototype workflow. No imported member credentials or private information are displayed here.</div>
       </div>
       <div className="loginRoles">
-        {Object.entries(roleLabels).map(([key, label]) => (
-          <button key={key} onClick={() => switchRole(key as Role)}>
-            {label}
-            <span>Open prototype role flow</span>
+        {testRoles.map((item) => (
+          <button key={item.role} onClick={() => switchRole(item.role)}>
+            {item.label}
+            <span>{item.description}</span>
           </button>
         ))}
       </div>
     </section>
   );
 }
-
 function ModuleHeader<T extends string>({
   title,
   label,
@@ -4633,237 +4651,168 @@ function Dashboard({
   role,
   member,
   setScreen,
-  openDashboardDetail,
-  totalOutstanding
+  months,
+  selectedMonthKey,
+  setSelectedMonthKey
 }: {
   role: Role;
   member: Member;
   setScreen: (screen: Screen) => void;
   openDashboardDetail: (detail: DashboardDetail) => void;
   totalOutstanding: number;
+  months: Record<string, FellowshipMonthRecord>;
+  selectedMonthKey: string;
+  setSelectedMonthKey: (key: string) => void;
 }) {
-  if (role === "member") {
-    const paidThisMonth = ledgerRows
-      .filter((row) => row.member === member.name)
-      .reduce((sum, row) => sum + row.credit, 0);
-    const memberDebits = ledgerRows
-      .filter((row) => row.member === member.name)
-      .reduce((sum, row) => sum + row.debit, 0);
-    const netBalance = paidThisMonth - memberDebits;
-    const currentDues = netBalance < 0 ? Math.abs(netBalance) : 0;
-    const advanceBalance = netBalance > 0 ? netBalance : 0;
-    return (
-      <section className="memberHome">
-        <InternalMvpReadinessPanel role={role} setScreen={setScreen} />
-        <div className="memberHero">
-          <Avatar name={member.name} />
-          <div>
-            <p className="eyebrow">Welcome</p>
-            <h2>{member.dashboardName}</h2>
-            <p>{member.clubRole} - {member.status}</p>
-          </div>
-        </div>
-        <section className="memberPanel">
-          <Toolbar title="Important" actionLabel="Own records only" />
-          <div className="memberImportantGrid">
-            <button onClick={() => setScreen("member-dues-detail")}><span>Current Dues</span><strong>{money(currentDues)}</strong><small>Tap to view details</small></button>
-            <button onClick={() => openDashboardDetail("member-events")}><span>Next Meeting</span><strong>12 Jun</strong><small>View details</small></button>
-            <button onClick={() => setScreen("fellowship")}><span>Fellowship</span><strong>June</strong><small>{advanceBalance ? `${money(advanceBalance)} advance available` : "Sponsorship pending"}</small></button>
-          </div>
-        </section>
-        <MemberFinanceSummaryPanel role={role} compact />
-        <section className="memberPanel">
-          <Toolbar title="Quick Access" actionLabel="Member tools" />
-          <div className="memberQuickGrid">
-            {memberQuickAccess.map((item) => (
-              <button key={item.label} onClick={() => setScreen(item.screen)}>
-                <span>{item.short}</span>
-                <strong>{item.label}</strong>
-              </button>
-            ))}
-          </div>
-        </section>
-        <section className="memberPanel">
-          <Toolbar title="Recent / Upcoming" actionLabel="Today" />
-          <div className="memberUpdateList">
-            <button onClick={() => setScreen("announcements")}><strong>District Governor Visit Planning</strong><span>Priority: High</span></button>
-            <button onClick={() => setScreen("documents")}><strong>June meeting notice published</strong><span>Document available</span></button>
-            <button onClick={() => setScreen("celebrations")}><strong>Celebrations this week</strong><span>2 wishes pending</span></button>
-          </div>
-        </section>
-      </section>
-    );
+  const { members: currentMembers, status: currentMemberStatus } = useCurrentMemberData();
+  const [clientDate, setClientDate] = useState<Date | null>(null);
+  useEffect(() => setClientDate(new Date()), []);
+
+  const officerRole = role !== "member";
+  const genuineMembers = officerRole ? canonicalFellowshipMembers(currentMembers) : [];
+  const memberCountText = currentMemberStatus === "loading"
+    ? "Loading member records…"
+    : currentMemberStatus === "error"
+      ? "Unable to load member records"
+      : `${genuineMembers.length}`;
+  const dateText = clientDate
+    ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", year: "numeric" }).format(clientDate)
+    : "Loading current date…";
+  const currentMonthKey = clientDate
+    ? `${clientDate.getFullYear()}-${String(clientDate.getMonth() + 1).padStart(2, "0")}`
+    : null;
+  const currentMonth = currentMonthKey ? months[currentMonthKey] : null;
+  const currentMonthLabel = currentMonthKey ? fellowshipMonthLabel(currentMonthKey) : "Current month";
+  const lifecycleLabels: Record<FellowshipMonthLifecycle, string> = {
+    unprepared: "Unprepared",
+    draft: "Draft — sponsor selection",
+    payment_tracking: "Payment tracking open",
+    finalised: "Finalised"
+  };
+  const fellowshipSponsors = currentMonth
+    ? (currentMonth.lifecycle === "draft" ? currentMonth.selectedSponsors : currentMonth.confirmedSponsors)
+    : [];
+  const fellowshipReceived = currentMonth
+    ? currentMonth.confirmedSponsors.reduce((sum, memberId) => sum + (currentMonth.payments[memberId] || 0), 0)
+    : 0;
+  const fellowshipOutstanding = currentMonth
+    ? Math.max(0, currentMonth.confirmedSharePerSponsor * currentMonth.confirmedSponsors.length - fellowshipReceived)
+    : 0;
+  const birthdaysToday = officerRole && clientDate && currentMemberStatus === "ready"
+    ? genuineMembers.filter((currentMember) => {
+        if (!currentMember.birthDate) return false;
+        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(currentMember.birthDate);
+        return Boolean(match && Number(match[2]) === clientDate.getMonth() + 1 && Number(match[3]) === clientDate.getDate());
+      })
+    : [];
+  const birthdayText = !officerRole
+    ? "Available only in authorized officer views"
+    : currentMemberStatus === "loading"
+      ? "Loading birthday information…"
+      : currentMemberStatus === "error"
+        ? "Birthday information unavailable"
+        : birthdaysToday.length
+          ? `${birthdaysToday.length} member birthday${birthdaysToday.length === 1 ? "" : "s"} today`
+          : "No member birthdays today";
+
+  function openCurrentFellowship() {
+    if (currentMonthKey && currentMonth) setSelectedMonthKey(currentMonthKey);
+    setScreen("fellowship");
   }
 
-  if (role === "president") {
-    return (
-      <PresidentDashboard
-        setScreen={setScreen}
-        openDashboardDetail={openDashboardDetail}
-        totalOutstanding={totalOutstanding}
-      />
-    );
-  }
+  const fellowshipValue = !clientDate
+    ? "Loading current month…"
+    : currentMonth
+      ? `${currentMonthLabel} — ${lifecycleLabels[currentMonth.lifecycle]}`
+      : "Current month not prepared";
+  const roleName = role === "member" ? "Normal Member" : roleLabels[role];
 
   return (
-    <section className="stack">
-      <InternalMvpReadinessPanel role={role} setScreen={setScreen} totalOutstanding={totalOutstanding} />
-      <PstOverview role={role} totalOutstanding={totalOutstanding} openDashboardDetail={openDashboardDetail} />
-      <MyMemberAreaPanel setScreen={setScreen} />
-      <section className="compactPanel">
-        <div className="toolbar">
-          <h2>What needs my attention today?</h2>
-          <span className="statusPill">{roleLabels[role]}</span>
-        </div>
-        <div className="taskGrid">
-          {rolePendingTasks[role].map((task) => (
-            <button className="taskItem" key={task} onClick={() => openDashboardDetail(taskDetailForRole(role, task))}>
-              <strong>{task}</strong>
-              <span>{taskActionLabel(role, task)}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-      <div className="metricsGrid">
-        <ClickableMetric label="Active members" value="64" action="Open" onClick={() => openDashboardDetail("active-members")} />
-        <ClickableMetric label={role === "treasurer" ? "Payments pending" : role === "secretary" ? "Pending dues summary (view only)" : "Pending dues summary"} value={role === "treasurer" ? "5 receipts" : money(totalOutstanding)} action="Review" onClick={() => openDashboardDetail("pending-dues")} />
-        <ClickableMetric label="Fellowship month status" value={role === "treasurer" ? "2 payments pending" : "Confirmation pending"} action="Continue" onClick={() => openDashboardDetail(role === "treasurer" ? "fellowship-pending" : "fellowship-status")} />
-        <ClickableMetric label={role === "secretary" ? "Pending documents" : "Pending activity reports"} value="2" action="Review" onClick={() => openDashboardDetail(role === "secretary" ? "published-items" : "activity-reports")} />
-        <ClickableMetric label="Upcoming events/meetings" value="3" action="View details" onClick={() => openDashboardDetail("upcoming-events")} />
-        <ClickableMetric label={role === "treasurer" ? "Today’s collection" : "Recent announcements/docs"} value={role === "treasurer" ? money(8500) : "6"} action="Open" onClick={() => openDashboardDetail(role === "treasurer" ? "today-collection" : "published-items")} />
-        <ClickableMetric label="Today's celebrations" value="1" action="Review" onClick={() => openDashboardDetail("celebration-reminders")} />
-        <ClickableMetric label={role === "treasurer" ? "This month’s collection" : "Important club reminders"} value={role === "treasurer" ? money(42500) : "PST review due"} action="Review" onClick={() => openDashboardDetail(role === "treasurer" ? "month-collection" : "club-reminders")} />
-      </div>
-      {role === "treasurer" && (
-        <div className="metricsGrid">
-          <ClickableMetric label="Fellowship pending" value={money(5000)} action="Open" onClick={() => openDashboardDetail("fellowship-pending")} />
-          <ClickableMetric label="Cash / Bank / UPI split" value="3 modes" action="View split" onClick={() => openDashboardDetail("mode-split")} />
-        </div>
-      )}
-      <CelebrationWidget role={role} openDashboardDetail={openDashboardDetail} />
-      <div className="actionGrid">
-        {role === "secretary" && <>
-          <Action title="Create meeting/event" body="Use default date and visibility options." onClick={() => setScreen("events-meetings")} />
-          <Action title="Create announcement" body="Use communication template." onClick={() => setScreen("announcements")} />
-          <Action title="Upload document" body="Attach file and select visibility." onClick={() => setScreen("documents")} />
-          <Action title="Update activity" body="Use annual plan or template." onClick={() => setScreen("projects")} />
-        </>}
-        {role === "treasurer" && <>
-          <Action title="Record payment" body="Select outstanding due and auto-allocate." onClick={() => setScreen("record-member-payment")} />
-          <Action title="Add due" body="Use due category defaults." onClick={() => setScreen("ledger")} />
-          <Action title="View member ledger" body="Search member account history." onClick={() => setScreen("ledger")} />
-          <Action title="Fellowship payment status" body="Track sponsor payments." onClick={() => setScreen("fellowship")} />
-        </>}
-      </div>
-    </section>
-  );
-}
-
-function PresidentDashboard({
-  setScreen,
-  openDashboardDetail,
-  totalOutstanding
-}: {
-  setScreen: (screen: Screen) => void;
-  openDashboardDetail: (detail: DashboardDetail) => void;
-  totalOutstanding: number;
-}) {
-  const priorityItems = [
-    { title: "Confirm June fellowship sponsors", meta: "Group confirmation pending", action: "Continue", detail: "fellowship-status" as DashboardDetail },
-    { title: "Approve 3 member profile updates", meta: "Submitted this week", action: "Review", detail: "pending-member-updates" as DashboardDetail },
-    { title: "Review 2 pending activity reports", meta: "School kit and medical camp", action: "Update", detail: "activity-reports" as DashboardDetail },
-    { title: "Send today’s celebration wishes", meta: "1 birthday today", action: "Open", detail: "celebration-reminders" as DashboardDetail },
-    { title: "Check dues summary", meta: `${money(totalOutstanding)} pending`, action: "Review", detail: "pending-dues" as DashboardDetail }
-  ];
-
-  const snapshotItems = [
-    { label: "Active Members", value: "64", action: "Open", detail: "active-members" as DashboardDetail },
-    { label: "Pending Dues", value: money(totalOutstanding), action: "Review", detail: "pending-dues" as DashboardDetail },
-    { label: "Fellowship", value: "Confirmation Pending", action: "Continue", detail: "fellowship-status" as DashboardDetail },
-    { label: "Upcoming Events", value: "3", action: "View details", detail: "upcoming-events" as DashboardDetail },
-    { label: "Activity Reports Pending", value: "2", action: "Update", detail: "activity-reports" as DashboardDetail },
-    { label: "Celebrations This Week", value: "4", action: "Open", detail: "celebration-reminders" as DashboardDetail }
-  ];
-
-  return (
-    <section className="dashboardStack">
+    <section className="dashboardStack" style={{ minWidth: 0 }}>
       <div className="dashboardIntro">
         <div>
-          <p className="eyebrow">President Dashboard</p>
-          <h2>Today, 03 Jun 2026</h2>
+          <p className="eyebrow">{roleName} Test Dashboard</p>
+          <h2>{dateText}</h2>
+          <p>Live club member and Fellowship information is shown where connected. Unconnected modules are marked as unavailable.</p>
         </div>
-        <span className="statusPill">Control room view</span>
+        <span className="statusPill">Signed in as {member.dashboardName} — {roleName} Test Role</span>
       </div>
 
-      <InternalMvpReadinessPanel role="president" setScreen={setScreen} totalOutstanding={totalOutstanding} />
-
       <section className="compactPanel dashboardPanel">
-        <DashboardSectionHeader title="Today’s Priority Actions" label="Needs attention now" />
-        <div className="priorityList">
-          {priorityItems.map((item) => (
-            <button className="priorityAction" key={item.title} onClick={() => openDashboardDetail(item.detail)}>
-              <strong>{item.title}</strong>
-              <span>{item.meta}</span>
-              <small>{item.action}</small>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="compactPanel dashboardPanel">
-        <DashboardSectionHeader title="Club Snapshot" label="Today’s status" />
+        <DashboardSectionHeader title="Connected club information" label="Verified sources only" />
         <div className="compactDashboardGrid">
-          {snapshotItems.map((item) => (
-            <CompactDashboardCard
-              key={item.label}
-              label={item.label}
-              value={item.value}
-              action={item.action}
-              onClick={() => openDashboardDetail(item.detail)}
-            />
-          ))}
+          {officerRole ? (
+            <CompactDashboardCard label="Active Members" value={memberCountText} action="Open member directory" onClick={() => setScreen("members")} />
+          ) : (
+            <TruthStatusCard label="Active Members" value="Club-wide member totals are not shown in the Normal Member dashboard." />
+          )}
+          <TruthStatusCard label="Birthdays Today" value={birthdayText} />
+          <CompactDashboardCard label="Fellowship" value={fellowshipValue} action={currentMonth ? "Open current month" : "View existing months"} onClick={openCurrentFellowship} />
         </div>
+        {currentMonth && (
+          <div className="metricsGrid" style={{ marginTop: "1rem" }}>
+            <Metric label="Fellowship month" value={currentMonthLabel} />
+            <Metric label="Lifecycle" value={lifecycleLabels[currentMonth.lifecycle]} />
+            <Metric label="Sponsor count" value={`${fellowshipSponsors.length}`} />
+            <Metric label="Amount received" value={formatSponsorShare(fellowshipReceived)} />
+            <Metric label="Outstanding" value={formatSponsorShare(fellowshipOutstanding)} />
+            <Metric label="Selected month retained" value={fellowshipMonthLabel(selectedMonthKey)} />
+          </div>
+        )}
       </section>
 
-      <section className="compactPanel dashboardPanel">
-        <DashboardSectionHeader title="PST Coordination Overview" label="Role-linked member profiles" />
-        <div className="compactDashboardGrid">
-          <CompactDashboardCard
-            label="View PST Profiles"
-            value="3 roles"
-            action="Open"
-            onClick={() => openDashboardDetail("pst-profiles")}
-          />
-        </div>
-      </section>
+      {role === "member" ? (
+        <>
+          <MemberFinanceSummaryPanel role={role} compact />
+          <section className="compactPanel dashboardPanel">
+            <DashboardSectionHeader title="Member dashboard sources" label="Own authorized records only" />
+            <div className="compactDashboardGrid">
+              <TruthStatusCard label="Meetings" value="Meeting information is not connected to the Dashboard yet." />
+              <TruthStatusCard label="Announcements" value="Announcements are not connected to the Dashboard yet." />
+              <TruthStatusCard label="Documents" value="Document activity is not connected to the Dashboard yet." />
+            </div>
+          </section>
+        </>
+      ) : (
+        <section className="compactPanel dashboardPanel">
+          <DashboardSectionHeader title="Operational source status" label="Unknown is not reported as zero" />
+          <div className="compactDashboardGrid">
+            <TruthStatusCard label="Finance & Dues" value="Finance summary not connected" />
+            <TruthStatusCard label="Announcements" value="Announcements are not connected to the Dashboard yet." />
+            <TruthStatusCard label="Events" value="No live event source is connected." />
+            <TruthStatusCard label="Meetings" value="Meeting information is not connected." />
+            <TruthStatusCard label="Recent Payments" value="Recent payment activity is unavailable here." />
+            <TruthStatusCard label="Documents" value="Document activity is not connected." />
+            <TruthStatusCard label="Pending Reports" value="Pending report totals are unavailable." />
+            <TruthStatusCard label="Approvals" value="Approval totals are unavailable." />
+          </div>
+        </section>
+      )}
 
-      <MyMemberAreaPanel setScreen={setScreen} />
-
       <section className="compactPanel dashboardPanel">
-        <DashboardSectionHeader title="Quick Actions" label="Common President tasks" />
+        <DashboardSectionHeader title="Available navigation" label="No dashboard mutations" />
         <div className="quickActionGrid">
-          <button onClick={() => setScreen("members")}>Add Member</button>
-          <button onClick={() => setScreen("announcements")}>Create Announcement</button>
-          <button onClick={() => setScreen("record-member-payment")}>Record Payment</button>
-          <button onClick={() => setScreen("fellowship")}>Open Fellowship</button>
-          <button onClick={() => setScreen("reports-tools-module")}>Open Reports</button>
+          <button onClick={() => setScreen("members")}>{role === "member" ? "Member Directory" : "Open Members"}</button>
+          <button onClick={openCurrentFellowship}>Open Fellowship</button>
+          {role !== "member" && <button onClick={() => setScreen("reports-tools-module")}>Open Reports</button>}
+          {role === "treasurer" && <button onClick={() => setScreen("record-member-payment")}>Record Member Payment</button>}
+          {(role === "president" || role === "secretary") && <button onClick={() => setScreen("announcements")}>Open Announcements</button>}
           <button onClick={() => setScreen("celebrations")}>Open Celebrations</button>
         </div>
       </section>
-
-      <section className="compactPanel dashboardPanel">
-        <DashboardSectionHeader title="Recent / Upcoming Updates" label="Latest movement" />
-        <div className="updateList">
-          <button onClick={() => openDashboardDetail("published-items")}><strong>Latest announcement</strong><span>District Governor Visit Planning</span><small>Open</small></button>
-          <button onClick={() => openDashboardDetail("published-items")}><strong>Latest document</strong><span>Annual Plan 2026 published</span><small>View details</small></button>
-          <button onClick={() => openDashboardDetail("today-collection")}><strong>Last payment</strong><span>₹3,000 via UPI</span><small>Review</small></button>
-          <button onClick={() => openDashboardDetail("upcoming-events")}><strong>Upcoming meeting</strong><span>Board Meeting - 10 Jun 2026</span><small>View details</small></button>
-        </div>
-      </section>
     </section>
   );
 }
 
+function TruthStatusCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="compactDashboardCard" style={{ cursor: "default", overflowWrap: "anywhere" }}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>Source status</small>
+    </div>
+  );
+}
 function InternalMvpReadinessPanel({
   role,
   setScreen,
@@ -5355,13 +5304,19 @@ function ClubRemindersDetail() {
 }
 
 function ActiveMembersDetail({ setScreen }: { setScreen: (screen: Screen) => void }) {
+  const { members, status } = useCurrentMemberData();
+  const value = status === "loading"
+    ? "Loading member records…"
+    : status === "error"
+      ? "Unable to load member records"
+      : `${canonicalFellowshipMembers(members).length}`;
   return (
     <div className="compactPanel">
       <div className="metricsGrid">
-        <Metric label="Active members" value="64" />
-        <Metric label="Board / PST" value="8" />
-        <Metric label="Members with donor consent" value="42" />
-        <Metric label="Profile updates pending" value="3" />
+        <Metric label="Genuine active members" value={value} />
+        <Metric label="Board / PST totals" value="Data unavailable" />
+        <Metric label="Donor consent totals" value="Not connected here" />
+        <Metric label="Profile update totals" value="Not connected here" />
       </div>
       <button onClick={() => setScreen("members")}>Open member list</button>
     </div>
@@ -5373,7 +5328,7 @@ function MemberFellowshipDetail({ member, setScreen }: { member: Member; setScre
     <div className="compactPanel">
       <div className="fieldGrid">
         <Field label="Member" value={member.dashboardName} />
-        <Field label="Current month" value="June 2026" />
+        <Field label="Current month" value="Open Fellowship to view connected month state" />
         <Field label="Queue position" value="4" />
         <Field label="Sponsor status" value="Not selected this month" />
         <Field label="Last sponsored" value="Apr 2026" />
