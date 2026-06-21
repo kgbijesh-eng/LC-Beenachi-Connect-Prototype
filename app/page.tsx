@@ -368,6 +368,7 @@ type Screen =
   | "event-meeting-detail"
   | "announcement-single-detail"
   | "club-document-detail"
+  | "personal-document-detail"
   | "activity-detail"
   | "member-dues-detail"
   | "special-collection"
@@ -382,7 +383,9 @@ type Screen =
   | "events-meetings"
   | "announcements"
   | "announcement-detail"
-  | "documents"
+  | "my-documents"
+  | "documents-administration"
+  | "document-administration-edit"
   | "projects"
   | "celebrations"
   | "donor-consent"
@@ -662,15 +665,25 @@ const announcements = [
   { title: "Annual Plan Updated", priority: "Normal", audience: "Members", status: "Published", date: "02 Jun 2026", preview: "The updated Annual Plan 2026 is now available in Documents." }
 ];
 
-const documents = [
-  { title: "General Body Minutes - May 2026", category: "Meeting minutes", visibility: "Members", date: "31 May 2026" },
-  { title: "Annual Plan 2026", category: "Planning document", visibility: "Members", date: "02 Jun 2026" },
-  { title: "Member Guidelines", category: "Club document", visibility: "Members", date: "01 Jun 2026" },
-  { title: "Public Circular - June Meeting", category: "Member circular", visibility: "Members", date: "03 Jun 2026" },
-  { title: "Board Meeting Minutes - May 2026", category: "Board minutes", visibility: "Board", date: "30 May 2026" },
-  { title: "Treasurer Internal Finance Note", category: "Internal finance", visibility: "Treasurer", date: "03 Jun 2026" },
-  { title: "Project Report Template", category: "Committee template", visibility: "Committee", date: "28 May 2026" }
+type ClubDocumentRecord = { id: string; title: string; category: string; visibility: "Members" | "Board" | "Treasurer" | "Committee"; date: string };
+type DocumentEditDraft = { title: string; category: string; visibility: ClubDocumentRecord["visibility"]; date: string };
+
+const documents: ClubDocumentRecord[] = [
+  { id: "doc-general-body-minutes-2026-05", title: "General Body Minutes - May 2026", category: "Meeting minutes", visibility: "Members", date: "31 May 2026" },
+  { id: "doc-annual-plan-2026", title: "Annual Plan 2026", category: "Planning document", visibility: "Members", date: "02 Jun 2026" },
+  { id: "doc-member-guidelines", title: "Member Guidelines", category: "Club document", visibility: "Members", date: "01 Jun 2026" },
+  { id: "doc-public-circular-2026-06", title: "Public Circular - June Meeting", category: "Member circular", visibility: "Members", date: "03 Jun 2026" },
+  { id: "doc-board-minutes-2026-05", title: "Board Meeting Minutes - May 2026", category: "Board minutes", visibility: "Board", date: "30 May 2026" },
+  { id: "doc-treasurer-note-2026-06", title: "Treasurer Internal Finance Note", category: "Internal finance", visibility: "Treasurer", date: "03 Jun 2026" },
+  { id: "doc-project-report-template", title: "Project Report Template", category: "Committee template", visibility: "Committee", date: "28 May 2026" }
 ];
+
+function documentsVisibleToRole(role: Role) {
+  if (role === "president") return documents;
+  if (role === "secretary") return documents.filter((item) => item.visibility !== "Treasurer");
+  if (role === "treasurer") return documents.filter((item) => ["Members", "Board", "Treasurer"].includes(item.visibility));
+  return documents.filter((item) => item.visibility === "Members");
+}
 
 const activities: Activity[] = [
   {
@@ -961,7 +974,7 @@ const myMemberAreaItems: NavItem[] = [
   { label: "My Digital Card", screen: "digital-card" },
   { label: "My Dues", screen: "my-dues" },
   { label: "My Fellowship", screen: "my-fellowship" },
-  { label: "My Documents", screen: "documents" },
+  { label: "My Documents", screen: "my-documents" },
   { label: "My Celebrations", screen: "celebrations" },
   { label: "Blood Donor Consent", screen: "donor-consent" }
 ];
@@ -1020,9 +1033,7 @@ const operationsMenuItems: NavItem[] = [
   {
     label: "Documents",
     children: [
-      detailItem("Operations", "Club Documents"),
-      detailItem("Operations", "Meeting Minutes"),
-      detailItem("Operations", "Circulars")
+      { label: "Club Document Management", screen: "documents-administration" }
     ]
   },
   {
@@ -1140,7 +1151,7 @@ const navByRole: Record<Role, NavGroup[]> = {
     { title: "Finance", items: financeMenuItems },
     { title: "Club Visibility", items: [
       ...peopleMenuItems,
-      ...operationsMenuItems.filter((item) => item.label !== "Fellowship")
+      ...operationsMenuItems.filter((item) => item.label !== "Fellowship" && item.label !== "Documents")
     ] },
     { title: "Reports & Tools", items: [
       ...reportMenuItems,
@@ -1159,7 +1170,7 @@ const navByRole: Record<Role, NavGroup[]> = {
       { label: "My Fellowship", screen: "my-fellowship" },
       { label: "Events & Meetings", screen: "events-meetings" },
       { label: "Announcements", screen: "announcements" },
-      { label: "Documents", screen: "documents" },
+      { label: "My Documents", screen: "my-documents" },
       { label: "Celebrations", screen: "celebrations" },
       { label: "Blood Donor Consent", screen: "donor-consent" }
     ] }
@@ -1190,7 +1201,7 @@ const memberQuickAccess = [
   { label: "Digital Card", short: "ID", screen: "digital-card" as Screen },
   { label: "Announcements", short: "AN", screen: "announcements" as Screen },
   { label: "Events", short: "EV", screen: "events-meetings" as Screen },
-  { label: "Documents", short: "DO", screen: "documents" as Screen },
+  { label: "Documents", short: "DO", screen: "my-documents" as Screen },
   { label: "Blood Donor", short: "BD", screen: "donor-consent" as Screen },
   { label: "Directory", short: "DR", screen: "members" as Screen }
 ];
@@ -1200,7 +1211,7 @@ const pstMemberAreaCards = [
   { label: "My Digital Card", value: "In-app card", action: "View", screen: "digital-card" as Screen },
   { label: "My Dues", value: "Own account", action: "Review", screen: "my-dues" as Screen },
   { label: "My Fellowship", value: "Own status", action: "Open", screen: "my-fellowship" as Screen },
-  { label: "My Documents", value: "My access", action: "View", screen: "documents" as Screen },
+  { label: "My Documents", value: "My access", action: "View", screen: "my-documents" as Screen },
   { label: "My Celebrations", value: "My wishes", action: "Open", screen: "celebrations" as Screen },
   { label: "Blood Donor Consent", value: "My consent", action: "Update", screen: "donor-consent" as Screen }
 ];
@@ -1418,6 +1429,9 @@ export default function Prototype() {
   const [selectedEventMeeting, setSelectedEventMeeting] = useState<EventMeeting | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<{ title: string; meta: string[]; sourceSection: AnnouncementDetail } | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<{ title: string; meta: string[]; sourceTitle: string } | null>(null);
+  const [selectedPersonalDocumentId, setSelectedPersonalDocumentId] = useState<string | null>(null);
+  const [selectedAdministrativeDocumentId, setSelectedAdministrativeDocumentId] = useState<string | null>(null);
+  const [documentEditDraft, setDocumentEditDraft] = useState<DocumentEditDraft | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<{
     name: string;
     date: string;
@@ -1647,6 +1661,7 @@ export default function Prototype() {
 
   const activeMember = roleUser[role];
   const canAccessFellowshipAdministration = role === "president" || role === "secretary";
+  const canManageClubDocuments = role === "president" || role === "secretary";
 
   function handleSetScreen(nextScreen: Screen) {
     if (nextScreen === "fellowship-queue") {
@@ -1659,12 +1674,18 @@ export default function Prototype() {
     if (!canAccessFellowshipAdministration && ["fellowship-administration", "fellowship-queue", "confirm-sponsors", "fellowship-sponsor-detail"].includes(nextScreen)) {
       nextScreen = "fellowship-administration";
     }
+    if (!canManageClubDocuments && ["documents-administration", "document-administration-edit"].includes(nextScreen)) {
+      nextScreen = "documents-administration";
+    }
     setSelectedMember(null);
     setSelectedUpdate(null);
     setSelectedCommittee(null);
     setSelectedEventMeeting(null);
     setSelectedAnnouncement(null);
     setSelectedDocument(null);
+    setSelectedPersonalDocumentId(null);
+    setSelectedAdministrativeDocumentId(null);
+    setDocumentEditDraft(null);
     setSelectedActivity(null);
     setProfileBackContext(null);
     if (
@@ -1730,6 +1751,38 @@ export default function Prototype() {
     setSelectedDocument(doc);
     setScreen("club-document-detail");
   }
+  function openPersonalDocument(documentId: string) {
+    const document = documentsVisibleToRole(role).find((item) => item.id === documentId);
+    if (!document) {
+      setSelectedPersonalDocumentId(null);
+      setScreen("personal-document-detail");
+      return;
+    }
+    setSelectedAdministrativeDocumentId(null);
+    setDocumentEditDraft(null);
+    setSelectedPersonalDocumentId(document.id);
+    setScreen("personal-document-detail");
+  }
+
+  function startAdministrativeDocumentEdit(documentId: string) {
+    const document = canManageClubDocuments ? documents.find((item) => item.id === documentId) : null;
+    if (!document) {
+      setSelectedAdministrativeDocumentId(null);
+      setDocumentEditDraft(null);
+      setScreen("documents-administration");
+      return;
+    }
+    setSelectedPersonalDocumentId(null);
+    setSelectedAdministrativeDocumentId(document.id);
+    setDocumentEditDraft({ title: document.title, category: document.category, visibility: document.visibility, date: document.date });
+    setScreen("document-administration-edit");
+  }
+
+  function cancelAdministrativeDocumentEdit() {
+    setSelectedAdministrativeDocumentId(null);
+    setDocumentEditDraft(null);
+    setScreen("documents-administration");
+  }
 
   function openAnnouncementDetail(announcement: { title: string; meta: string[]; sourceSection: AnnouncementDetail }) {
     setSelectedMember(null);
@@ -1783,6 +1836,9 @@ export default function Prototype() {
     setSelectedEventMeeting(null);
     setSelectedAnnouncement(null);
     setSelectedDocument(null);
+    setSelectedPersonalDocumentId(null);
+    setSelectedAdministrativeDocumentId(null);
+    setDocumentEditDraft(null);
     setSelectedActivity(null);
     setProfileBackContext(null);
     setSelectedSponsor(null);
@@ -1879,6 +1935,8 @@ export default function Prototype() {
     if (item.statementSection) setClubStatementSection(item.statementSection);
     if (item.collectionDetail) setCollectionDetail(item.collectionDetail);
     if (item.fellowshipPaymentView) setFellowshipPaymentView(item.fellowshipPaymentView);
+    if (item.screen === "my-documents") { setSelectedAdministrativeDocumentId(null); setDocumentEditDraft(null); }
+    if (item.screen === "documents-administration") { setSelectedPersonalDocumentId(null); setDocumentEditDraft(null); }
     setScreen(item.screen);
     if (!item.collectionDetail) setCollectionDetail(null);
     if (item.screen !== "events-meetings" || !item.eventMeetingSection) setEventMeetingSection(null);
@@ -1899,6 +1957,7 @@ export default function Prototype() {
     } else {
       setSelectedMember(null);
     }
+    if (item.screen === "my-documents") { setSelectedAdministrativeDocumentId(null); setDocumentEditDraft(null); }
     setScreen(item.screen);
     setCollectionDetail(null);
     setEventMeetingSection(null);
@@ -2164,6 +2223,25 @@ export default function Prototype() {
             }}
           />
         )}
+        {screen === "my-documents" && (
+          <ContextBack
+            parent="My Member Area"
+            onBack={() => {
+              setScreen("dashboard");
+              setExpandedGroups(role === "member" ? [] : ["My Member Area"]);
+            }}
+          />
+        )}
+        {screen === "documents-administration" && canManageClubDocuments && (
+          <ContextBack
+            parent="Operations"
+            onBack={() => {
+              setScreen("operations-module");
+              setOperationsSection(null);
+              setExpandedGroups(["Operations"]);
+            }}
+          />
+        )}
         {screen === "member-profile" && profileBackContext ? (
           <ContextBack
             parent={profileBackContext.screen === "nav-detail" ? (profileBackContext.title === "PST Profiles" ? "PST Profiles" : profileBackContext.title || "Back") : (profileBackContext.screen === "members" ? "Member Directory" : "Back")}
@@ -2180,7 +2258,7 @@ export default function Prototype() {
             }}
           />
         ) : (
-          activeParent && screen !== "my-fellowship" && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
+          activeParent && screen !== "my-fellowship" && screen !== "my-documents" && screen !== "documents-administration" && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
             <ContextBack
               parent={screen === "fellowship-administration" ? "Operations" : activeParent}
               onBack={() => {
@@ -2332,6 +2410,26 @@ export default function Prototype() {
         {screen === "club-document-detail" && (
           <ClubDocumentDetail item={selectedDocument} setScreen={handleSetScreen} />
         )}
+        {screen === "personal-document-detail" && (
+          <PersonalDocumentDetail
+            document={documentsVisibleToRole(role).find((item) => item.id === selectedPersonalDocumentId) || null}
+            onBack={() => {
+              setSelectedPersonalDocumentId(null);
+              setScreen("my-documents");
+              setExpandedGroups(role === "member" ? [] : ["My Member Area"]);
+            }}
+          />
+        )}
+        {screen === "document-administration-edit" && (canManageClubDocuments ? (
+          <DocumentAdministrationEdit
+            document={documents.find((item) => item.id === selectedAdministrativeDocumentId) || null}
+            draft={documentEditDraft}
+            setDraft={setDocumentEditDraft}
+            onCancel={cancelAdministrativeDocumentEdit}
+          />
+        ) : (
+          <section className="compactPanel"><p className="eyebrow">DOCUMENT ADMINISTRATION</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to manage club documents.</div></section>
+        ))}
         {screen === "activity-detail" && (
           <ActivityDetail
             item={selectedActivity}
@@ -2483,7 +2581,12 @@ export default function Prototype() {
           <EventMeetingDetail item={selectedEventMeeting} setScreen={handleSetScreen} />
         )}
         {screen === "announcements" && <Announcements role={role} member={activeMember} selectedSponsors={selectedSponsors} />}
-        {screen === "documents" && <Documents role={role} />}
+        {screen === "my-documents" && <MyDocuments role={role} onOpen={openPersonalDocument} />}
+        {screen === "documents-administration" && (canManageClubDocuments ? (
+          <DocumentAdministration onEdit={startAdministrativeDocumentEdit} />
+        ) : (
+          <section className="compactPanel"><p className="eyebrow">DOCUMENT ADMINISTRATION</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club document management.</div></section>
+        ))}
         {screen === "projects" && <ProjectsActivities setScreen={handleSetScreen} />}
         {screen === "celebrations" && <Celebrations role={role} setScreen={handleSetScreen} />}
         {screen === "donor-consent" && <DonorConsent member={activeMember} />}
@@ -2585,7 +2688,10 @@ function screenTitle(screen: Screen) {
     "announcement-single-detail": "Announcement Details",
     "club-document-detail": "Document Details",
     "activity-detail": "Activity Details",
-    documents: "Documents",
+    "my-documents": "My Documents",
+    "documents-administration": "Document Administration",
+    "document-administration-edit": "Edit Club Document",
+    "personal-document-detail": "Document Details",
     projects: "Projects / Activities",
     celebrations: "Celebrations",
     "donor-consent": "Blood Donor Consent",
@@ -2855,7 +2961,7 @@ function OperationsModule({
       />
       {section === "Events & Meetings" && <EventsMeetings role={role} member={member} selectedSponsors={selectedSponsors} setScreen={setScreen} />}
       {section === "Announcements" && <Announcements role={role} member={member} selectedSponsors={selectedSponsors} />}
-      {section === "Documents" && <Documents role={role} />}
+      {section === "Documents" && <div className="compactPanel"><p>Club document management has a separate authorized workspace.</p><button onClick={() => setScreen("documents-administration")}>Open Document Administration</button></div>}
       {section === "Projects / Activities" && <ProjectsActivities setScreen={setScreen} />}
       {section === "Fellowship" && (
         <FellowshipDashboard
@@ -3650,7 +3756,7 @@ function ClubVisibilityModule({
       {section === "Members" && <MembersList setScreen={setScreen} role={role} onSelectMember={onSelectMember} />}
       {section === "Events & Meetings" && <EventsMeetings role={role} member={member} selectedSponsors={selectedSponsors} setScreen={setScreen} />}
       {section === "Announcements" && <Announcements role={role} member={member} selectedSponsors={selectedSponsors} />}
-      {section === "Documents" && <Documents role={role} />}
+      {section === "Documents" && <div className="compactPanel"><p>Use My Documents for read-only role-authorized document access.</p><button onClick={() => setScreen("my-documents")}>Open My Documents</button></div>}
       {section === "Projects / Activities" && <ProjectsActivities setScreen={setScreen} />}
       {section === "Celebrations" && <Celebrations role={role} setScreen={setScreen} />}
     </section>
@@ -9168,39 +9274,51 @@ function Announcements({ role, member, selectedSponsors }: { role: Role; member:
   );
 }
 
-function Documents({ role }: { role: Role }) {
-  if (role === "member") {
-    const visibleDocuments = documents.filter((item) => item.visibility === "Members");
-    return (
-      <section className="stack">
-        <Toolbar title="Documents" actionLabel="Documents available to you" />
-        <div className="documentGrid">
-          {visibleDocuments.map((item) => (
-            <article className="documentCard" key={item.title}>
-              <div>
-                <h2>{item.title}</h2>
-                <p>{item.category}</p>
-                <span>{item.date}</span>
-              </div>
-              <button className="filterButton">Open Document</button>
-            </article>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
+function MyDocuments({ role, onOpen }: { role: Role; onOpen: (documentId: string) => void }) {
+  const visibleDocuments = documentsVisibleToRole(role);
   return (
-    <section className="stack">
-      <Toolbar title="Documents" actionLabel="Role-based edit" />
+    <section className="stack" style={{ minWidth: 0 }}>
+      <div className="memberPanel">
+        <div className="toolbar" style={{ gap: "12px", flexWrap: "wrap" }}>
+          <div><p className="eyebrow">MY DOCUMENTS</p><h2>Documents Available to Me</h2></div>
+          <span className="statusPill">Read-only member access</span>
+        </div>
+        <div className="notice memberHelperText">Only documents authorized for this test role are shown. Document content and file downloads are not connected in this prototype.</div>
+      </div>
+      <div className="documentGrid">
+        {visibleDocuments.map((item) => (
+          <article className="documentCard" key={item.id}>
+            <div>
+              <h2>{item.title}</h2>
+              <p>{item.category}</p>
+              <span>{item.date}</span>
+            </div>
+            <button className="filterButton" onClick={() => onOpen(item.id)}>View Details</button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DocumentAdministration({ onEdit }: { onEdit: (documentId: string) => void }) {
+  return (
+    <section className="stack" style={{ minWidth: 0 }}>
+      <div className="compactPanel">
+        <div className="toolbar" style={{ gap: "12px", flexWrap: "wrap" }}>
+          <div><p className="eyebrow">DOCUMENT ADMINISTRATION</p><h2>Club Document Management</h2></div>
+          <span className="statusPill">Authorized metadata workflow</span>
+        </div>
+        <div className="notice memberHelperText">Club document records currently contain metadata only. No club-document update API or shared file storage is connected.</div>
+      </div>
       <div className="tableLike">
         {documents.map((item) => (
-          <div className="staticRow documentAdminRow" key={item.title}>
+          <div className="staticRow documentAdminRow" key={item.id}>
             <strong>{item.title}</strong>
             <span>{item.category}</span>
             <span>{item.date}</span>
             <span className="tag">{item.visibility}</span>
-            <button className="filterButton">Edit</button>
+            <button className="filterButton" onClick={() => onEdit(item.id)}>Edit</button>
           </div>
         ))}
       </div>
@@ -9208,6 +9326,65 @@ function Documents({ role }: { role: Role }) {
   );
 }
 
+function PersonalDocumentDetail({ document, onBack }: { document: ClubDocumentRecord | null; onBack: () => void }) {
+  return (
+    <section className="stack" style={{ minWidth: 0 }}>
+      <div className="compactPanel">
+        <button className="secondaryButton compactBackButton" onClick={onBack}>← My Documents</button>
+        <Toolbar title="Document Details" actionLabel="Member document access" />
+      </div>
+      {!document ? (
+        <div className="notice memberHelperText">The selected document is unavailable or is not authorized for this role.</div>
+      ) : (
+        <div className="memberPanel">
+          <div className="toolbar" style={{ gap: "8px", flexWrap: "wrap" }}><h3>{document.title}</h3><span className="statusPill">{document.visibility}</span></div>
+          <div className="fieldGrid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+            <Field label="Stable document ID" value={document.id} />
+            <Field label="Category" value={document.category} />
+            <Field label="Document date" value={document.date} />
+            <Field label="Visibility" value={document.visibility} />
+          </div>
+          <div className="notice memberHelperText">Document content is not connected in this prototype.</div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DocumentAdministrationEdit({
+  document,
+  draft,
+  setDraft,
+  onCancel
+}: {
+  document: ClubDocumentRecord | null;
+  draft: DocumentEditDraft | null;
+  setDraft: (draft: DocumentEditDraft) => void;
+  onCancel: () => void;
+}) {
+  if (!document || !draft) {
+    return <section className="compactPanel"><p className="eyebrow">DOCUMENT ADMINISTRATION</p><h2>Edit unavailable</h2><div className="notice">No stable club document record is selected.</div><button className="secondaryButton" onClick={onCancel}>Back to Document Administration</button></section>;
+  }
+  return (
+    <section className="stack" style={{ minWidth: 0 }}>
+      <div className="compactPanel">
+        <p className="eyebrow">DOCUMENT ADMINISTRATION</p>
+        <h2>Edit Club Document Metadata</h2>
+        <div className="notice memberHelperText">Editing stable record <strong>{document.id}</strong>. The form is prepopulated from this exact document.</div>
+      </div>
+      <div className="memberPanel">
+        <div className="fieldGrid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <label>Title<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
+          <label>Category<input value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} /></label>
+          <label>Date<input value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label>
+          <label>Visibility<select value={draft.visibility} onChange={(event) => setDraft({ ...draft, visibility: event.target.value as ClubDocumentRecord["visibility"] })}><option>Members</option><option>Board</option><option>Treasurer</option><option>Committee</option></select></label>
+        </div>
+        <div className="notice memberHelperText"><strong>Save is unavailable.</strong> No authorized club-document update API or shared backend record exists. No changes have been applied.</div>
+        <div className="buttonRow"><button disabled title="No club-document update API is connected">Save unavailable</button><button className="secondaryButton" onClick={onCancel}>Cancel Without Changes</button></div>
+      </div>
+    </section>
+  );
+}
 function ListScreen({ title, items, role }: { title: string; items: string[]; role: Role }) {
   return (
     <section className="stack">
