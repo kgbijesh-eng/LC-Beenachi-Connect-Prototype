@@ -107,6 +107,10 @@ type BackendClubMembership = {
   };
 };
 
+type BackendAuthenticatedUser = {
+  id?: number;
+};
+
 type BackendMemberRecord = {
   id: number;
   club_id: number;
@@ -352,7 +356,8 @@ type Screen =
   | "committees"
   | "member-profile"
   | "digital-card"
-  | "fellowship"
+  | "my-fellowship"
+  | "fellowship-administration"
   | "fellowship-queue"
   | "confirm-sponsors"
   | "fellowship-sponsor-detail"
@@ -460,6 +465,7 @@ type DashboardDetail =
 type Member = {
   id: string;
   backendId?: number;
+  userId?: number | null;
   name: string;
   dashboardName: string;
   clubRole: string;
@@ -954,7 +960,7 @@ const myMemberAreaItems: NavItem[] = [
   { label: "My Profile", screen: "member-profile" },
   { label: "My Digital Card", screen: "digital-card" },
   { label: "My Dues", screen: "my-dues" },
-  { label: "My Fellowship", screen: "fellowship" },
+  { label: "My Fellowship", screen: "my-fellowship" },
   { label: "My Documents", screen: "documents" },
   { label: "My Celebrations", screen: "celebrations" },
   { label: "Blood Donor Consent", screen: "donor-consent" }
@@ -1031,11 +1037,11 @@ const operationsMenuItems: NavItem[] = [
   {
     label: "Fellowship",
     children: [
-      { label: "Overview", screen: "fellowship", fellowshipTab: "Overview" },
-      { label: "Sponsor Rotation", screen: "fellowship", fellowshipTab: "Queue" },
-      { label: "Selected Sponsors", screen: "fellowship", fellowshipTab: "Selected Sponsors" },
-      { label: "Payments", screen: "fellowship", fellowshipTab: "Payments" },
-      { label: "Month Summary", screen: "fellowship", fellowshipTab: "History" }
+      { label: "Overview", screen: "fellowship-administration", fellowshipTab: "Overview" },
+      { label: "Sponsor Rotation", screen: "fellowship-administration", fellowshipTab: "Queue" },
+      { label: "Selected Sponsors", screen: "fellowship-administration", fellowshipTab: "Selected Sponsors" },
+      { label: "Payments", screen: "fellowship-administration", fellowshipTab: "Payments" },
+      { label: "Month Summary", screen: "fellowship-administration", fellowshipTab: "History" }
     ]
   }
 ];
@@ -1150,7 +1156,7 @@ const navByRole: Record<Role, NavGroup[]> = {
       { label: "PST Profiles", screen: "nav-detail", detailParent: "People", detailTitle: "PST Profiles" },
       { label: "My Dues", screen: "my-dues" },
       { label: "My Payment History", screen: "payment-history" },
-      { label: "My Fellowship", screen: "fellowship" },
+      { label: "My Fellowship", screen: "my-fellowship" },
       { label: "Events & Meetings", screen: "events-meetings" },
       { label: "Announcements", screen: "announcements" },
       { label: "Documents", screen: "documents" },
@@ -1180,7 +1186,7 @@ function hasPositiveFellowshipBalance(amount: number) {
 const memberQuickAccess = [
   { label: "My Dues", short: "DU", screen: "my-dues" as Screen },
   { label: "Payments", short: "PH", screen: "payment-history" as Screen },
-  { label: "My Fellowship", short: "FE", screen: "fellowship" as Screen },
+  { label: "My Fellowship", short: "FE", screen: "my-fellowship" as Screen },
   { label: "Digital Card", short: "ID", screen: "digital-card" as Screen },
   { label: "Announcements", short: "AN", screen: "announcements" as Screen },
   { label: "Events", short: "EV", screen: "events-meetings" as Screen },
@@ -1193,7 +1199,7 @@ const pstMemberAreaCards = [
   { label: "My Profile", value: "Member record", action: "Open", screen: "member-profile" as Screen },
   { label: "My Digital Card", value: "In-app card", action: "View", screen: "digital-card" as Screen },
   { label: "My Dues", value: "Own account", action: "Review", screen: "my-dues" as Screen },
-  { label: "My Fellowship", value: "Own status", action: "Open", screen: "fellowship" as Screen },
+  { label: "My Fellowship", value: "Own status", action: "Open", screen: "my-fellowship" as Screen },
   { label: "My Documents", value: "My access", action: "View", screen: "documents" as Screen },
   { label: "My Celebrations", value: "My wishes", action: "Open", screen: "celebrations" as Screen },
   { label: "Blood Donor Consent", value: "My consent", action: "Update", screen: "donor-consent" as Screen }
@@ -1242,6 +1248,7 @@ function memberFromBackend(record: BackendMemberRecord): Member {
   return {
     id: record.member_code,
     backendId: record.id,
+    userId: record.user_id,
     name: displayName,
     dashboardName: displayName,
     clubRole: record.membership_category || record.membership_type || "Member",
@@ -1377,6 +1384,7 @@ export default function Prototype() {
   const [memberLoadError, setMemberLoadError] = useState<string | null>(null);
   const [memberToken, setMemberToken] = useState<string | null>(null);
   const [memberClubId, setMemberClubId] = useState<number | null>(null);
+  const [authenticatedUserId, setAuthenticatedUserId] = useState<number | null>(null);
   const [memberRefreshKey, setMemberRefreshKey] = useState(0);
 
   const [selectedSponsors, setSelectedSponsors] = useState<string[]>([]);
@@ -1491,6 +1499,7 @@ export default function Prototype() {
       setCurrentMembers([]);
       setMemberToken(null);
       setMemberClubId(null);
+      setAuthenticatedUserId(null);
 
       try {
         const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
@@ -1509,6 +1518,8 @@ export default function Prototype() {
         const meResponse = await fetch(API_BASE_URL + "/auth/me", { headers: authHeaders, signal: controller.signal });
         if (!meResponse.ok) throw new Error("Club context could not be loaded.");
         const mePayload = await meResponse.json();
+        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
+        const authenticatedId = authenticatedUser?.id;
         const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
         const clubId = memberships?.[0]?.club?.id;
         if (typeof clubId !== "number") throw new Error("No active club context is available.");
@@ -1537,6 +1548,7 @@ export default function Prototype() {
           setCurrentMembers(normalized);
           setMemberToken(token);
           setMemberClubId(clubId);
+          setAuthenticatedUserId(typeof authenticatedId === "number" ? authenticatedId : null);
           setMemberStatus("ready");
         }
       } catch (error) {
@@ -1634,14 +1646,18 @@ export default function Prototype() {
   const activeConfirmationTitle = `Review & Confirm ${activeFellowshipMonthLabel} Sponsors`;
 
   const activeMember = roleUser[role];
+  const canAccessFellowshipAdministration = role === "president" || role === "secretary";
 
   function handleSetScreen(nextScreen: Screen) {
     if (nextScreen === "fellowship-queue") {
       setFellowshipTab("Queue");
-      nextScreen = "fellowship";
+      nextScreen = "fellowship-administration";
     } else if (nextScreen === "confirm-sponsors") {
       setFellowshipTab("Selected Sponsors");
-      nextScreen = "fellowship";
+      nextScreen = "fellowship-administration";
+    }
+    if (!canAccessFellowshipAdministration && ["fellowship-administration", "fellowship-queue", "confirm-sponsors", "fellowship-sponsor-detail"].includes(nextScreen)) {
+      nextScreen = "fellowship-administration";
     }
     setSelectedMember(null);
     setSelectedUpdate(null);
@@ -1652,7 +1668,8 @@ export default function Prototype() {
     setSelectedActivity(null);
     setProfileBackContext(null);
     if (
-      nextScreen !== "fellowship" &&
+      nextScreen !== "fellowship-administration" &&
+      nextScreen !== "my-fellowship" &&
       nextScreen !== "fellowship-sponsor-detail"
     ) {
       setSelectedSponsor(null);
@@ -1807,7 +1824,7 @@ export default function Prototype() {
 
   function navItemMatches(item: NavItem) {
     if (!item.screen) return false;
-    const isFellowshipMatch = item.screen === "fellowship" && (screen === "fellowship" || (screen === "operations-module" && operationsSection === "Fellowship"));
+    const isFellowshipMatch = item.screen === "fellowship-administration" && (screen === "fellowship-administration" || (screen === "operations-module" && operationsSection === "Fellowship"));
     if (item.screen !== screen && !isFellowshipMatch) return false;
     if (item.reportDetail && item.reportDetail !== reportDetail) return false;
     if (item.financeSection && item.financeSection !== financeSection) return false;
@@ -1923,7 +1940,8 @@ export default function Prototype() {
               screen === "committee-detail" ||
               (screen === "people-module" && peopleSection === "Board & Committees")
             ? "Club member selector"
-            : screen === "fellowship" ||
+            : screen === "my-fellowship" ||
+                screen === "fellowship-administration" ||
                 screen === "fellowship-queue" ||
                 screen === "confirm-sponsors" ||
                 screen === "fellowship-sponsor-detail" ||
@@ -2137,6 +2155,15 @@ export default function Prototype() {
 
       <section className="workspace">
         <Header role={roleLabels[role]} user={activeMember.dashboardName} screen={screen} reportDetail={reportDetail} navTitle={navDetailTitle(navDetail.parent, navDetail.title)} selectedMember={selectedMember} fellowshipConfirmationTitle={activeConfirmationTitle} backendMemberLabel={backendMemberHeaderLabel} />
+        {screen === "my-fellowship" && (
+          <ContextBack
+            parent="My Member Area"
+            onBack={() => {
+              setScreen("dashboard");
+              setExpandedGroups(role === "member" ? [] : ["My Member Area"]);
+            }}
+          />
+        )}
         {screen === "member-profile" && profileBackContext ? (
           <ContextBack
             parent={profileBackContext.screen === "nav-detail" ? (profileBackContext.title === "PST Profiles" ? "PST Profiles" : profileBackContext.title || "Back") : (profileBackContext.screen === "members" ? "Member Directory" : "Back")}
@@ -2153,11 +2180,11 @@ export default function Prototype() {
             }}
           />
         ) : (
-          activeParent && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
+          activeParent && screen !== "my-fellowship" && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
             <ContextBack
-              parent={screen === "fellowship" ? "Operations" : activeParent}
+              parent={screen === "fellowship-administration" ? "Operations" : activeParent}
               onBack={() => {
-                if (screen === "fellowship") {
+                if (screen === "fellowship-administration") {
                   setScreen("operations-module");
                   setOperationsSection(null);
                   setEventMeetingSection(null);
@@ -2345,10 +2372,15 @@ export default function Prototype() {
         {screen === "committees" && <Committees />}
         {screen === "member-profile" && <MemberProfile key={selectedMember?.backendId ?? activeMember.id} member={selectedMember ?? activeMember} role={role} />}
         {screen === "digital-card" && <DigitalCard member={activeMember} />}
-        {screen === "fellowship" && (
+        {screen === "my-fellowship" && (
+          <MemberFellowship
+            authenticatedUserId={authenticatedUserId}
+            months={fellowshipMonths}
+            selectedMonthKey={selectedFellowshipMonthKey}
+          />
+        )}
+        {screen === "fellowship-administration" && (canAccessFellowshipAdministration ? (
           <FellowshipDashboard
-            role={role}
-            member={activeMember}
             tab={fellowshipTab}
             setTab={setFellowshipTab}
             months={fellowshipMonths}
@@ -2356,7 +2388,14 @@ export default function Prototype() {
             selectedMonthKey={selectedFellowshipMonthKey}
             setSelectedMonthKey={setSelectedFellowshipMonthKey}
           />
-        )}        {screen === "fellowship-queue" && (
+        ) : (
+          <section className="compactPanel">
+            <p className="eyebrow">FELLOWSHIP ADMINISTRATION</p>
+            <h2>Unauthorized</h2>
+            <div className="notice">This test role is not authorized to access club-wide Fellowship administration.</div>
+          </section>
+        ))}
+        {screen === "fellowship-queue" && canAccessFellowshipAdministration && (
           <FellowshipQueue
             selectedSponsors={activeSelectedSponsors}
             confirmationTitle={activeConfirmationTitle}
@@ -2374,7 +2413,7 @@ export default function Prototype() {
             isFellowshipConfirmed={activeIsFellowshipConfirmed}
           />
         )}
-        {screen === "confirm-sponsors" && (
+        {screen === "confirm-sponsors" && canAccessFellowshipAdministration && (
           <ConfirmSponsors
             title={activeConfirmationTitle}
             monthLabel={activeFellowshipMonthLabel}
@@ -2397,14 +2436,14 @@ export default function Prototype() {
 
           />
         )}
-        {screen === "fellowship-sponsor-detail" && (
+        {screen === "fellowship-sponsor-detail" && canAccessFellowshipAdministration && (
           selectedSponsor ? (
             <FellowshipSponsorDetail
               sponsor={selectedSponsor}
               onBack={() => {
                 setSelectedSponsor(null);
                 setFellowshipTab("Selected Sponsors");
-                setScreen("fellowship");
+                setScreen("fellowship-administration");
               }}
             />
           ) : selectedSponsorPayment ? (
@@ -2413,7 +2452,7 @@ export default function Prototype() {
               onBack={() => {
                 setSelectedSponsorPayment(null);
                 setFellowshipTab("Payments");
-                setScreen("fellowship");
+                setScreen("fellowship-administration");
               }}
             />
           ) : null
@@ -2520,7 +2559,8 @@ function screenTitle(screen: Screen) {
     committees: "Board & Committees",
     "member-profile": "My Profile",
     "digital-card": "My Digital Card",
-    fellowship: "Fellowship Sponsorship",
+    "my-fellowship": "My Fellowship",
+    "fellowship-administration": "Fellowship Administration",
     "fellowship-queue": "Fellowship Queue",
     "confirm-sponsors": "Review & Confirm June 2026 Sponsors",
     "fellowship-sponsor-detail": "Fellowship Sponsor Details",
@@ -2819,8 +2859,6 @@ function OperationsModule({
       {section === "Projects / Activities" && <ProjectsActivities setScreen={setScreen} />}
       {section === "Fellowship" && (
         <FellowshipDashboard
-          role={role}
-          member={member}
           tab={tab}
           setTab={setTab}
           months={months}
@@ -2938,6 +2976,8 @@ function ClubFinanceReportsPanel({
         }
 
         const mePayload = await meResponse.json();
+        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
+        const authenticatedId = authenticatedUser?.id;
         const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
         const loadedClubId = memberships?.[0]?.club?.id;
 
@@ -4717,7 +4757,7 @@ function Dashboard({
 
   function openCurrentFellowship() {
     if (currentMonthKey && currentMonth) setSelectedMonthKey(currentMonthKey);
-    setScreen("fellowship");
+    setScreen(role === "president" || role === "secretary" ? "fellowship-administration" : "my-fellowship");
   }
 
   const fellowshipValue = !clientDate
@@ -5191,7 +5231,7 @@ function FellowshipStatusDetail({ setScreen }: { setScreen: (screen: Screen) => 
   return (
     <div className="compactPanel">
       <div className="fieldGrid">{rows.map(([label, value]) => <Field key={label} label={label} value={value} />)}</div>
-      <button onClick={() => setScreen("fellowship")}>Continue fellowship workflow</button>
+      <button onClick={() => setScreen("fellowship-administration")}>Continue fellowship workflow</button>
     </div>
   );
 }
@@ -5334,7 +5374,7 @@ function MemberFellowshipDetail({ member, setScreen }: { member: Member; setScre
         <Field label="Last sponsored" value="Apr 2026" />
         <Field label="Visibility" value="Own fellowship status only" />
       </div>
-      <button onClick={() => setScreen("fellowship")}>Open My Fellowship</button>
+      <button onClick={() => setScreen("my-fellowship")}>Open My Fellowship</button>
     </div>
   );
 }
@@ -5944,8 +5984,6 @@ function DigitalCard({ member }: { member: Member }) {
 }
 
 function FellowshipDashboard({
-  role,
-  member,
   tab,
   setTab,
   months,
@@ -5953,8 +5991,6 @@ function FellowshipDashboard({
   selectedMonthKey,
   setSelectedMonthKey
 }: {
-  role: Role;
-  member: Member;
   tab: FellowshipTab;
   setTab: (tab: FellowshipTab) => void;
   months: Record<string, FellowshipMonthRecord>;
@@ -6118,8 +6154,6 @@ function FellowshipDashboard({
   if (status === "loading") return <div className="notice">Loading current members...</div>;
   if (status === "error") return <div className="notice"><strong>Current member data could not be loaded.</strong> {error} <button className="filterButton" onClick={retry}>Retry</button></div>;
   if (!month) return <div className="notice">Fellowship month state is unavailable.</div>;
-  if (role === "member") return <MemberFellowship member={member} selectedSponsors={activeSponsors} memberActionMessage={month.notice} setMemberActionMessage={() => undefined} amountPerSponsor={share} />;
-
   const lifecycleLabel: Record<FellowshipMonthLifecycle, string> = {
     unprepared: "Unprepared",
     draft: "Draft — Sponsor Selection",
@@ -6129,6 +6163,9 @@ function FellowshipDashboard({
 
   return (
     <section className="stack" style={{ minWidth: 0 }}>
+      <div className="compactPanel">
+        <div className="toolbar" style={{ gap: "12px", flexWrap: "wrap" }}><div><p className="eyebrow">FELLOWSHIP ADMINISTRATION</p><h2>Club Fellowship Management</h2></div><span className="statusPill">Authorized club workflow</span></div>
+      </div>
       <div className="compactPanel">
         <div className="toolbar" style={{ gap: "12px", flexWrap: "wrap" }}>
           <div><p className="eyebrow">Fellowship Sponsorship — {monthLabel}</p><h2>Month lifecycle</h2></div>
@@ -6189,86 +6226,152 @@ function FellowshipDashboard({
   );
 }
 function MemberFellowship({
-  member,
-  selectedSponsors,
-  memberActionMessage,
-  setMemberActionMessage,
-  amountPerSponsor
+  authenticatedUserId,
+  months,
+  selectedMonthKey
 }: {
-  member: Member;
-  selectedSponsors: string[];
-  memberActionMessage: string | null;
-  setMemberActionMessage: (msg: string | null) => void;
-  amountPerSponsor: number;
+  authenticatedUserId: number | null;
+  months: Record<string, FellowshipMonthRecord>;
+  selectedMonthKey: string;
 }) {
-  const { members: currentMembers } = useCurrentMemberData();
-  const sponsorName = (memberId: string) => displayMemberName(memberId, currentMembers);
-  const isSponsor = selectedSponsors.includes(member.name) || selectedSponsors.includes(member.dashboardName);
-  const coSponsors = selectedSponsors.filter((sponsor) => sponsor !== member.name && sponsor !== member.dashboardName);
-  const memberIndex = selectedSponsors.findIndex((s) => s === member.name || s === member.dashboardName);
-  const memberPaid = memberIndex === 0;
+  const { members: currentMembers, status, error, retry } = useCurrentMemberData();
+
+  if (status === "loading") return <div className="notice">Loading personal Fellowship information…</div>;
+  if (status === "error") return <div className="notice"><strong>Personal Fellowship information is unavailable.</strong>{error && <span> {error}</span>} <button className="filterButton" onClick={retry}>Retry</button></div>;
+
+  const linkedMember = authenticatedUserId === null
+    ? null
+    : currentMembers.find((currentMember) => currentMember.userId === authenticatedUserId && typeof currentMember.backendId === "number") || null;
+
+  if (!linkedMember) {
+    return (
+      <section className="stack" style={{ minWidth: 0 }}>
+        <section className="memberPanel">
+          <p className="eyebrow">MY FELLOWSHIP</p>
+          <h2>Personal Fellowship Summary</h2>
+          <div className="notice memberHelperText"><strong>No genuine club member profile is linked to this development test account.</strong> Personal Fellowship information is unavailable.</div>
+          <div className="notice memberHelperText">Use Operations → Fellowship for authorized club administration.</div>
+        </section>
+        <div className="notice memberHelperText">Prototype session data only. Fellowship records are not yet stored as shared backend records.</div>
+      </section>
+    );
+  }
+
+  const memberKey = String(linkedMember.backendId);
+  const monthKeys = Object.keys(months).sort((left, right) => right.localeCompare(left));
+  const selectedMonth = months[selectedMonthKey] || null;
+  const hasPersonalRecord = (month: FellowshipMonthRecord) =>
+    month.selectedSponsors.includes(memberKey)
+    || month.confirmedSponsors.includes(memberKey)
+    || Object.prototype.hasOwnProperty.call(month.payments, memberKey)
+    || (month.paymentHistories[memberKey]?.length || 0) > 0;
+  const personalHistory = monthKeys.map((key) => months[key]).filter(hasPersonalRecord);
+
+  function personalStatus(month: FellowshipMonthRecord) {
+    if (month.lifecycle === "unprepared") return "No Fellowship month is currently prepared";
+    if (month.lifecycle === "draft") return month.selectedSponsors.includes(memberKey) ? "Selected — awaiting confirmation" : "Not selected this month";
+    if (!month.confirmedSponsors.includes(memberKey)) return "Not selected this month";
+    if (month.lifecycle === "finalised") return "Month finalised";
+    return "Confirmed sponsor";
+  }
+
+  function paymentStatus(month: FellowshipMonthRecord) {
+    if (!month.confirmedSponsors.includes(memberKey)) return null;
+    const paid = month.payments[memberKey] || 0;
+    const balance = roundFellowshipAmount(month.confirmedSharePerSponsor - paid);
+    if (!month.paymentHistories[memberKey]?.length && paid === 0) return "Payment not started";
+    if (!hasPositiveFellowshipBalance(balance)) return "Paid";
+    return paid > 0 ? "Partly paid" : "Not paid";
+  }
+
+  const selectedHasRecord = Boolean(selectedMonth && hasPersonalRecord(selectedMonth));
+  const selectedConfirmed = Boolean(selectedMonth?.confirmedSponsors.includes(memberKey));
+  const selectedPaid = selectedConfirmed ? selectedMonth?.payments[memberKey] || 0 : null;
+  const selectedBalance = selectedConfirmed && selectedMonth
+    ? roundFellowshipAmount(selectedMonth.confirmedSharePerSponsor - (selectedPaid || 0))
+    : null;
+  const selectedDraftShare = selectedMonth?.lifecycle === "draft" && selectedMonth.selectedSponsors.includes(memberKey)
+    ? Number(selectedMonth.totalExpenseInput) / selectedMonth.selectedSponsors.length
+    : null;
+  const selectedShare = selectedConfirmed
+    ? selectedMonth?.confirmedSharePerSponsor ?? null
+    : Number.isFinite(selectedDraftShare) && (selectedDraftShare || 0) > 0
+      ? selectedDraftShare
+      : null;
+  const selectedTransactions = selectedMonth?.paymentHistories[memberKey] || [];
 
   return (
-    <section className="stack">
+    <section className="stack" style={{ minWidth: 0 }}>
       <section className="memberPanel">
-        <Toolbar title="My Fellowship" actionLabel="Member view" />
+        <div className="toolbar" style={{ gap: "12px", flexWrap: "wrap" }}>
+          <div><p className="eyebrow">MY FELLOWSHIP</p><h2>Personal Fellowship Summary</h2></div>
+          <span className="statusPill">Read-only personal view</span>
+        </div>
         <div className="memberFellowshipHero">
-          <p className="eyebrow">June 2026</p>
-          <h2>{isSponsor ? "You are assigned as a fellowship sponsor this month." : "You are not assigned as a fellowship sponsor this month."}</h2>
-          <p>{isSponsor ? "Please check your own contribution and action." : "No action required."}</p>
+          <p className="eyebrow">{selectedMonth ? fellowshipMonthLabel(selectedMonth.key) : "Selected month unavailable"}</p>
+          <h2>{selectedMonth ? personalStatus(selectedMonth) : "Personal Fellowship information is unavailable."}</h2>
+          <p>This view is limited to the Fellowship record linked to your authenticated club member profile.</p>
         </div>
       </section>
 
-      {memberActionMessage && (
-        <div className="notice" style={{ backgroundColor: "#e8f0fe", color: "#1a73e8", padding: "12px", borderRadius: "8px" }}>
-          {memberActionMessage}
-        </div>
-      )}
-
-      {isSponsor ? (
-        <>
-          <section className="memberPanel">
-            <Toolbar title="Your Sponsorship" actionLabel={memberPaid ? "Paid" : "Action needed"} />
-            <div className="memberDuesSummary">
-              <Metric label="Your Contribution" value={formatSponsorShare(amountPerSponsor)} />
-              <Metric label="Your Payment Status" value={memberPaid ? "Paid" : "Pending"} />
-              <Metric label="Meeting Date" value="15 Jun 2026" />
-            </div>
-            {memberPaid ? (
-              <div className="notice memberHelperText">No payment pending.</div>
-            ) : (
-              <div className="buttonRow">
-                <button onClick={() => setMemberActionMessage("Success: Support request has been sent to the Treasurer regarding your sponsorship details.")}>Contact Treasurer</button>
-                <button className="secondaryButton" onClick={() => setMemberActionMessage("Success: June fellowship agenda & details request registered successfully.")}>View Fellowship Details</button>
-              </div>
-            )}
-          </section>
-          <section className="memberPanel">
-            <Toolbar title="Co-sponsors" actionLabel="Names only" />
-            <div className="memberLedgerList">
-              {coSponsors.map((sponsor) => (
-                <div className="memberLedgerCard" key={sponsor}>
-                  <div className="memberLedgerDate">LC</div>
-                  <div>
-                    <strong>{sponsorName(sponsor)}</strong>
-                    <span>Co-sponsor for June Fellowship</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="notice memberHelperText">Payment status of other sponsors is visible only to authorized club roles.</div>
-          </section>
-        </>
+      {selectedMonth?.lifecycle === "unprepared" ? (
+        <div className="notice memberHelperText">No Fellowship month is currently prepared.</div>
+      ) : !selectedMonth || !selectedHasRecord ? (
+        <div className="notice memberHelperText">You have no Fellowship sponsorship record for the selected period.</div>
       ) : (
         <section className="memberPanel">
-          <Toolbar title="Next Action" actionLabel="Clear" />
-          <div className="notice memberHelperText">Your future sponsorship turn will be informed by the club.</div>
+          <Toolbar title="Current or Selected Month" actionLabel={personalStatus(selectedMonth)} />
+          <div className="memberDuesSummary">
+            <Metric label="Fellowship month" value={fellowshipMonthLabel(selectedMonth.key)} />
+            <Metric label="Sponsor status" value={personalStatus(selectedMonth)} />
+            <Metric label="Personal share" value={selectedShare === null ? "Not available" : formatSponsorShare(selectedShare)} />
+            <Metric label="Amount paid" value={selectedPaid === null ? "Not available" : formatSponsorShare(selectedPaid)} />
+            <Metric label="Outstanding balance" value={selectedBalance === null ? "Not available" : formatSponsorShare(selectedBalance)} />
+            <Metric label="Payment status" value={paymentStatus(selectedMonth) || "Not applicable"} />
+          </div>
+          {selectedTransactions.length > 0 && (
+            <div className="stack">
+              <strong>My payment transactions</strong>
+              {selectedTransactions.map((entry) => <div className="staticRow" key={entry.id}><span>{entry.date}</span><strong>{formatSponsorShare(entry.amount)}</strong><span className="tag">Personal payment</span></div>)}
+            </div>
+          )}
         </section>
       )}
+
+      <section className="memberPanel">
+        <Toolbar title="My Fellowship History" actionLabel="Newest first" />
+        {personalHistory.length === 0 ? (
+          <div className="notice memberHelperText">You have no Fellowship sponsorship record for the selected period.</div>
+        ) : (
+          <div className="financeCardList">
+            {personalHistory.map((month) => {
+              const confirmed = month.confirmedSponsors.includes(memberKey);
+              const paid = confirmed ? month.payments[memberKey] || 0 : null;
+              const balance = confirmed ? roundFellowshipAmount(month.confirmedSharePerSponsor - (paid || 0)) : null;
+              const draftShare = month.lifecycle === "draft" && month.selectedSponsors.includes(memberKey)
+                ? Number(month.totalExpenseInput) / month.selectedSponsors.length
+                : null;
+              const share = confirmed ? month.confirmedSharePerSponsor : Number.isFinite(draftShare) && (draftShare || 0) > 0 ? draftShare : null;
+              return (
+                <article className="financeStackCard" key={month.key}>
+                  <div className="toolbar" style={{ gap: "8px", flexWrap: "wrap" }}><strong>{fellowshipMonthLabel(month.key)}</strong><span className="tag">{personalStatus(month)}</span></div>
+                  <div className="memberDuesSummary">
+                    <Metric label="Personal share" value={share === null ? "Not available" : formatSponsorShare(share)} />
+                    <Metric label="Amount paid" value={paid === null ? "Not available" : formatSponsorShare(paid)} />
+                    <Metric label="Outstanding" value={balance === null ? "Not available" : formatSponsorShare(balance)} />
+                    <Metric label="Payment status" value={paymentStatus(month) || "Not applicable"} />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <div className="notice memberHelperText">Prototype session data only. Fellowship records are not yet stored as shared backend records.</div>
     </section>
   );
 }
-
 function FellowshipQueue({
   selectedSponsors,
   confirmationTitle,
@@ -6434,7 +6537,7 @@ function FellowshipQueue({
         <button
           className="secondaryButton"
           onClick={() => {
-            setScreen("fellowship");
+            setScreen("fellowship-administration");
             setFellowshipTab("Overview");
           }}
         >
@@ -6568,7 +6671,7 @@ function ConfirmSponsors({
             setHighlightedSponsor(null);
             setFellowshipConfirmationMessage(`Success: ${monthLabel} fellowship sponsors have been confirmed. Payment recording is now ready.`);
             setFellowshipTab("Payments");
-            setScreen("fellowship");
+            setScreen("fellowship-administration");
           }}
         >
           Confirm Sponsors & Start Payment Tracking
@@ -6577,7 +6680,7 @@ function ConfirmSponsors({
           className="secondaryButton"
           onClick={() => {
             setFellowshipTab("Selected Sponsors");
-            setScreen("fellowship");
+            setScreen("fellowship-administration");
           }}
         >
           Back to Sponsor Selection
@@ -6586,7 +6689,7 @@ function ConfirmSponsors({
           className="secondaryButton"
           onClick={() => {
             setFellowshipTab("Queue");
-            setScreen("fellowship");
+            setScreen("fellowship-administration");
           }}
         >
           Back to Sponsor Rotation
@@ -6595,7 +6698,7 @@ function ConfirmSponsors({
           className="secondaryButton"
           onClick={() => {
             setFellowshipTab("Overview");
-            setScreen("fellowship");
+            setScreen("fellowship-administration");
           }}
         >
           Back to Fellowship Overview
@@ -7251,6 +7354,8 @@ function RecordMemberPayment({ role }: { role: Role }) {
         }
 
         const mePayload = await meResponse.json();
+        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
+        const authenticatedId = authenticatedUser?.id;
         const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
         const loadedClubId = memberships?.[0]?.club?.id;
 
@@ -7634,6 +7739,8 @@ function ReceiptList({ role }: { role: Role }) {
         }
 
         const mePayload = await meResponse.json();
+        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
+        const authenticatedId = authenticatedUser?.id;
         const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
         const loadedClubId = memberships?.[0]?.club?.id;
 
@@ -8020,6 +8127,8 @@ function PaymentHistory({ role }: { role: Role }) {
         }
 
         const mePayload = await meResponse.json();
+        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
+        const authenticatedId = authenticatedUser?.id;
         const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
         const loadedClubId = memberships?.[0]?.club?.id;
 
@@ -8372,6 +8481,8 @@ function MemberImportPreview({ role }: { role: Role }) {
         }
 
         const mePayload = await meResponse.json();
+        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
+        const authenticatedId = authenticatedUser?.id;
         const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
         const loadedClubId = memberships?.[0]?.club?.id;
 
