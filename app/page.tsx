@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, type FormEvent, useContext, useEffect, useMemo, useState, useRef } from "react";
+import { createContext, type FormEvent, type ReactNode, useContext, useEffect, useMemo, useState, useRef } from "react";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 type FinanceSummaryStatus = "loading" | "ready" | "error";
@@ -820,7 +820,7 @@ const clubAccountFunds = [
 
 const rolePendingTasks: Record<Exclude<Role, "member">, string[]> = {
   president: [
-    "Approve 3 member profile updates",
+    "Profile update approval workflow is not connected",
     "Confirm June fellowship sponsors",
     "Review 2 pending activity reports",
     "Check dues summary before PST meeting",
@@ -842,11 +842,7 @@ const rolePendingTasks: Record<Exclude<Role, "member">, string[]> = {
   ]
 };
 
-const pendingMemberUpdates = [
-  { member: "Lion Ajith Kumar - Member", change: "Phone number update", submitted: "03 Jun 2026", status: "Pending review" },
-  { member: "Lion Secretary User", change: "Anniversary visibility consent", submitted: "02 Jun 2026", status: "Pending approval" },
-  { member: "Lion Treasurer User", change: "Blood donor consent update", submitted: "01 Jun 2026", status: "Needs confirmation" }
-];
+const pendingMemberUpdates: { member: string; change: string; submitted: string; status: string }[] = [];
 
 const committeesList = [
   { id: "COM-001", name: "Committee List", lead: "Lion Secretary User", count: 4, purpose: "Oversee school kit distribution and educational service projects." },
@@ -958,6 +954,14 @@ const reportMenuItems: NavItem[] = [
   }
 ];
 
+const treasurerReportMenuItems = reportMenuItems.map((item) => item.label === "Member Reports"
+  ? {
+      ...item,
+      children: item.children?.filter((child) => child.reportDetail !== "Profile Update Pending Report")
+    }
+  : item
+);
+
 const roleUser: Record<Role, Member> = {
   president: roleTestMembers[0],
   secretary: roleTestMembers[1],
@@ -1011,6 +1015,16 @@ const peopleMenuItems: NavItem[] = [
     ]
   }
 ];
+
+const treasurerPeopleMenuItems = peopleMenuItems.map((item) => item.label === "Members"
+  ? {
+      ...item,
+      children: item.children?.filter((child) =>
+        child.detailTitle !== "Profile Update Pending" && child.screen !== "member-import-preview"
+      )
+    }
+  : item
+);
 
 const operationsMenuItems: NavItem[] = [
   {
@@ -1150,11 +1164,11 @@ const navByRole: Record<Role, NavGroup[]> = {
     { title: "My Member Area", items: myMemberAreaItems },
     { title: "Finance", items: financeMenuItems },
     { title: "Club Visibility", items: [
-      ...peopleMenuItems,
+      ...treasurerPeopleMenuItems,
       ...operationsMenuItems.filter((item) => item.label !== "Fellowship" && item.label !== "Documents")
     ] },
     { title: "Reports & Tools", items: [
-      ...reportMenuItems,
+      ...treasurerReportMenuItems,
       { label: "Notifications & Reminders", screen: "notifications-reminders" }
     ] }
   ],
@@ -1235,6 +1249,7 @@ type MemberDataContextValue = {
   error: string | null;
   token: string | null;
   clubId: number | null;
+  authenticatedUserId: number | null;
   retry: () => void;
 };
 
@@ -1244,6 +1259,7 @@ const MemberDataContext = createContext<MemberDataContextValue>({
   error: null,
   token: null,
   clubId: null,
+  authenticatedUserId: null,
   retry: () => undefined
 });
 
@@ -1290,6 +1306,61 @@ function memberFromBackend(record: BackendMemberRecord): Member {
 
 function isImportedCurrentMember(record: BackendMemberRecord) {
   return /^\d+$/.test(record.member_code);
+}
+
+const verifiedLeadershipAssignments = [
+  { position: "President", memberCode: "4794370" },
+  { position: "Secretary", memberCode: "26766796" },
+  { position: "Treasurer", memberCode: "26766860" },
+  { position: "Immediate Past President", memberCode: "4177371" },
+  { position: "First Vice President", memberCode: "26766886" },
+  { position: "Finance Committee Chair", memberCode: "4796991" },
+  { position: "Service Committee Chair", memberCode: "5922386" },
+  { position: "LCIF Coordinator", memberCode: "5148361" },
+  { position: "Meeting Committee Chair", memberCode: "5148362" },
+  { position: "Membership Committee Chair", memberCode: "5148360" },
+  { position: "Marketing Committee Chair", memberCode: "26766807" },
+  { position: "Leadership Training Chair", memberCode: "4798100" },
+  { position: "Board Member", memberCode: "6131765" },
+  { position: "Board Member", memberCode: "26766781" }
+] as const;
+
+const governanceDetailTitles = [
+  "PST Profiles",
+  "President Profile",
+  "Secretary Profile",
+  "Treasurer Profile",
+  "Board Members",
+  "Committee List",
+  "Committee Members"
+];
+
+function verifiedLeadershipCards(currentMembers: Member[], title: string) {
+  const positionForTitle = title === "President Profile"
+    ? "President"
+    : title === "Secretary Profile"
+      ? "Secretary"
+      : title === "Treasurer Profile"
+        ? "Treasurer"
+        : null;
+  const configured = positionForTitle
+    ? verifiedLeadershipAssignments.filter((assignment) => assignment.position === positionForTitle)
+    : title === "PST Profiles"
+      ? verifiedLeadershipAssignments.filter((assignment) => ["President", "Secretary", "Treasurer"].includes(assignment.position))
+      : verifiedLeadershipAssignments;
+
+  return configured.flatMap((assignment) => {
+    const matches = currentMembers.filter((member) => member.id === assignment.memberCode && typeof member.backendId === "number");
+    if (matches.length !== 1) return [];
+    const member = matches[0];
+    return [{
+      title: member.name,
+      meta: [`Position: ${assignment.position}`, `Member Code: ${member.id}`, "Term / Lionistic Year: 2026–27"],
+      action: "View member profile",
+      memberId: member.id,
+      memberBackendId: member.backendId
+    }];
+  });
 }
 
 function normalizeFellowshipMemberName(name: string) {
@@ -2018,7 +2089,7 @@ export default function Prototype() {
                       : null;
 
   return (
-    <MemberDataContext.Provider value={{ members: currentMembers, status: memberStatus, error: memberLoadError, token: memberToken, clubId: memberClubId, retry: () => setMemberRefreshKey((key) => key + 1) }}>
+    <MemberDataContext.Provider value={{ members: currentMembers, status: memberStatus, error: memberLoadError, token: memberToken, clubId: memberClubId, authenticatedUserId, retry: () => setMemberRefreshKey((key) => key + 1) }}>
     <main className="shell">
       <style>{`
         .sidebar {
@@ -2387,7 +2458,11 @@ export default function Prototype() {
           <NotificationsReminders role={role} setScreen={handleSetScreen} />
         )}
         {screen === "report-detail" && (
-          <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} amountPerSponsor={activeAmountPerSponsor} selectedSponsors={activeConfirmedSponsors.length ? activeConfirmedSponsors : activeSelectedSponsors} sponsorPayments={activeSponsorPayments} />
+          reportDetail === "Profile Update Pending Report" && role !== "president" && role !== "secretary"
+            ? <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>
+            : reportDetail === "Profile Update Pending Report"
+              ? <PendingMemberUpdatesDetail />
+              : <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} amountPerSponsor={activeAmountPerSponsor} selectedSponsors={activeConfirmedSponsors.length ? activeConfirmedSponsors : activeSelectedSponsors} sponsorPayments={activeSponsorPayments} />
         )}
         {screen === "nav-detail" && (
           <NavDetailScreen
@@ -2443,7 +2518,9 @@ export default function Prototype() {
           <CommitteeDetail committee={selectedCommittee} setScreen={handleSetScreen} />
         )}
         {screen === "profile-update-detail" && (
-          <ProfileUpdateDetail update={selectedUpdate} setScreen={handleSetScreen} />
+          role === "president" || role === "secretary"
+            ? <PendingMemberUpdatesDetail />
+            : <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>
         )}
         {screen === "announcement-detail" && (
           <AnnouncementDetailScreen
@@ -2468,8 +2545,8 @@ export default function Prototype() {
         )}
         {screen === "members" && <MembersList setScreen={handleSetScreen} role={role} onSelectMember={selectAndOpenMemberProfile} />}
         {screen === "committees" && <Committees />}
-        {screen === "member-profile" && <MemberProfile key={selectedMember?.backendId ?? activeMember.id} member={selectedMember ?? activeMember} role={role} />}
-        {screen === "digital-card" && <DigitalCard member={activeMember} />}
+        {screen === "member-profile" && (selectedMember ? <MemberProfile key={selectedMember.backendId} member={selectedMember} role={role} /> : <PersonalMemberProfile role={role} />)}
+        {screen === "digital-card" && <PersonalDigitalCard />}
         {screen === "my-fellowship" && (
           <MemberFellowship
             authenticatedUserId={authenticatedUserId}
@@ -2589,7 +2666,7 @@ export default function Prototype() {
         ))}
         {screen === "projects" && <ProjectsActivities setScreen={handleSetScreen} />}
         {screen === "celebrations" && <Celebrations role={role} setScreen={handleSetScreen} />}
-        {screen === "donor-consent" && <DonorConsent member={activeMember} />}
+        {screen === "donor-consent" && <DonorConsent />}
         {screen === "donor-search" && <DonorSearch bloodGroup={bloodGroup} setBloodGroup={setBloodGroup} allowedDonors={allowedDonors} />}
         {screen === "reports" && <Reports />}
         {screen === "settings" && <Settings setScreen={handleSetScreen} />}
@@ -3983,7 +4060,27 @@ function NavDetailScreen({
   }) => void;
   amountPerSponsor?: number;
 }) {
-  const { members: currentMembers } = useCurrentMemberData();
+  const { members: currentMembers, status: memberStatus, error: memberError } = useCurrentMemberData();
+  const isProfileUpdatePending = parent === "People" && title === "Profile Update Pending";
+  const isGovernanceDetail = parent === "People" && governanceDetailTitles.includes(title);
+  if (isProfileUpdatePending && role !== "president" && role !== "secretary") {
+    return <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>;
+  }
+  if (isProfileUpdatePending) {
+    return (
+      <section className="stack">
+        <Toolbar title="Profile Update Pending" actionLabel="Not connected" />
+        <div className="notice">The profile update approval workflow is not connected yet.</div>
+        <div className="notice memberHelperText">Real pending requests will appear here only after a verified backend approval source is connected.</div>
+      </section>
+    );
+  }
+  if (isGovernanceDetail && memberStatus === "loading") {
+    return <section className="compactPanel"><Toolbar title={title} actionLabel="Loading" /><div className="notice">Loading verified leadership assignments...</div></section>;
+  }
+  if (isGovernanceDetail && memberStatus === "error") {
+    return <section className="compactPanel"><Toolbar title={title} actionLabel="Unavailable" /><div className="notice">Leadership assignments could not be loaded.{memberError && <span> {memberError}</span>}</div></section>;
+  }
   if (parent === "Operations" && title === "Draft / Pending") {
     return <DraftPendingAnnouncements setScreen={setScreen} />;
   }
@@ -3992,6 +4089,11 @@ function NavDetailScreen({
   const rows = navDetailCards(parent, title, role, amountPerSponsor, currentMembers);
 
   const handleRowClick = (row: { title: string; action: string; memberId?: string; memberBackendId?: number }) => {
+    if (parent === "People" && typeof row.memberBackendId === "number" && onSelectMember) {
+      const found = currentMembers.find((member) => member.backendId === row.memberBackendId);
+      if (found) onSelectMember(found);
+      return;
+    }
     if (parent === "Operations" && ["This Month", "Pending Reports", "Completed Activities", "Category-wise Activities"].includes(title)) {
       if (onSelectActivity) {
         const matched = rows.find((r) => r.title === row.title);
@@ -4077,6 +4179,7 @@ function NavDetailScreen({
         </button>
         <div className="notice">{navDetailNote(parent, title)}</div>
       </div>
+      {isGovernanceDetail && <div className="notice memberHelperText">Leadership assignments shown here are configured in this frontend prototype and are not yet stored in the backend.</div>}
       <div className="draftPendingGrid">
         {rows.length > 0 ? (
           rows.map((row, index) => (
@@ -4213,6 +4316,9 @@ function navDetailNote(parent: string, title: string) {
 }
 
 function navDetailCards(parent: string, title: string, role: Role = "president", amountPerSponsor?: number, currentMembers: Member[] = []): { title: string; meta: string[]; action: string; memberId?: string; memberBackendId?: number }[] {
+  if (parent === "People" && governanceDetailTitles.includes(title)) {
+    return verifiedLeadershipCards(currentMembers, title);
+  }
   if (parent === "People" && title.includes("Member") && title !== "Committee Members") {
     const statusFilter = title === "Inactive Members" ? "Inactive" : "Active";
     return currentMembers.filter((member) => member.status === statusFilter).map((member) => ({
@@ -4881,7 +4987,6 @@ function Dashboard({
           <h2>{dateText}</h2>
           <p>Live club member and Fellowship information is shown where connected. Unconnected modules are marked as unavailable.</p>
         </div>
-        <span className="statusPill">Signed in as {member.dashboardName} — {roleName} Test Role</span>
       </div>
 
       <section className="compactPanel dashboardPanel">
@@ -5046,13 +5151,15 @@ function CompactDashboardCard({ label, value, action, onClick }: { label: string
 
 function PstOverview({ role, totalOutstanding, openDashboardDetail }: { role: Role; totalOutstanding: number; openDashboardDetail: (detail: DashboardDetail) => void }) {
   const items: { label: string; value: string; detail: DashboardDetail; action: string }[] = [
-    { label: "Pending member updates", value: "3", detail: "pending-member-updates", action: "Review" },
+    ...(role === "president" || role === "secretary"
+      ? [{ label: "Pending member updates", value: "Not connected", detail: "pending-member-updates" as DashboardDetail, action: "View status" }]
+      : []),
     { label: "Upcoming meetings/events", value: "3", detail: "upcoming-events", action: "View details" },
     { label: "Fellowship month status", value: "Draft", detail: "fellowship-status", action: "Continue" },
     { label: role === "secretary" ? "Pending dues summary (view only)" : "Pending dues summary", value: money(totalOutstanding), detail: "pending-dues", action: "Review" },
     { label: "Pending activity/project reports", value: "2", detail: "activity-reports", action: "Update" },
     { label: "Recent announcements/docs", value: "6", detail: "published-items", action: "Open" },
-    { label: "View PST Profiles", value: "3 roles", detail: "pst-profiles", action: "Open" },
+    { label: "View PST Profiles", value: "Verified assignments", detail: "pst-profiles", action: "Open" },
     { label: "Celebration reminders", value: "4 this week", detail: "celebration-reminders", action: "Review" },
     { label: "Important club reminders", value: "PST review due", detail: "club-reminders", action: "Review" }
   ];
@@ -5273,36 +5380,26 @@ function dashboardDetailLabel(role: Role, detail: DashboardDetail) {
   return "President review detail";
 }
 
-function PstProfilesDetail({ role }: { role: Role }) {
+function PstProfilesDetail({ role: _role }: { role: Role }) {
+  const { members: currentMembers, status } = useCurrentMemberData();
+  if (status === "loading") return <div className="notice">Loading verified leadership assignments...</div>;
+  if (status === "error") return <div className="notice">Leadership assignments are unavailable.</div>;
+  const profiles = verifiedLeadershipCards(currentMembers, "PST Profiles");
   return (
-    <div className="financeCardList">
-      {pstProfileCards("PST Profiles", role).map((profile) => (
+    <section className="stack"><div className="notice memberHelperText">Leadership assignments shown here are configured in this frontend prototype and are not yet stored in the backend.</div><div className="financeCardList">
+      {profiles.map((profile) => (
         <article className="financeStackCard" key={profile.title}>
           <h3>{profile.title}</h3>
           {profile.meta.map((line) => <span key={line}>{line}</span>)}
         </article>
       ))}
-    </div>
+    </div></section>
   );
 }
 
 function PendingMemberUpdatesDetail() {
   return (
-    <div className="tableLike">
-      {pendingMemberUpdates.map((item) => (
-        <div className="staticRow dashboardDetailRow" key={`${item.member}-${item.change}`}>
-          <strong>{item.member}</strong>
-          <span>{item.change}</span>
-          <span>{item.submitted}</span>
-          <span className="tag">{item.status}</span>
-          <div className="miniActions">
-            <button className="filterButton">Review</button>
-            <button className="filterButton">Approve</button>
-            <button className="filterButton">Reject</button>
-          </div>
-        </div>
-      ))}
-    </div>
+    <section className="stack"><div className="notice">The profile update approval workflow is not connected yet.</div><div className="notice memberHelperText">Real pending requests will appear here only after a verified backend approval source is connected.</div></section>
   );
 }
 
@@ -6281,7 +6378,7 @@ function FellowshipDashboard({
           <Metric label="Selected month" value={monthLabel} />
           <Metric label="Month key" value={month.key} />
           <Metric label="Lifecycle" value={lifecycleLabel[month.lifecycle]} />
-          <Metric label="Next chronological month" value={fellowshipMonthLabel(nextFellowshipMonthKey(latestMonthKey))} />
+          <Metric label="Next month available to prepare" value={fellowshipMonthLabel(nextFellowshipMonthKey(latestMonthKey))} />
         </div>
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "12px" }}>
           <label className="moduleSelect" style={{ flex: "1 1 220px", margin: 0 }}>Fellowship month
@@ -6314,7 +6411,7 @@ function FellowshipDashboard({
 
       {tab === "Queue" && <div className="stack">
         <div className="compactPanel"><Toolbar title={`${monthLabel} Sponsor Rotation`} actionLabel={lifecycleLabel[month.lifecycle]} /><label className="moduleSelect">{monthLabel} total Fellowship expense (₹)<input value={month.totalExpenseInput} disabled={month.lifecycle !== "draft"} onChange={(event) => updateMonth(month.key, (current) => ({ ...current, totalExpenseInput: event.target.value }))} /></label><div className="notice">Next suggested member: <strong>{nextSuggestedId ? displayMemberName(nextSuggestedId, currentMembers) : "Unavailable"}</strong>. Drafts and cancellations do not consume turns.</div></div>
-        {month.lifecycle === "unprepared" ? <div className="notice">Prepare {monthLabel} before selecting sponsors.</div> : <div className="financeCardList">{canonicalSequence.map((currentMember, index) => { const memberId=fellowshipMemberKey(currentMember); const queueStatus=month.queueStatuses[memberId]; const editable=month.lifecycle === "draft"; return <article className="financeStackCard" key={memberId}><div className="toolbar"><div><strong>{index + 1}. {currentMember.name}</strong><small>{completedByMember.has(memberId) ? `${fellowshipMonthLabel(completedByMember.get(memberId)!)} confirmed` : "No confirmed turn recorded"}</small></div><span className="tag">{memberId === nextSuggestedId ? "Next suggested" : queueStatus || "Eligible"}</span></div>{editable && <div className="buttonRow"><button onClick={() => setSponsorSelected(memberId)}>{month.selectedSponsors.includes(memberId) ? "Remove Selection" : "Select Sponsor"}</button><button className="secondaryButton" onClick={() => deferSponsor(memberId)}>Defer This Month</button>{queueStatus && <button className="secondaryButton" onClick={() => updateMonth(month.key,(current)=>{const statuses={...current.queueStatuses}; delete statuses[memberId]; return {...current,queueStatuses:statuses,selectedSponsors:current.selectedSponsors.filter((id)=>id!==memberId)};})}>Reset</button>}</div>}</article>; })}</div>}
+        {month.lifecycle === "unprepared" ? <div className="notice">Prepare {monthLabel} before selecting sponsors.</div> : <div className="financeCardList">{canonicalSequence.map((currentMember, index) => { const memberId=fellowshipMemberKey(currentMember); const queueStatus=month.queueStatuses[memberId]; const editable=month.lifecycle === "draft"; return <article className="financeStackCard" key={memberId}><div className="toolbar"><div style={{ display: "grid", gap: "4px" }}><strong>{index + 1}. {currentMember.name}</strong><small style={{ display: "block" }}>{completedByMember.has(memberId) ? `${fellowshipMonthLabel(completedByMember.get(memberId)!)} confirmed` : "No confirmed turn recorded"}</small></div><span className="tag">{memberId === nextSuggestedId ? "Next suggested" : queueStatus || "Eligible"}</span></div>{editable && <div className="buttonRow"><button onClick={() => setSponsorSelected(memberId)}>{month.selectedSponsors.includes(memberId) ? "Remove Selection" : "Select Sponsor"}</button><button className="secondaryButton" onClick={() => deferSponsor(memberId)}>Defer This Month</button>{queueStatus && <button className="secondaryButton" onClick={() => updateMonth(month.key,(current)=>{const statuses={...current.queueStatuses}; delete statuses[memberId]; return {...current,queueStatuses:statuses,selectedSponsors:current.selectedSponsors.filter((id)=>id!==memberId)};})}>Reset</button>}</div>}</article>; })}</div>}
       </div>}
 
       {tab === "Selected Sponsors" && <div className="stack">
@@ -8508,7 +8605,7 @@ function memberImportCommitStatusLabel(status?: string | null): string {
 }
 
 function MemberImportPreview({ role }: { role: Role }) {
-  const canUseMemberImportPreview = role === "president" || role === "secretary" || role === "treasurer";
+  const canUseMemberImportPreview = role === "president" || role === "secretary";
   const [status, setStatus] = useState<MemberImportPreviewStatus>(canUseMemberImportPreview ? "initializing" : "ready");
   const [message, setMessage] = useState(
     canUseMemberImportPreview
@@ -8517,7 +8614,7 @@ function MemberImportPreview({ role }: { role: Role }) {
   );
   const [previewToken, setPreviewToken] = useState<string | null>(null);
   const [previewClubId, setPreviewClubId] = useState<number | null>(null);
-  const [pasteRows, setPasteRows] = useState("Member Code\tFull Name\tPhone\tEmail\nM-001\tMember Name\t9999999999\tmember@example.test");
+  const [pasteRows, setPasteRows] = useState("");
   const [preview, setPreview] = useState<MemberImportPreviewPayload | null>(null);
   const [previewedRows, setPreviewedRows] = useState<Record<string, string>[]>([]);
   const [commitStatus, setCommitStatus] = useState<MemberImportCommitStatus>("idle");
@@ -8541,9 +8638,9 @@ function MemberImportPreview({ role }: { role: Role }) {
         setPreviewToken(null);
         setPreviewClubId(null);
         setPreview(null);
-        resetMemberImportCommitState("Commit behavior is hidden from Normal Member role and no commit API call is made.");
+        resetMemberImportCommitState("Commit behavior is hidden from this unauthorized role and no commit API call is made.");
         setStatus("ready");
-        setMessage("Member import preview is hidden from Normal Member role and no preview API call is made.");
+        setMessage("Member import preview is hidden from this unauthorized role and no preview API call is made.");
         return;
       }
 
@@ -8627,22 +8724,22 @@ function MemberImportPreview({ role }: { role: Role }) {
 
     if (!canUseMemberImportPreview) {
       setStatus("error");
-      setMessage("Normal Member role cannot use member import preview.");
+      setMessage("This role cannot use member import preview.");
+      return;
+    }
+
+    const hasMeaningfulInput = pasteRows.trim().split(/\r?\n/).some((line) => line.trim().length > 0);
+    const rows = parseMemberImportPreviewRows(pasteRows);
+    if (!hasMeaningfulInput || !rows.length) {
+      setPreview(null);
+      setStatus("empty");
+      setMessage("Enter at least one non-empty member row before running Preview.");
       return;
     }
 
     if (!previewToken || !previewClubId) {
       setStatus("error");
       setMessage("Member import preview cannot run without an active club context.");
-      return;
-    }
-
-    const rows = parseMemberImportPreviewRows(pasteRows);
-
-    if (!rows.length) {
-      setPreview(null);
-      setStatus("empty");
-      setMessage("Enter a header row and at least one member row before running preview.");
       return;
     }
 
@@ -8694,7 +8791,7 @@ function MemberImportPreview({ role }: { role: Role }) {
   async function runMemberImportCommit() {
     if (!canUseMemberImportPreview) {
       setCommitStatus("error");
-      setCommitMessage("Normal Member role cannot use member import commit.");
+      setCommitMessage("This role cannot use member import commit.");
       return;
     }
 
@@ -8763,7 +8860,7 @@ function MemberImportPreview({ role }: { role: Role }) {
       <section className="stack">
         <Toolbar title="Member Import Preview" actionLabel="Officer only" />
         <div className="notice">
-          Member import preview is hidden from Normal Member role. No preview API call is made and no import preview data is loaded.
+          Member import preview is unavailable for this role. No preview API call is made and no import preview data is loaded.
         </div>
       </section>
     );
@@ -8801,8 +8898,9 @@ function MemberImportPreview({ role }: { role: Role }) {
               resetMemberImportCommitState("Rows changed. Run preview again before commit is offered.");
             }}
             rows={7}
-            placeholder="Member Code\tFull Name\tPhone\tEmail"
+            placeholder="Member Code, Full Name, Phone, Email"
           />
+          <span className="memberHelperText"><strong>Example only — not submitted unless copied into the input field.</strong><br />Member Code, Full Name, Phone, Email<br />SYN-3FK-001, Synthetic Preview Member, 9000000000, synthetic.preview@example.test</span>
         </label>
         <div className="buttonRow">
           <button disabled={status === "initializing" || status === "loading"}>Run preview</button>
@@ -9476,14 +9574,84 @@ function Celebrations({ role, setScreen }: { role: Role; setScreen: (screen: Scr
     </section>
   );
 }
-function DonorConsent({ member }: { member: Member }) {
+function PersonalMemberIdentityState({ children }: { children: (member: Member) => ReactNode }) {
+  const { members: currentMembers, status, error, authenticatedUserId } = useCurrentMemberData();
+  if (status === "loading") {
+    return <section className="compactPanel"><div className="notice">Loading authenticated member identity...</div></section>;
+  }
+  if (status === "error" || authenticatedUserId === null) {
+    return <section className="compactPanel"><div className="notice"><strong>Personal member information is unavailable.</strong>{error && <span> {error}</span>}</div></section>;
+  }
+  const matches = currentMembers.filter((member) => member.userId === authenticatedUserId && typeof member.backendId === "number");
+  if (matches.length === 0) {
+    return (
+      <section className="compactPanel">
+        <div className="notice">No genuine club member profile is linked to this development test account. Personal member information is unavailable.</div>
+        <div className="notice memberHelperText">Personal member information can be shown only after a verified account-to-member link exists.</div>
+      </section>
+    );
+  }
+  if (matches.length > 1) {
+    return <section className="compactPanel"><div className="notice"><strong>Personal member information is unavailable because the authenticated account has multiple genuine member links.</strong></div></section>;
+  }
+  return <>{children(matches[0])}</>;
+}
+
+function PersonalMemberProfile({ role }: { role: Role }) {
+  return (
+    <PersonalMemberIdentityState>
+      {(member) => <MemberProfile key={member.backendId} member={member} role={role} />}
+    </PersonalMemberIdentityState>
+  );
+}
+
+function PersonalDigitalCard() {
+  return (
+    <PersonalMemberIdentityState>
+      {(member) => <DigitalCard member={member} />}
+    </PersonalMemberIdentityState>
+  );
+}
+
+function DonorConsent() {
+  const { members: currentMembers, status, error, authenticatedUserId } = useCurrentMemberData();
+
+  if (status === "loading") {
+    return <section className="formPanel"><div className="notice">Loading authenticated member identity...</div></section>;
+  }
+
+  if (status === "error" || authenticatedUserId === null) {
+    return (
+      <section className="formPanel">
+        <div className="notice"><strong>Blood donor consent settings are unavailable.</strong>{error && <span> {error}</span>}</div>
+      </section>
+    );
+  }
+
+  const matches = currentMembers.filter((member) => member.userId === authenticatedUserId && typeof member.backendId === "number");
+  if (matches.length === 0) {
+    return (
+      <section className="formPanel">
+        <div className="notice">No genuine club member profile is linked to this development test account. Blood donor consent settings are unavailable.</div>
+        <div className="notice memberHelperText">Personal donor-consent settings can be managed only after a verified account-to-member link exists.</div>
+      </section>
+    );
+  }
+
+  if (matches.length > 1) {
+    return (
+      <section className="formPanel">
+        <div className="notice"><strong>Blood donor consent settings are unavailable because the authenticated account has multiple genuine member links.</strong></div>
+      </section>
+    );
+  }
+
+  const member = matches[0];
   return (
     <section className="formPanel">
       <label>Blood group<input value={member.bloodGroup} readOnly /></label>
-      <label>Consent to donate<select defaultValue={member.donorConsent ? "yes" : "no"}><option value="yes">Yes</option><option value="no">No</option></select></label>
-      <label>Show contact to authorized users<select defaultValue={member.consentContact ? "yes" : "no"}><option value="yes">Yes</option><option value="no">No</option></select></label>
-      <label>Availability status<select defaultValue="available"><option value="available">Available if contacted</option><option value="not-now">Not available now</option></select></label>
-      <button>Save Consent Settings</button>
+      <label>Consent to donate<input value={member.donorConsent ? "Yes" : "No"} readOnly /></label>
+      <div className="notice">Donor-consent updates are not connected yet.</div>
     </section>
   );
 }
@@ -9561,17 +9729,8 @@ function Settings({ setScreen }: { setScreen: (screen: Screen) => void }) {
         ))}
       </div>
       <div className="compactPanel">
-        <Toolbar title="Role Assignment" actionLabel="Dummy linked member profiles" />
-        <p className="prototypeNote">PST roles are attached to normal member records in this prototype. Real role assignment, audit history and profile editing will be implemented in the backend phase.</p>
-        <div className="financeCardList">
-          {pstProfileCards("PST Profiles").map((profile) => (
-            <article className="financeStackCard" key={`settings-${profile.title}`}>
-              <h3>{profile.title}</h3>
-              {profile.meta.filter((line) => line.startsWith("Role:") || line.startsWith("Term") || line.startsWith("Designation") || line.startsWith("Document") || line.startsWith("Finance")).map((line) => <span key={line}>{line}</span>)}
-              <button className="filterButton">View linked member profile</button>
-            </article>
-          ))}
-        </div>
+        <Toolbar title="Role Assignment" actionLabel="Frontend prototype" />
+        <p className="prototypeNote">Leadership assignments are shown on Board &amp; Committees only when stable imported-member identity is verified. They are not yet stored in the backend.</p>
       </div>
     </section>
   );
