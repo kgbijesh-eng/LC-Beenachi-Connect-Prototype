@@ -1195,6 +1195,10 @@ function money(value: number) {
   return `₹${value.toLocaleString("en-IN")}`;
 }
 
+function verifiedOperationalSourceConnected(_source: "events" | "announcements" | "projects" | "reports" | "collections" | "reminders") {
+  return false;
+}
+
 function roundFellowshipAmount(amount: number) {
   return Math.round((amount + Number.EPSILON) * 100) / 100;
 }
@@ -3586,6 +3590,15 @@ function NotificationsReminders({ role, setScreen }: { role: Role; setScreen: (s
     );
   }
 
+  if (!verifiedOperationalSourceConnected("reminders")) return (
+    <section className="stack">
+      <Toolbar title="Notifications & Reminders" actionLabel="Not connected" />
+      <div className="notice">Reminder scheduling is not connected yet.</div>
+      <div className="notice memberHelperText">Reminders can be created only after a verified persistence workflow is connected.</div>
+      <button className="secondaryButton" onClick={() => setScreen("dashboard")}>Back to Dashboard</button>
+    </section>
+  );
+
   return (
     <section className="stack">
       <Toolbar title="Notifications & Reminders" actionLabel="Milestone 1A prototype only" />
@@ -3854,10 +3867,10 @@ function ReportCategory({ section }: { section: ReportsSection }) {
   return (
     <div className="reportGrid">
       {rows[section].map((report) => (
-        <button className="reportCard" key={report}>
+        <div className="reportCard" key={report}>
           <span>{section}</span>
           <strong>{report}</strong>
-        </button>
+        </div>
       ))}
     </div>
   );
@@ -3880,7 +3893,7 @@ function ReportDetailScreen({
 }) {
   const { members: currentMembers } = useCurrentMemberData();
   if (section === "Finance / Ledger Reports") {
-    return <FinanceLedgerReportDetail detail={detail} setScreen={setScreen} amountPerSponsor={amountPerSponsor} selectedSponsors={selectedSponsors} sponsorPayments={sponsorPayments} />;
+    return <OperationalReportsUnavailable setScreen={setScreen} />;
   }
   if (section === "Fellowship Reports" && detail === "Current Month Sponsorship") {
     return <CurrentMonthSponsorshipReport setScreen={setScreen} amountPerSponsor={amountPerSponsor} selectedSponsors={selectedSponsors} sponsorPayments={sponsorPayments} />;
@@ -3888,7 +3901,12 @@ function ReportDetailScreen({
   if (section === "Fellowship Reports" && detail === "Sponsor Queue History") {
     return <SponsorQueueHistoryReport setScreen={setScreen} />;
   }
-
+  const sourceBackedReport =
+    (section === "Member Reports" && ["Active Member List", "Inactive Member List", "Birthday / Anniversary Report"].includes(detail)) ||
+    section === "Celebration Reports";
+  if (!sourceBackedReport) {
+    return <OperationalReportsUnavailable setScreen={setScreen} />;
+  }
 
   const cards = reportDetailCards(section, detail, amountPerSponsor, currentMembers);
   return (
@@ -3896,7 +3914,7 @@ function ReportDetailScreen({
       <div className="compactPanel">
         <Toolbar title={detail} actionLabel={section} />
         <button className="secondaryButton compactBackButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button>
-        <div className="notice">Dummy data only. Real report generation, filters, export, and approval logic will be implemented in backend phase.</div>
+        <div className="notice">This report is derived from the verified imported-member source. No export or report-generation mutation is connected.</div>
       </div>
       <div className="financeCardList">
         {cards.map((card, index) => (
@@ -3910,9 +3928,12 @@ function ReportDetailScreen({
   );
 }
 
+function OperationalReportsUnavailable({ setScreen }: { setScreen: (screen: Screen) => void }) {
+  return <section className="stack"><Toolbar title="Operational Reports" actionLabel="Not connected" /><button className="secondaryButton compactBackButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button><div className="notice">Operational reports are not connected to a verified source yet.</div><div className="notice memberHelperText">Real reports and collection summaries will appear here only after a verified source is connected.</div></section>;
+}
+
 function SponsorQueueHistoryReport({ setScreen }: { setScreen: (screen: Screen) => void }) {
-  return <section className="stack"><div className="compactPanel"><Toolbar title="Sponsor Queue History" actionLabel="Fellowship Reports" /><button className="secondaryButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button><div className="notice">No historical sponsorship turns were imported. Current members are initialized without invented history.</div></div>
-    <MemberCollectionState>{(currentMembers) => <div className="financeCardList">{currentMembers.map((member, index) => <article className="financeStackCard" key={member.id}><h3>{member.name}</h3><span>Member ID: {member.id}</span><span>Queue Position: {index + 1}</span><span>Last turn: Not yet recorded</span></article>)}</div>}</MemberCollectionState>
+  return <section className="stack"><div className="compactPanel"><Toolbar title="Sponsor Queue History" actionLabel="No historical records" /><button className="secondaryButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button><div className="notice">No historical sponsorship turns were imported. Queue history will appear only after confirmed turns exist.</div></div>
   </section>;
 }
 
@@ -4061,6 +4082,10 @@ function NavDetailScreen({
   amountPerSponsor?: number;
 }) {
   const { members: currentMembers, status: memberStatus, error: memberError } = useCurrentMemberData();
+  const isUnconnectedProjectDetail = parent === "Operations" && ["This Month", "Pending Reports", "Completed Activities", "Category-wise Activities"].includes(title);
+  if (isUnconnectedProjectDetail) {
+    return <section className="stack"><Toolbar title="Projects & Activities" actionLabel="Not connected" /><div className="notice">The Projects & Activities workflow is not connected to a verified operational source yet.</div><div className="notice memberHelperText">Real project and activity records will appear here only after a verified source is connected.</div></section>;
+  }
   const isProfileUpdatePending = parent === "People" && title === "Profile Update Pending";
   const isGovernanceDetail = parent === "People" && governanceDetailTitles.includes(title);
   if (isProfileUpdatePending && role !== "president" && role !== "secretary") {
@@ -5605,7 +5630,7 @@ function MembersList({
   return (
     <section className="stack">
       <Toolbar title="Member Directory" actionLabel={role === "member" ? "Consent-approved fields only" : "Role-based management"} />
-      <div className="notice memberHelperText">47 genuine current members. Select a member to view the profile fields authorized for this role.</div>
+      <div className="notice memberHelperText">{role === "member" ? "47 genuine current members. Detailed member profiles are available only to authorized club officers." : "47 genuine current members. Select a member to view the profile fields authorized for this role."}</div>
       <div className="filterBar">
         <input aria-label="Search current members" placeholder="Search name, Member ID, occupation or membership" value={query} onChange={(event) => setQuery(event.target.value)} />
         {(["All", "Active", "Inactive"] as const).map((filter) => <button className="filterButton" key={filter} onClick={() => setStatusFilter(filter)}>{filter}</button>)}
@@ -5618,7 +5643,15 @@ function MembersList({
           return statusMatches && (!normalizedQuery || searchText.includes(normalizedQuery));
         });
         if (!filtered.length) return <div className="notice">No current members match this search.</div>;
-        return <div className="tableLike">{filtered.map((member) => (
+        return <div className="tableLike">{filtered.map((member) => role === "member" ? (
+          <div key={member.id} className="staticRow">
+            <Avatar name={member.name} />
+            <span><strong>{member.name}</strong><small>Member ID: {member.id}</small></span>
+            <span>{member.occupation || "Not provided"}</span>
+            <span>{member.membershipCategory || member.membershipType || "Not provided"}</span>
+            <span className="tag">{member.status}</span>
+          </div>
+        ) : (
           <button key={member.id} className="rowButton" onClick={() => onSelectMember ? onSelectMember(member) : setScreen("member-profile")}>
             <Avatar name={member.name} />
             <span><strong>{member.name}</strong><small>Member ID: {member.id}</small></span>
@@ -9076,6 +9109,8 @@ function OutstandingDues({ setScreen, amountPerSponsor }: { setScreen: (screen: 
 }
 
 function CollectionSummary({ detail, setDetail, amountPerSponsor }: { detail: CollectionDetail; setDetail: (detail: CollectionDetail) => void; amountPerSponsor?: number }) {
+  if (!verifiedOperationalSourceConnected("collections")) return <section className="stack"><Toolbar title="Collection Summary" actionLabel="Not connected" /><div className="notice">Operational reports are not connected to a verified source yet.</div><div className="notice memberHelperText">Real reports and collection summaries will appear here only after a verified source is connected.</div></section>;
+
   const cards: { key: Exclude<CollectionDetail, null>; label: string; value: string }[] = [
     { key: "today", label: "Today’s Collection", value: money(8500) },
     { key: "month", label: "This Month’s Collection", value: money(42500) },
@@ -9217,8 +9252,8 @@ function FellowshipPayments({ view = "Current Month", setScreen, amountPerSponso
               <span>Payment Status: {record.status}</span>
               <span>Receipt: {record.receipt}</span>
             </div>
-            <button className="filterButton" onClick={() => record.status === "Paid" ? undefined : setScreen("record-member-payment")}>
-              {record.status === "Paid" ? "View Receipt" : "Record Payment"}
+            <button className="filterButton" onClick={() => setScreen(record.status === "Paid" ? "receipt-list" : "record-member-payment")}>
+              {record.status === "Paid" ? "Open Receipt List" : "Record Payment"}
             </button>
           </article>
         ))}
@@ -9242,6 +9277,8 @@ function EventsMeetings({
   selectedSection?: EventMeetingSection | null;
   onSelectEventMeeting?: (item: EventMeeting) => void;
 }) {
+  if (!verifiedOperationalSourceConnected("events")) return <section className="stack"><Toolbar title="Events & Meetings" actionLabel="Not connected" /><div className="notice">The Events & Meetings workflow is not connected to a verified operational source yet.</div><div className="notice memberHelperText">Real events and meeting records will appear here only after a verified source is connected.</div></section>;
+
   const visible = role === "member" ? eventsMeetings.filter((item) => item.visibility === "All Members") : eventsMeetings;
   const memberIsFellowshipSponsor = selectedSponsors.includes(member.name) || selectedSponsors.includes(member.dashboardName);
   const sections: EventMeetingSection[] = selectedSection ? [selectedSection] : ["Upcoming Events", "Upcoming Meetings", "Past Events", "Meeting Notices"];
@@ -9322,6 +9359,8 @@ function EventsMeetings({
 }
 
 function Announcements({ role, member, selectedSponsors }: { role: Role; member: Member; selectedSponsors: string[] }) {
+  if (!verifiedOperationalSourceConnected("announcements")) return <section className="stack"><Toolbar title="Announcements" actionLabel="Not connected" /><div className="notice">The Announcements workflow is not connected to a verified operational source yet.</div><div className="notice memberHelperText">Real announcements will appear here only after a verified operational source is connected.</div></section>;
+
   const memberIsSponsor = selectedSponsors.includes(member.name) || selectedSponsors.includes(member.dashboardName);
   const visibleAnnouncements = role === "member"
     ? announcements.filter((item) => item.status === "Published" && (item.audience === "Members" || (item.audience === "Sponsors" && memberIsSponsor)))
@@ -9493,6 +9532,8 @@ function ListScreen({ title, items, role }: { title: string; items: string[]; ro
 }
 
 function ProjectsActivities({ setScreen }: { setScreen: (screen: Screen) => void }) {
+  if (!verifiedOperationalSourceConnected("projects")) return <section className="stack"><Toolbar title="Projects / Activities" actionLabel="Not connected" /><div className="notice">The Projects & Activities workflow is not connected to a verified operational source yet.</div><div className="notice memberHelperText">Real project and activity records will appear here only after a verified source is connected.</div></section>;
+
   return (
     <section className="stack">
       <Toolbar title="Projects / Activities" actionLabel="V1 activity reporting" />
@@ -9550,7 +9591,7 @@ function Celebrations({ role, setScreen }: { role: Role; setScreen: (screen: Scr
   return (
     <section className="stack">
       <Toolbar title="Celebrations" actionLabel={`${celebrationMonths[month - 1]} 2026`} />
-      <div className="buttonRow"><button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Greeting Reminder</button></div>
+      <div className="notice memberHelperText">Greeting reminders are unavailable until a verified reminder workflow is connected.</div>
       <label className="moduleSelect">Celebration month
         <select value={month} onChange={(event) => setMonth(Number(event.target.value))}>{celebrationMonths.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}</select>
       </label>
@@ -9673,6 +9714,8 @@ function DonorSearch({ bloodGroup, setBloodGroup, allowedDonors }: { bloodGroup:
 }
 
 function Reports() {
+  if (!verifiedOperationalSourceConnected("reports")) return <section className="stack"><Toolbar title="Reports" actionLabel="Not connected" /><div className="notice">Operational reports are not connected to a verified source yet.</div><div className="notice memberHelperText">Real reports and collection summaries will appear here only after a verified source is connected.</div></section>;
+
   const reportCategories = [
     "Member Reports",
     "Finance / Ledger Reports",
