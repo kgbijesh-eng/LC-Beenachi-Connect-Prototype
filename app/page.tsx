@@ -506,6 +506,44 @@ type EventMeeting = {
   visibility: "All Members" | "Board Only" | "PST";
   status: "Published" | "Draft" | "Completed";
 };
+type BackendEventMeeting = {
+  id: number;
+  club_id: number;
+  type: "event" | "meeting";
+  title: string;
+  description?: string | null;
+  is_all_day: boolean;
+  starts_at: string | null;
+  ends_at: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  venue?: string | null;
+  status: "draft" | "published" | "completed" | "cancelled";
+  visibility?: "members" | "management";
+  timezone?: string | null;
+  published_at?: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  completed_at?: string | null;
+  created_by_user_id?: number | null;
+  updated_by_user_id?: number | null;
+  lock_version?: number;
+};
+
+type EventMeetingFormState = {
+  id?: number;
+  type: "event" | "meeting";
+  title: string;
+  description: string;
+  venue: string;
+  visibility: "members" | "management";
+  is_all_day: boolean;
+  start_at: string;
+  end_at: string;
+  start_date: string;
+  end_date: string;
+  lock_version?: number;
+};
 
 type Activity = {
   name: string;
@@ -1501,7 +1539,7 @@ export default function Prototype() {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [selectedUpdate, setSelectedUpdate] = useState<typeof pendingMemberUpdates[number] | null>(null);
   const [selectedCommittee, setSelectedCommittee] = useState<typeof committeesList[number] | null>(null);
-  const [selectedEventMeeting, setSelectedEventMeeting] = useState<EventMeeting | null>(null);
+  const [selectedEventMeeting, setSelectedEventMeeting] = useState<BackendEventMeeting | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<{ title: string; meta: string[]; sourceSection: AnnouncementDetail } | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<{ title: string; meta: string[]; sourceTitle: string } | null>(null);
   const [selectedPersonalDocumentId, setSelectedPersonalDocumentId] = useState<string | null>(null);
@@ -1868,7 +1906,7 @@ export default function Prototype() {
     setScreen("announcement-single-detail");
   }
 
-  function openEventMeetingDetail(item: EventMeeting) {
+  function openEventMeetingDetail(item: BackendEventMeeting) {
     setSelectedMember(null);
     setSelectedUpdate(null);
     setSelectedCommittee(null);
@@ -9264,9 +9302,6 @@ function FellowshipPayments({ view = "Current Month", setScreen, amountPerSponso
 
 function EventsMeetings({
   role,
-  member,
-  selectedSponsors,
-  setScreen,
   selectedSection,
   onSelectEventMeeting
 }: {
@@ -9275,89 +9310,342 @@ function EventsMeetings({
   selectedSponsors: string[];
   setScreen: (screen: Screen) => void;
   selectedSection?: EventMeetingSection | null;
-  onSelectEventMeeting?: (item: EventMeeting) => void;
+  onSelectEventMeeting?: (item: BackendEventMeeting) => void;
 }) {
-  if (!verifiedOperationalSourceConnected("events")) return <section className="stack"><Toolbar title="Events & Meetings" actionLabel="Not connected" /><div className="notice">The Events & Meetings workflow is not connected to a verified operational source yet.</div><div className="notice memberHelperText">Real events and meeting records will appear here only after a verified source is connected.</div></section>;
+  const canManageEvents = role === "president" || role === "secretary";
+  const [status, setStatus] = useState<"loading" | "ready" | "empty" | "missing-club" | "unauthenticated" | "forbidden" | "error">("loading");
+  const [message, setMessage] = useState("Loading Events & Meetings from the backend...");
+  const [token, setToken] = useState<string | null>(null);
+  const [clubId, setClubId] = useState<number | null>(null);
+  const [events, setEvents] = useState<BackendEventMeeting[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState<EventMeetingFormState>(defaultEventMeetingForm());
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
 
-  const visible = role === "member" ? eventsMeetings.filter((item) => item.visibility === "All Members") : eventsMeetings;
-  const memberIsFellowshipSponsor = selectedSponsors.includes(member.name) || selectedSponsors.includes(member.dashboardName);
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadEvents() {
+      setStatus("loading");
+      setMessage("Loading Events & Meetings from the verified backend...");
+      setEvents([]);
+      setEditingId(null);
+      setCancelReason("");
+
+      try {
+        const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
+        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
+          method: "POST",
+          headers: { Accept: "application/json", "Content-Type": "application/json" },
+          body: JSON.stringify(login),
+          signal: controller.signal
+        });
+
+        if (loginResponse.status === 401) throw new Error("unauthenticated");
+        if (!loginResponse.ok) throw new Error("Event role login failed.");
+
+        const loginPayload = await loginResponse.json();
+        const loadedToken = loginPayload.token as string | undefined;
+        if (!loadedToken) throw new Error("Event token missing.");
+
+        const authHeaders = { Accept: "application/json", Authorization: "Bearer " + loadedToken };
+        const meResponse = await fetch(API_BASE_URL + "/auth/me", { headers: authHeaders, signal: controller.signal });
+        if (meResponse.status === 401) throw new Error("unauthenticated");
+        if (meResponse.status === 403) throw new Error("forbidden");
+        if (!meResponse.ok) throw new Error("Unable to load active club context for Events & Meetings.");
+
+        const mePayload = await meResponse.json();
+        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
+        const loadedClubId = memberships?.[0]?.club?.id;
+        if (typeof loadedClubId !== "number") throw new Error("missing-club");
+
+        const url = API_BASE_URL + "/clubs/" + loadedClubId + "/events" + eventMeetingQuery(selectedSection, canManageEvents);
+        const listResponse = await fetch(url, { headers: authHeaders, signal: controller.signal });
+        if (listResponse.status === 401) throw new Error("unauthenticated");
+        if (listResponse.status === 403) throw new Error("forbidden");
+        if (!listResponse.ok) throw new Error(await eventApiError(listResponse, "Events & Meetings could not be loaded."));
+
+        const payload = await listResponse.json();
+        const loadedEvents = (payload.data ?? []) as BackendEventMeeting[];
+        setToken(loadedToken);
+        setClubId(loadedClubId);
+        setEvents(loadedEvents);
+        setStatus(loadedEvents.length === 0 ? "empty" : "ready");
+        setMessage(loadedEvents.length === 0 ? "No Events & Meetings records match this view." : "Events & Meetings loaded from the verified backend.");
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        const value = error instanceof Error ? error.message : "Events & Meetings could not be loaded.";
+        if (value === "unauthenticated") {
+          setStatus("unauthenticated");
+          setMessage("Please sign in again to view Events & Meetings.");
+        } else if (value === "forbidden") {
+          setStatus("forbidden");
+          setMessage("This role is not authorized to view this Events & Meetings context.");
+        } else if (value === "missing-club") {
+          setStatus("missing-club");
+          setMessage("No active club context is available for Events & Meetings.");
+        } else {
+          setStatus("error");
+          setMessage(value);
+        }
+      }
+    }
+
+    loadEvents();
+
+    return () => controller.abort();
+  }, [role, selectedSection, canManageEvents, refreshKey]);
+
+  function sectionForEvent(event: BackendEventMeeting): EventMeetingSection {
+    if (event.status === "draft") return "Meeting Notices";
+    if (event.starts_at && new Date(event.starts_at).getTime() < Date.now()) return "Past Events";
+    return event.type === "meeting" ? "Upcoming Meetings" : "Upcoming Events";
+  }
+
   const sections: EventMeetingSection[] = selectedSection ? [selectedSection] : ["Upcoming Events", "Upcoming Meetings", "Past Events", "Meeting Notices"];
-  const emptyMessages: Record<EventMeeting["section"], string> = {
-    "Upcoming Events": "No events available at the moment.",
-    "Upcoming Meetings": "No upcoming meetings announced.",
-    "Past Events": "No past events available at the moment.",
-    "Meeting Notices": "No meeting notices created yet. Meeting reminder sending will be available after a notice is created."
-  };
-  const memberEmptyMessages: Record<EventMeeting["section"], string> = {
-    ...emptyMessages,
-    "Meeting Notices": "No meeting notices available yet."
-  };
-  const displaySectionTitle = (section: EventMeetingSection) => {
-    if (role === "member" && section === "Upcoming Events") return "Upcoming Club Events";
-    return section;
-  };
-  const title = selectedSection ? displaySectionTitle(selectedSection) : "Events & Meetings";
-  const selectedSectionItems = selectedSection ? visible.filter((item) => item.section === selectedSection) : [];
-  const badge = role === "member"
-    ? "Available to you"
-    : selectedSection === "Meeting Notices"
-      ? "Meeting notice management"
-      : "Management view";
+  const sectionedEvents = events.filter((event) => !selectedSection || sectionForEvent(event) === selectedSection);
+  const title = selectedSection ?? "Events & Meetings";
+
+  function beginCreate() {
+    setEditingId(null);
+    setForm(defaultEventMeetingForm());
+    setMessage("Create a Draft event or meeting. Publish only after backend confirmation.");
+  }
+
+  function beginEdit(event: BackendEventMeeting) {
+    setEditingId(event.id);
+    setForm(formFromEventMeeting(event));
+    setMessage("Editing uses the selected backend ID " + event.id + " and lock version " + (event.lock_version ?? "unavailable") + ".");
+  }
+
+  async function submitForm(event: React.FormEvent) {
+    event.preventDefault();
+    if (!token || !clubId) {
+      setStatus("error");
+      setMessage("Events & Meetings cannot submit without an authenticated club context.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const isEditing = editingId !== null;
+      const response = await fetch(API_BASE_URL + "/clubs/" + clubId + "/events" + (isEditing ? "/" + editingId : ""), {
+        method: isEditing ? "PATCH" : "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify(eventMeetingPayload(form, isEditing))
+      });
+
+      if (!response.ok) throw new Error(await eventApiError(response, isEditing ? "Event update failed." : "Event creation failed."));
+      setMessage(isEditing ? "Event or meeting updated by the backend." : "Draft event or meeting created by the backend.");
+      setEditingId(null);
+      setForm(defaultEventMeetingForm());
+      setRefreshKey((key) => key + 1);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Events & Meetings submission failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function runTransition(event: BackendEventMeeting, transition: "publish" | "cancel" | "complete") {
+    if (!token || !clubId || typeof event.lock_version !== "number") {
+      setMessage("Lifecycle action cannot run without token, club, and lock version.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const body: Record<string, string | number> = { lock_version: event.lock_version };
+      if (transition === "cancel") body.cancellation_reason = cancelReason.trim();
+      const response = await fetch(API_BASE_URL + "/clubs/" + clubId + "/events/" + event.id + "/" + transition, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) throw new Error(await eventApiError(response, "Lifecycle action failed."));
+      setCancelReason("");
+      setMessage("Lifecycle action confirmed by the backend: " + transition + ".");
+      setRefreshKey((key) => key + 1);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Lifecycle action failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <section className="stack">
-      <Toolbar title={title} actionLabel={badge} />
+      <Toolbar title={title} actionLabel={canManageEvents ? "Verified backend management" : "Verified backend read-only"} />
       {selectedSection && <p className="breadcrumbText">Operations → Events & Meetings → {selectedSection}</p>}
-      {role !== "member" && (
-        <div className="buttonRow">
-          {selectedSection === "Meeting Notices" && selectedSectionItems.length === 0 ? (
-            <button className="secondaryButton">Create Meeting Notice</button>
-          ) : (
-            <button className="secondaryButton" onClick={() => setScreen("notifications-reminders")}>Send Meeting Reminder</button>
-          )}
-        </div>
+      <div className="notice">{message}</div>
+      {status === "loading" && <div className="notice memberHelperText">Loading real Events & Meetings records...</div>}
+      {status === "unauthenticated" && <div className="notice">Please sign in again before viewing Events & Meetings.</div>}
+      {status === "forbidden" && <div className="notice">This role is not authorized for the selected Events & Meetings view.</div>}
+      {status === "missing-club" && <div className="notice">No active club context is available.</div>}
+      {status === "error" && <button className="secondaryButton" onClick={() => setRefreshKey((key) => key + 1)}>Retry Events API</button>}
+
+      {canManageEvents && (
+        <form className="compactPanel" onSubmit={submitForm}>
+          <Toolbar title={editingId ? "Edit Event / Meeting" : "Create Draft Event / Meeting"} actionLabel="Backend write API" />
+          <div className="formGrid">
+            <label>Type<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as "event" | "meeting" })}><option value="event">Event</option><option value="meeting">Meeting</option></select></label>
+            <label>Visibility<select value={form.visibility} onChange={(event) => setForm({ ...form, visibility: event.target.value as "members" | "management" })}><option value="members">Members</option><option value="management">Management</option></select></label>
+            <label>Title<input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
+            <label>Venue<input value={form.venue} onChange={(event) => setForm({ ...form, venue: event.target.value })} /></label>
+            <label>Description<textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+            <label><input type="checkbox" checked={form.is_all_day} onChange={(event) => setForm({ ...form, is_all_day: event.target.checked })} /> All-day record</label>
+            {form.is_all_day ? (
+              <>
+                <label>Start date<input type="date" value={form.start_date} onChange={(event) => setForm({ ...form, start_date: event.target.value })} required /></label>
+                <label>End date<input type="date" value={form.end_date} onChange={(event) => setForm({ ...form, end_date: event.target.value })} /></label>
+              </>
+            ) : (
+              <>
+                <label>Start time<input type="datetime-local" value={form.start_at} onChange={(event) => setForm({ ...form, start_at: event.target.value })} required /></label>
+                <label>End time<input type="datetime-local" value={form.end_at} onChange={(event) => setForm({ ...form, end_at: event.target.value })} /></label>
+              </>
+            )}
+          </div>
+          <div className="buttonRow">
+            <button disabled={submitting}>{editingId ? "Save backend update" : "Create backend Draft"}</button>
+            {editingId && <button type="button" className="secondaryButton" onClick={beginCreate}>Cancel edit</button>}
+          </div>
+        </form>
       )}
+
+      {status === "empty" && <div className="compactPanel"><div className="memberEmptyState">No real Events & Meetings records are available for this view.</div></div>}
       {sections.map((section) => {
-        const sectionItems = visible.filter((item) => item.section === section);
-        const sectionTitle = displaySectionTitle(section);
-        const emptyMessage = role === "member" ? memberEmptyMessages[section] : emptyMessages[section];
+        const sectionItems = sectionedEvents.filter((event) => sectionForEvent(event) === section);
         return (
           <div className="compactPanel" key={section}>
-            <h2>{sectionTitle}</h2>
+            <h2>{section}</h2>
             <div className={role === "member" ? "memberEventList" : "tableLike"}>
-              {sectionItems.map((item) => role === "member" ? (
-                <article className="memberEventCard" key={item.title}>
+              {sectionItems.map((event) => (
+                <article className={role === "member" ? "memberEventCard" : "adminEventCard"} key={event.id}>
                   <div>
-                    <h3>{item.title}</h3>
-                    <p>{item.date}{item.time ? ` · ${item.time}` : ""}</p>
-                    <span>Venue: {item.venue}</span>
-                    <span>Audience: {item.title === "Monthly Family Fellowship" ? "Members & Family" : "All Members"}</span>
-                    {item.title === "Monthly Family Fellowship" && memberIsFellowshipSponsor && (
-                      <span>You are a sponsor for this fellowship. Your contribution: {money(500)}. Payment status: Pending.</span>
-                    )}
+                    <h3>{event.title}</h3>
+                    <p>{formatEventSchedule(event)}</p>
+                    <span>Venue: {event.venue || "Not specified"}</span>
+                    <span>Type: {event.type}</span>
+                    {canManageEvents && <span>Visibility: {event.visibility}</span>}
                   </div>
-                  <span className="tag">{item.status === "Published" ? "Upcoming" : item.status}</span>
-                </article>
-              ) : (
-                <article className="adminEventCard" key={item.title}>
-                  <div>
-                    <h3>{item.title}</h3>
-                    <p>{item.date}{item.time ? ` · ${item.time}` : ""}</p>
-                  </div>
-                  <span>Venue: {item.venue}</span>
-                  <span>Audience: {item.visibility}</span>
-                  <span className="tag">{item.status}</span>
-                  <button className="filterButton" onClick={() => onSelectEventMeeting?.(item)}>View details</button>
+                  <span className="tag">{event.status}</span>
+                  <button className="filterButton" onClick={() => onSelectEventMeeting?.(event)}>View details</button>
+                  {canManageEvents && (
+                    <div className="buttonRow">
+                      <button className="secondaryButton" onClick={() => beginEdit(event)} disabled={submitting || event.status === "completed" || event.status === "cancelled"}>Edit</button>
+                      {event.status === "draft" && <button onClick={() => runTransition(event, "publish")} disabled={submitting}>Publish</button>}
+                      {event.status === "published" && <button onClick={() => runTransition(event, "complete")} disabled={submitting}>Complete</button>}
+                      {(event.status === "draft" || event.status === "published") && <button className="secondaryButton" onClick={() => runTransition(event, "cancel")} disabled={submitting}>Cancel</button>}
+                    </div>
+                  )}
                 </article>
               ))}
-              {sectionItems.length === 0 && <div className="memberEmptyState">{role === "member" || section === "Meeting Notices" ? emptyMessage : "No items in this section."}</div>}
+              {sectionItems.length === 0 && status !== "loading" && <div className="memberEmptyState">No real records in this section.</div>}
             </div>
           </div>
         );
       })}
+      {canManageEvents && <label className="moduleSelect">Cancellation reason<input value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Required before cancelling" /></label>}
     </section>
   );
 }
 
+function defaultEventMeetingForm(): EventMeetingFormState {
+  return {
+    type: "meeting",
+    title: "",
+    description: "",
+    venue: "",
+    visibility: "members",
+    is_all_day: false,
+    start_at: "",
+    end_at: "",
+    start_date: "",
+    end_date: ""
+  };
+}
+
+function formFromEventMeeting(event: BackendEventMeeting): EventMeetingFormState {
+  return {
+    id: event.id,
+    type: event.type,
+    title: event.title,
+    description: event.description || "",
+    venue: event.venue || "",
+    visibility: event.visibility || "members",
+    is_all_day: event.is_all_day,
+    start_at: event.starts_at ? toDateTimeLocal(event.starts_at) : "",
+    end_at: event.ends_at ? toDateTimeLocal(event.ends_at) : "",
+    start_date: event.start_date || "",
+    end_date: event.end_date || "",
+    lock_version: event.lock_version
+  };
+}
+
+function eventMeetingPayload(form: EventMeetingFormState, isEditing: boolean) {
+  const payload: Record<string, string | boolean | number | undefined> = {
+    title: form.title,
+    description: form.description || undefined,
+    venue: form.venue || undefined,
+    visibility: form.visibility,
+    is_all_day: form.is_all_day
+  };
+  if (!isEditing) payload.type = form.type;
+  if (isEditing) payload.lock_version = form.lock_version;
+  if (form.is_all_day) {
+    payload.start_date = form.start_date;
+    if (form.end_date) payload.end_date = form.end_date;
+  } else {
+    payload.start_at = toOffsetDateTime(form.start_at);
+    if (form.end_at) payload.end_at = toOffsetDateTime(form.end_at);
+  }
+  return payload;
+}
+
+function eventMeetingQuery(section: EventMeetingSection | null | undefined, management: boolean) {
+  const params = new URLSearchParams();
+  if (section === "Past Events") params.set("scope", "past");
+  else if (section === "Meeting Notices" && management) params.set("scope", "all");
+  else params.set("scope", "upcoming");
+  if (section === "Upcoming Events") params.set("type", "event");
+  if (section === "Upcoming Meetings" || section === "Meeting Notices") params.set("type", "meeting");
+  params.set("per_page", "50");
+  const query = params.toString();
+  return query ? "?" + query : "";
+}
+
+function formatEventSchedule(event: BackendEventMeeting) {
+  if (event.is_all_day) return `${event.start_date || "Date unavailable"}${event.end_date && event.end_date !== event.start_date ? " → " + event.end_date : ""} · all day`;
+  const timezone = event.timezone || "Asia/Kolkata";
+  const start = event.starts_at ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: timezone }).format(new Date(event.starts_at)) : "Start unavailable";
+  const end = event.ends_at ? new Intl.DateTimeFormat("en-IN", { timeStyle: "short", timeZone: timezone }).format(new Date(event.ends_at)) : "";
+  return end ? `${start} → ${end}` : start;
+}
+
+function toDateTimeLocal(value: string) {
+  const date = new Date(value);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function toOffsetDateTime(value: string) {
+  if (!value) return value;
+  const date = new Date(value);
+  return date.toISOString();
+}
+
+async function eventApiError(response: Response, fallback: string) {
+  try {
+    const payload = await response.json();
+    const errors = payload.errors ? Object.values(payload.errors).flat().join(" ") : "";
+    return errors || payload.message || fallback;
+  } catch {
+    return response.status === 401 ? "Please sign in again." : response.status === 403 ? "This role is not authorized for that Events & Meetings action." : response.status === 409 ? "This Events & Meetings record changed or is not in a valid lifecycle state. Refresh and try again." : fallback;
+  }
+}
 function Announcements({ role, member, selectedSponsors }: { role: Role; member: Member; selectedSponsors: string[] }) {
   if (!verifiedOperationalSourceConnected("announcements")) return <section className="stack"><Toolbar title="Announcements" actionLabel="Not connected" /><div className="notice">The Announcements workflow is not connected to a verified operational source yet.</div><div className="notice memberHelperText">Real announcements will appear here only after a verified operational source is connected.</div></section>;
 
@@ -9832,7 +10120,7 @@ function EventMeetingDetail({
   item,
   setScreen
 }: {
-  item: EventMeeting | null;
+  item: BackendEventMeeting | null;
   setScreen: (screen: Screen) => void;
 }) {
   if (!item) {
@@ -9840,7 +10128,7 @@ function EventMeetingDetail({
       <section className="stack">
         <div className="compactPanel">
           <button className="secondaryButton compactBackButton" onClick={() => setScreen("events-meetings")}>← Back to List</button>
-          <div className="notice memberHelperText">No event or meeting selected.</div>
+          <div className="notice memberHelperText">No backend event or meeting record is selected.</div>
         </div>
       </section>
     );
@@ -9849,50 +10137,27 @@ function EventMeetingDetail({
   return (
     <section className="stack">
       <div className="compactPanel">
-        <button className="secondaryButton compactBackButton" onClick={() => setScreen("events-meetings")}>
-          ← {item.section}
-        </button>
-        <Toolbar title="Event / Meeting Details" actionLabel="Operational Schedule" />
+        <button className="secondaryButton compactBackButton" onClick={() => setScreen("events-meetings")}>← Events & Meetings</button>
+        <Toolbar title="Event / Meeting Details" actionLabel="Verified backend record" />
       </div>
-
       <div className="memberPanel">
-        <div className="toolbar">
-          <h3>{item.type} Information</h3>
-          <span className="statusPill">{item.status}</span>
+        <div className="toolbar"><h3>{item.type === "meeting" ? "Meeting" : "Event"} #{item.id}</h3><span className="statusPill">{item.status}</span></div>
+        <div className="fieldGrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <Field label="Stable backend ID" value={String(item.id)} />
+          <Field label="Title" value={item.title} />
+          <Field label="Schedule" value={formatEventSchedule(item)} />
+          <Field label="Venue" value={item.venue || "Not specified"} />
+          <Field label="Type" value={item.type} />
+          <Field label="Status" value={item.status} />
+          {item.visibility && <Field label="Visibility" value={item.visibility} />}
+          {typeof item.lock_version === "number" && <Field label="Lock version" value={String(item.lock_version)} />}
         </div>
-        <div className="detailGrid">
-          <div className="fieldGrid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-            <div className="field">
-              <span className="fieldLabel">Title</span>
-              <strong>{item.title}</strong>
-            </div>
-            <div className="field">
-              <span className="fieldLabel">Date & Time</span>
-              <strong>{item.date}{item.time ? ` @ ${item.time}` : ""}</strong>
-            </div>
-            <div className="field">
-              <span className="fieldLabel">Venue</span>
-              <strong>{item.venue}</strong>
-            </div>
-            <div className="field">
-              <span className="fieldLabel">Audience (Visibility)</span>
-              <strong>{item.visibility}</strong>
-            </div>
-            <div className="field">
-              <span className="fieldLabel">Section Type</span>
-              <strong>{item.section}</strong>
-            </div>
-            <div className="field">
-              <span className="fieldLabel">Activity Category</span>
-              <strong>{item.type}</strong>
-            </div>
-          </div>
-        </div>
+        {item.description && <div className="notice memberHelperText">{item.description}</div>}
+        {item.cancellation_reason && <div className="notice">Cancellation reason: {item.cancellation_reason}</div>}
       </div>
     </section>
   );
 }
-
 function AnnouncementSingleDetail({
   item,
   setScreen
