@@ -93,6 +93,48 @@ const LOCAL_MEMBER_FINANCE_LOGIN = {
   password: "password"
 };
 
+type ClubProjectRecord = {
+  id: number;
+  club_id?: number;
+  record_type: "project" | "activity";
+  title: string;
+  description?: string | null;
+  objective?: string | null;
+  service_category?: string | null;
+  visibility?: "members" | "management";
+  status: "draft" | "planned" | "active" | "completed" | "cancelled";
+  planned_start_date?: string | null;
+  planned_end_date?: string | null;
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
+  location?: string | null;
+  lead_member?: { id: number; member_code: string; full_name: string } | null;
+  expected_beneficiary_count?: number | null;
+  actual_beneficiary_count?: number | null;
+  impact_summary?: string | null;
+  cancellation_reason?: string | null;
+  lock_version?: number;
+};
+
+type ClubProjectForm = {
+  record_type: "project" | "activity";
+  title: string;
+  description: string;
+  objective: string;
+  service_category: string;
+  visibility: "members" | "management";
+  planned_start_date: string;
+  planned_end_date: string;
+  location: string;
+  expected_beneficiary_count: string;
+  actual_start_date: string;
+  actual_end_date: string;
+  actual_beneficiary_count: string;
+  impact_summary: string;
+};
+
+type ClubProjectsMeta = { current_page: number; last_page: number; total: number };
+
 type PaymentRecordingStatus = "initializing" | "ready" | "submitting" | "success" | "error";
 type PaymentRecordingMode = "cash" | "bank_transfer" | "upi" | "cheque" | "card" | "adjustment";
 
@@ -1221,6 +1263,7 @@ const navByRole: Record<Role, NavGroup[]> = {
       { label: "My Payment History", screen: "payment-history" },
       { label: "My Fellowship", screen: "my-fellowship" },
       { label: "Events & Meetings", screen: "events-meetings" },
+      { label: "Projects / Activities", screen: "projects" },
       { label: "Announcements", screen: "announcements" },
       { label: "My Documents", screen: "my-documents" },
       { label: "Celebrations", screen: "celebrations" },
@@ -2706,7 +2749,7 @@ export default function Prototype() {
         ) : (
           <section className="compactPanel"><p className="eyebrow">DOCUMENT ADMINISTRATION</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club document management.</div></section>
         ))}
-        {screen === "projects" && <ProjectsActivities setScreen={handleSetScreen} />}
+        {screen === "projects" && <ProjectsActivities role={role} setScreen={handleSetScreen} />}
         {screen === "celebrations" && <Celebrations role={role} setScreen={handleSetScreen} />}
         {screen === "donor-consent" && <DonorConsent />}
         {screen === "donor-search" && <DonorSearch bloodGroup={bloodGroup} setBloodGroup={setBloodGroup} allowedDonors={allowedDonors} />}
@@ -3081,7 +3124,7 @@ function OperationsModule({
       {section === "Events & Meetings" && <EventsMeetings role={role} member={member} selectedSponsors={selectedSponsors} setScreen={setScreen} />}
       {section === "Announcements" && <Announcements role={role} member={member} selectedSponsors={selectedSponsors} />}
       {section === "Documents" && <div className="compactPanel"><p>Club document management has a separate authorized workspace.</p><button onClick={() => setScreen("documents-administration")}>Open Document Administration</button></div>}
-      {section === "Projects / Activities" && <ProjectsActivities setScreen={setScreen} />}
+      {section === "Projects / Activities" && <ProjectsActivities role={role} setScreen={setScreen} />}
       {section === "Fellowship" && (
         <FellowshipDashboard
           tab={tab}
@@ -3885,7 +3928,7 @@ function ClubVisibilityModule({
       {section === "Events & Meetings" && <EventsMeetings role={role} member={member} selectedSponsors={selectedSponsors} setScreen={setScreen} />}
       {section === "Announcements" && <Announcements role={role} member={member} selectedSponsors={selectedSponsors} />}
       {section === "Documents" && <div className="compactPanel"><p>Use My Documents for read-only role-authorized document access.</p><button onClick={() => setScreen("my-documents")}>Open My Documents</button></div>}
-      {section === "Projects / Activities" && <ProjectsActivities setScreen={setScreen} />}
+      {section === "Projects / Activities" && <ProjectsActivities role={role} setScreen={setScreen} />}
       {section === "Celebrations" && <Celebrations role={role} setScreen={setScreen} />}
     </section>
   );
@@ -4122,7 +4165,7 @@ function NavDetailScreen({
   const { members: currentMembers, status: memberStatus, error: memberError } = useCurrentMemberData();
   const isUnconnectedProjectDetail = parent === "Operations" && ["This Month", "Pending Reports", "Completed Activities", "Category-wise Activities"].includes(title);
   if (isUnconnectedProjectDetail) {
-    return <section className="stack"><Toolbar title="Projects & Activities" actionLabel="Not connected" /><div className="notice">The Projects & Activities workflow is not connected to a verified operational source yet.</div><div className="notice memberHelperText">Real project and activity records will appear here only after a verified source is connected.</div></section>;
+    return <ProjectsActivities role={role} setScreen={setScreen} />;
   }
   const isProfileUpdatePending = parent === "People" && title === "Profile Update Pending";
   const isGovernanceDetail = parent === "People" && governanceDetailTitles.includes(title);
@@ -9819,28 +9862,222 @@ function ListScreen({ title, items, role }: { title: string; items: string[]; ro
   );
 }
 
-function ProjectsActivities({ setScreen }: { setScreen: (screen: Screen) => void }) {
-  if (!verifiedOperationalSourceConnected("projects")) return <section className="stack"><Toolbar title="Projects / Activities" actionLabel="Not connected" /><div className="notice">The Projects & Activities workflow is not connected to a verified operational source yet.</div><div className="notice memberHelperText">Real project and activity records will appear here only after a verified source is connected.</div></section>;
+const emptyClubProjectForm: ClubProjectForm = {
+  record_type: "project", title: "", description: "", objective: "", service_category: "",
+  visibility: "members", planned_start_date: "", planned_end_date: "", location: "",
+  expected_beneficiary_count: "", actual_start_date: "", actual_end_date: "",
+  actual_beneficiary_count: "", impact_summary: ""
+};
 
-  return (
-    <section className="stack">
-      <Toolbar title="Projects / Activities" actionLabel="V1 activity reporting" />
-      <div className="filterBar">
-        {["This month", "Pending report", "Completed", "By category"].map((filter) => <button className="filterButton" key={filter}>{filter}</button>)}
-      </div>
-      <div className="actionGrid">
-        <Action title="Create from annual plan" body="Auto-fill month, category and lead committee." onClick={() => undefined} />
-        <Action title="Use activity template" body="Service, health, education or environment template." onClick={() => undefined} />
-        <Action title="Upload photos/report" body="Attach placeholders and mark report status." onClick={() => undefined} />
-        <Action title="Batch update status" body="Mark planned, completed or cancelled." onClick={() => undefined} />
-      </div>
-      <div className="activityGrid">
-        {activities.map((activity) => <ActivityCard key={activity.name} activity={activity} />)}
-      </div>
-      <button onClick={() => setScreen("reports-tools-module")}>Open Activity Reports</button>
-    </section>
-  );
+function clubProjectForm(project: ClubProjectRecord): ClubProjectForm {
+  return {
+    record_type: project.record_type,
+    title: project.title,
+    description: project.description ?? "",
+    objective: project.objective ?? "",
+    service_category: project.service_category ?? "",
+    visibility: project.visibility ?? "members",
+    planned_start_date: project.planned_start_date ?? "",
+    planned_end_date: project.planned_end_date ?? "",
+    location: project.location ?? "",
+    expected_beneficiary_count: project.expected_beneficiary_count?.toString() ?? "",
+    actual_start_date: project.actual_start_date ?? "",
+    actual_end_date: project.actual_end_date ?? "",
+    actual_beneficiary_count: project.actual_beneficiary_count?.toString() ?? "",
+    impact_summary: project.impact_summary ?? ""
+  };
 }
+
+function ProjectsActivities({ role, setScreen }: { role: Role; setScreen: (screen: Screen) => void }) {
+  const canManage = role === "president" || role === "secretary";
+  const [token, setToken] = useState<string | null>(null);
+  const [clubId, setClubId] = useState<number | null>(null);
+  const [records, setRecords] = useState<ClubProjectRecord[]>([]);
+  const [meta, setMeta] = useState<ClubProjectsMeta | null>(null);
+  const [selected, setSelected] = useState<ClubProjectRecord | null>(null);
+  const [view, setView] = useState<"list" | "detail" | "create" | "edit">("list");
+  const [state, setState] = useState<"loading" | "ready" | "empty" | "submitting" | "error" | "forbidden" | "conflict">("loading");
+  const [message, setMessage] = useState("Loading Projects and Activities from the backend...");
+  const [query, setQuery] = useState("");
+  const [recordType, setRecordType] = useState<"" | "project" | "activity">("");
+  const [scope, setScope] = useState<"all" | "planned" | "active" | "completed" | "cancelled">("all");
+  const [form, setForm] = useState<ClubProjectForm>(emptyClubProjectForm);
+
+  async function apiMessage(response: Response, fallback: string) {
+    try {
+      const payload = await response.json() as { message?: string; errors?: Record<string, string[]> };
+      return (payload.errors && Object.values(payload.errors)[0]?.[0]) || payload.message || fallback;
+    } catch { return fallback; }
+  }
+
+  function fail(statusCode: number, text: string) {
+    setState(statusCode === 403 ? "forbidden" : statusCode === 409 ? "conflict" : "error");
+    setMessage(text);
+  }
+
+  async function loadList(accessToken: string, activeClubId: number, page = 1, filters?: { q?: string; type?: string; scope?: string }) {
+    setState("loading");
+    setRecords([]); setMeta(null);
+    setMessage("Loading Projects and Activities from the backend...");
+    const params = new URLSearchParams({ per_page: "10", page: String(page), direction: "asc" });
+    const q = filters?.q ?? query;
+    const type = filters?.type ?? recordType;
+    const selectedScope = filters?.scope ?? scope;
+    if (q.trim()) params.set("q", q.trim());
+    if (type) params.set("record_type", type);
+    if (selectedScope !== "all") params.set("scope", selectedScope);
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/clubs/${activeClubId}/projects?${params}`, {
+        headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` }
+      });
+    } catch {
+      setState("error"); setMessage("Projects and Activities are unavailable.");
+      return;
+    }
+    if (!response.ok) {
+      setRecords([]); setMeta(null);
+      fail(response.status, await apiMessage(response, "Projects and Activities are unavailable."));
+      return;
+    }
+    const payload = await response.json() as { data?: ClubProjectRecord[]; meta?: ClubProjectsMeta };
+    const loaded = payload.data ?? [];
+    setRecords(loaded); setMeta(payload.meta ?? null);
+    setState(loaded.length ? "ready" : "empty");
+    setMessage(loaded.length ? "Backend records loaded." : "No Projects or Activities match the current filters.");
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setToken(null); setClubId(null); setRecords([]); setSelected(null); setView("list");
+    setForm(emptyClubProjectForm); setState("loading");
+    setMessage("Loading role-authorized Projects and Activities...");
+    async function initialize() {
+      try {
+        const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
+        const loginResponse = await fetch(`${API_BASE_URL}/auth/login`, {
+          method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(login)
+        });
+        if (!loginResponse.ok) throw new Error("Projects role login failed.");
+        const loginPayload = await loginResponse.json() as { token?: string };
+        if (!loginPayload.token) throw new Error("Projects access token is missing.");
+        const meResponse = await fetch(`${API_BASE_URL}/auth/me`, { headers: { Accept: "application/json", Authorization: `Bearer ${loginPayload.token}` } });
+        if (!meResponse.ok) throw new Error("Active club context is unavailable.");
+        const me = await meResponse.json() as { club_memberships?: BackendClubMembership[] };
+        const activeClubId = me.club_memberships?.[0]?.club?.id;
+        if (typeof activeClubId !== "number") throw new Error("Active club context is unavailable.");
+        if (!cancelled) { setToken(loginPayload.token); setClubId(activeClubId); await loadList(loginPayload.token, activeClubId, 1); }
+      } catch (error) {
+        if (!cancelled) { setState("error"); setMessage(error instanceof Error ? error.message : "Projects and Activities are unavailable."); }
+      }
+    }
+    void initialize();
+    return () => { cancelled = true; };
+  }, [role]);
+
+  async function openRecord(id: number) {
+    if (!token || !clubId) return;
+    setState("loading"); setMessage("Loading the selected stable backend record...");
+    const response = await fetch(`${API_BASE_URL}/clubs/${clubId}/projects/${id}`, { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } });
+    if (!response.ok) { setSelected(null); setView("list"); fail(response.status, await apiMessage(response, "The selected record is unavailable.")); return; }
+    const payload = await response.json() as { data: ClubProjectRecord };
+    setSelected(payload.data); setView("detail"); setState("ready"); setMessage(`Loaded backend record #${payload.data.id}.`);
+  }
+
+  function payload(includeOperational = false) {
+    const result: Record<string, string | number | null> = {
+      title: form.title.trim(), description: form.description.trim() || null, objective: form.objective.trim() || null,
+      service_category: form.service_category.trim() || null, visibility: form.visibility,
+      planned_start_date: form.planned_start_date || null, planned_end_date: form.planned_end_date || null,
+      location: form.location.trim() || null,
+      expected_beneficiary_count: form.expected_beneficiary_count === "" ? null : Number(form.expected_beneficiary_count)
+    };
+    if (includeOperational) {
+      result.actual_start_date = form.actual_start_date || null; result.actual_end_date = form.actual_end_date || null;
+      result.actual_beneficiary_count = form.actual_beneficiary_count === "" ? null : Number(form.actual_beneficiary_count);
+      result.impact_summary = form.impact_summary.trim() || null;
+    }
+    return result;
+  }
+
+  async function save() {
+    if (!token || !clubId || !canManage || !form.title.trim()) return;
+    const editing = view === "edit" && selected;
+    setState("submitting"); setMessage(editing ? "Saving the exact backend record..." : "Creating a Draft in the backend...");
+    const response = await fetch(editing ? `${API_BASE_URL}/clubs/${clubId}/projects/${selected.id}` : `${API_BASE_URL}/clubs/${clubId}/projects`, {
+      method: editing ? "PATCH" : "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(editing ? { ...payload(selected.status === "active"), lock_version: selected.lock_version } : { ...payload(), record_type: form.record_type })
+    });
+    if (!response.ok) { fail(response.status, await apiMessage(response, "The backend did not save this record.")); return; }
+    const body = await response.json() as { data: ClubProjectRecord };
+    await loadList(token, clubId, 1);
+    setSelected(body.data); setView("detail"); setState("ready"); setMessage(`Backend confirmed record #${body.data.id}.`);
+  }
+
+  async function transition(action: "plan" | "start" | "complete" | "cancel") {
+    if (!token || !clubId || !selected || !canManage || selected.lock_version === undefined) return;
+    const safeDate = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const body: Record<string, string | number> = { lock_version: selected.lock_version };
+    if (action === "start") body.actual_start_date = selected.planned_start_date ?? safeDate;
+    if (action === "complete") {
+      body.actual_start_date = selected.actual_start_date ?? selected.planned_start_date ?? safeDate;
+      body.actual_end_date = safeDate;
+      if (selected.actual_beneficiary_count != null) body.actual_beneficiary_count = selected.actual_beneficiary_count;
+      if (selected.impact_summary) body.impact_summary = selected.impact_summary;
+    }
+    if (action === "cancel") body.cancellation_reason = "Cancelled through the verified Projects and Activities frontend.";
+    setState("submitting"); setMessage(`Submitting ${action} to the backend...`);
+    const response = await fetch(`${API_BASE_URL}/clubs/${clubId}/projects/${selected.id}/${action}`, {
+      method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body)
+    });
+    if (!response.ok) { fail(response.status, await apiMessage(response, `The backend rejected the ${action} transition.`)); return; }
+    const result = await response.json() as { data: ClubProjectRecord };
+    await loadList(token, clubId, meta?.current_page ?? 1);
+    setSelected(result.data); setView("detail"); setState("ready"); setMessage(`${action} confirmed by the backend for record #${result.data.id}.`);
+  }
+
+  const notice = <div className="notice memberHelperText"><strong>{state === "forbidden" ? "Forbidden: " : state === "conflict" ? "Conflict: " : ""}</strong>{message}</div>;
+
+  if (view === "create" || view === "edit") {
+    const activeEdit = view === "edit" && selected?.status === "active";
+    return <section className="stack" style={{ minWidth: 0 }}><Toolbar title={view === "create" ? "Create Project / Activity Draft" : `Edit Record #${selected?.id}`} actionLabel="Backend workflow" />{notice}<div className="formPanel">
+      <div className="fieldGrid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" }}>
+        <label>Record type<select value={form.record_type} disabled={view === "edit"} onChange={e => setForm({ ...form, record_type: e.target.value as ClubProjectForm["record_type"] })}><option value="project">Project</option><option value="activity">Activity</option></select></label>
+        <label>Title<input value={form.title} disabled={activeEdit} onChange={e => setForm({ ...form, title: e.target.value })} /></label>
+        {!activeEdit && <label>Visibility<select value={form.visibility} onChange={e => setForm({ ...form, visibility: e.target.value as ClubProjectForm["visibility"] })}><option value="members">Members</option><option value="management">Management</option></select></label>}
+        {!activeEdit && <label>Category<input value={form.service_category} onChange={e => setForm({ ...form, service_category: e.target.value })} /></label>}
+        {!activeEdit && <label>Planned start<input type="date" value={form.planned_start_date} onChange={e => setForm({ ...form, planned_start_date: e.target.value })} /></label>}
+        {!activeEdit && <label>Planned end<input type="date" value={form.planned_end_date} onChange={e => setForm({ ...form, planned_end_date: e.target.value })} /></label>}
+        <label>Location<input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} /></label>
+        {!activeEdit && <label>Expected beneficiaries<input type="number" min="0" value={form.expected_beneficiary_count} onChange={e => setForm({ ...form, expected_beneficiary_count: e.target.value })} /></label>}
+        {activeEdit && <label>Actual beneficiaries<input type="number" min="0" value={form.actual_beneficiary_count} onChange={e => setForm({ ...form, actual_beneficiary_count: e.target.value })} /></label>}
+      </div>
+      <label>Description<textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>
+      {!activeEdit && <label>Objective<textarea value={form.objective} onChange={e => setForm({ ...form, objective: e.target.value })} /></label>}
+      {activeEdit && <label>Impact summary<textarea value={form.impact_summary} onChange={e => setForm({ ...form, impact_summary: e.target.value })} /></label>}
+      <div className="buttonRow"><button onClick={() => void save()} disabled={state === "submitting" || !form.title.trim()}>Save to Backend</button><button className="secondaryButton" onClick={() => { setView(selected ? "detail" : "list"); setState("ready"); setMessage("No unsaved changes were applied."); }}>Cancel Without Saving</button></div>
+    </div></section>;
+  }
+
+  if (view === "detail" && selected) return <section className="stack" style={{ minWidth: 0 }}><Toolbar title={selected.title} actionLabel={`${selected.record_type} #${selected.id}`} />{notice}
+    <article className="activityCard" style={{ overflowWrap: "anywhere" }}><div className="toolbar"><h2>{selected.record_type === "project" ? "Project" : "Activity"} details</h2><span className="tag">{selected.status}</span></div><div className="fieldGrid">
+      <Field label="Stable backend ID" value={String(selected.id)} /><Field label="Visibility" value={selected.visibility ?? "members"} /><Field label="Category" value={selected.service_category ?? "Not recorded"} />
+      <Field label="Planned dates" value={`${selected.planned_start_date ?? "Not set"} — ${selected.planned_end_date ?? "Not set"}`} /><Field label="Actual dates" value={`${selected.actual_start_date ?? "Not set"} — ${selected.actual_end_date ?? "Not set"}`} />
+      <Field label="Location" value={selected.location ?? "Not recorded"} /><Field label="Lead member" value={selected.lead_member?.full_name ?? "Not assigned"} /><Field label="Beneficiaries" value={String(selected.actual_beneficiary_count ?? selected.expected_beneficiary_count ?? "Not recorded")} />
+    </div>{selected.description && <p>{selected.description}</p>}{selected.objective && <p><strong>Objective:</strong> {selected.objective}</p>}{selected.impact_summary && <p><strong>Impact:</strong> {selected.impact_summary}</p>}{canManage && selected.cancellation_reason && <p><strong>Cancellation reason:</strong> {selected.cancellation_reason}</p>}</article>
+    {canManage && <div className="buttonRow">{["draft", "planned", "active"].includes(selected.status) && <button className="secondaryButton" onClick={() => { setForm(clubProjectForm(selected)); setView("edit"); }}>Edit Exact Record</button>}{selected.status === "draft" && <button onClick={() => void transition("plan")}>Plan</button>}{selected.status === "planned" && <button onClick={() => void transition("start")}>Start</button>}{["planned", "active"].includes(selected.status) && <button onClick={() => void transition("complete")}>Complete</button>}{["draft", "planned", "active"].includes(selected.status) && <button className="secondaryButton" onClick={() => void transition("cancel")}>Cancel Record</button>}</div>}
+    <button className="secondaryButton" onClick={() => { setSelected(null); setView("list"); setState(records.length ? "ready" : "empty"); setMessage("Returned to the current backend list."); }}>← Back to Projects / Activities</button>
+  </section>;
+
+  return <section className="stack" style={{ minWidth: 0 }}><Toolbar title="Projects / Activities" actionLabel={canManage ? "Backend management" : "Backend read-only"} /><div className="notice">This screen uses club-scoped backend records only. It has no dummy fallback or local-only save.</div>{notice}
+    <div className="filterBar" style={{ alignItems: "end" }}><label>Search<input value={query} onChange={e => setQuery(e.target.value)} placeholder="Title, objective, location" /></label><label>Type<select value={recordType} onChange={e => setRecordType(e.target.value as typeof recordType)}><option value="">All types</option><option value="project">Projects</option><option value="activity">Activities</option></select></label><label>Status<select value={scope} onChange={e => setScope(e.target.value as typeof scope)}><option value="all">All visible</option><option value="planned">Planned</option><option value="active">Active</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label><button className="filterButton" onClick={() => token && clubId && void loadList(token, clubId, 1)} disabled={!token || state === "loading"}>Apply Filters</button><button className="filterButton" onClick={() => { setQuery(""); setRecordType(""); setScope("all"); if (token && clubId) void loadList(token, clubId, 1, { q: "", type: "", scope: "all" }); }} disabled={!token}>Clear</button>{canManage && <button onClick={() => { setSelected(null); setForm(emptyClubProjectForm); setView("create"); setState("ready"); setMessage("New records are created as Draft only."); }}>Create Draft</button>}</div>
+    {records.length > 0 && <div className="activityGrid">{records.map(project => <article className="activityCard" key={project.id} style={{ minWidth: 0, overflowWrap: "anywhere" }}><div className="toolbar"><h2>{project.title}</h2><span className="tag">{project.status}</span></div><div className="fieldGrid"><Field label="Type" value={project.record_type === "project" ? "Project" : "Activity"} /><Field label="Stable ID" value={String(project.id)} /><Field label="Start" value={project.actual_start_date ?? project.planned_start_date ?? "Not set"} /><Field label="Location" value={project.location ?? "Not recorded"} /></div><button className="filterButton" onClick={() => void openRecord(project.id)}>View Record #{project.id}</button></article>)}</div>}
+    {meta && meta.last_page > 1 && <div className="buttonRow"><button className="secondaryButton" disabled={meta.current_page <= 1 || !token || !clubId} onClick={() => token && clubId && void loadList(token, clubId, meta.current_page - 1)}>Previous</button><span>Page {meta.current_page} of {meta.last_page} · {meta.total} records</span><button className="secondaryButton" disabled={meta.current_page >= meta.last_page || !token || !clubId} onClick={() => token && clubId && void loadList(token, clubId, meta.current_page + 1)}>Next</button></div>}
+    <button className="secondaryButton" onClick={() => setScreen("reports-tools-module")}>Open Reports & Tools</button>
+  </section>;
+}
+
 
 function ActivityCard({ activity }: { activity: Activity }) {
   return (
