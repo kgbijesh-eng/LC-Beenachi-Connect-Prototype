@@ -65,6 +65,15 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/projects', [ClubProjectController::class, 'index']);
             Route::get('/clubs/{club}/projects/{project}', [ClubProjectController::class, 'show']);
         });
+
+        Route::middleware('club.permission:projects.manage,club')->group(function (): void {
+            Route::post('/clubs/{club}/projects', [ClubProjectController::class, 'store']);
+            Route::patch('/clubs/{club}/projects/{project}', [ClubProjectController::class, 'update']);
+            Route::post('/clubs/{club}/projects/{project}/plan', [ClubProjectController::class, 'plan']);
+            Route::post('/clubs/{club}/projects/{project}/start', [ClubProjectController::class, 'start']);
+            Route::post('/clubs/{club}/projects/{project}/complete', [ClubProjectController::class, 'complete']);
+            Route::post('/clubs/{club}/projects/{project}/cancel', [ClubProjectController::class, 'cancel']);
+        });
         Route::middleware('club.permission:events.manage,club')->group(function (): void {
             Route::post('/clubs/{club}/events', [ClubEventController::class, 'store']);
             Route::patch('/clubs/{club}/events/{event}', [ClubEventController::class, 'update']);
