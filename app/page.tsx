@@ -9915,6 +9915,15 @@ function ProjectsActivities({ role, setScreen }: { role: Role; setScreen: (scree
     setMessage(text);
   }
 
+  async function safeProjectFetch(url: string, options: RequestInit, failureMessage: string): Promise<Response | null> {
+    try {
+      return await fetch(url, options);
+    } catch {
+      setState("error"); setMessage(failureMessage);
+      return null;
+    }
+  }
+
   async function loadList(accessToken: string, activeClubId: number, page = 1, filters?: { q?: string; type?: string; scope?: string }) {
     setState("loading");
     setRecords([]); setMeta(null);
@@ -9978,7 +9987,8 @@ function ProjectsActivities({ role, setScreen }: { role: Role; setScreen: (scree
   async function openRecord(id: number) {
     if (!token || !clubId) return;
     setState("loading"); setMessage("Loading the selected stable backend record...");
-    const response = await fetch(`${API_BASE_URL}/clubs/${clubId}/projects/${id}`, { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } });
+    const response = await safeProjectFetch(`${API_BASE_URL}/clubs/${clubId}/projects/${id}`, { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } }, "The selected record is unavailable.");
+    if (!response) { setSelected(null); setView("list"); return; }
     if (!response.ok) { setSelected(null); setView("list"); fail(response.status, await apiMessage(response, "The selected record is unavailable.")); return; }
     const payload = await response.json() as { data: ClubProjectRecord };
     setSelected(payload.data); setView("detail"); setState("ready"); setMessage(`Loaded backend record #${payload.data.id}.`);
@@ -10004,11 +10014,12 @@ function ProjectsActivities({ role, setScreen }: { role: Role; setScreen: (scree
     if (!token || !clubId || !canManage || !form.title.trim()) return;
     const editing = view === "edit" && selected;
     setState("submitting"); setMessage(editing ? "Saving the exact backend record..." : "Creating a Draft in the backend...");
-    const response = await fetch(editing ? `${API_BASE_URL}/clubs/${clubId}/projects/${selected.id}` : `${API_BASE_URL}/clubs/${clubId}/projects`, {
+    const response = await safeProjectFetch(editing ? `${API_BASE_URL}/clubs/${clubId}/projects/${selected.id}` : `${API_BASE_URL}/clubs/${clubId}/projects`, {
       method: editing ? "PATCH" : "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(editing ? { ...payload(selected.status === "active"), lock_version: selected.lock_version } : { ...payload(), record_type: form.record_type })
-    });
+    }, "The backend did not save this record.");
+    if (!response) return;
     if (!response.ok) { fail(response.status, await apiMessage(response, "The backend did not save this record.")); return; }
     const body = await response.json() as { data: ClubProjectRecord };
     await loadList(token, clubId, 1);
@@ -10028,9 +10039,10 @@ function ProjectsActivities({ role, setScreen }: { role: Role; setScreen: (scree
     }
     if (action === "cancel") body.cancellation_reason = "Cancelled through the verified Projects and Activities frontend.";
     setState("submitting"); setMessage(`Submitting ${action} to the backend...`);
-    const response = await fetch(`${API_BASE_URL}/clubs/${clubId}/projects/${selected.id}/${action}`, {
+    const response = await safeProjectFetch(`${API_BASE_URL}/clubs/${clubId}/projects/${selected.id}/${action}`, {
       method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body)
-    });
+    }, `The backend did not complete the ${action} transition.`);
+    if (!response) return;
     if (!response.ok) { fail(response.status, await apiMessage(response, `The backend rejected the ${action} transition.`)); return; }
     const result = await response.json() as { data: ClubProjectRecord };
     await loadList(token, clubId, meta?.current_page ?? 1);
