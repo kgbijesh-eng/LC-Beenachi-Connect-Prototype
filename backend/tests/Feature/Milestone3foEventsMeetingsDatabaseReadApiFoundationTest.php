@@ -246,8 +246,17 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
         $cancelled = $this->createClubEvent($club, [
             'status' => 'cancelled',
             'visibility' => 'members',
+            'published_at' => '2026-06-23 00:30:00',
             'cancelled_at' => '2026-06-23 01:00:00',
             'cancellation_reason' => 'Private management reason.',
+        ]);
+        $cancelledDraft = $this->createClubEvent($club, [
+            'title' => 'Cancelled Draft Hidden From Members',
+            'status' => 'cancelled',
+            'visibility' => 'members',
+            'published_at' => null,
+            'cancelled_at' => '2026-06-23 01:00:00',
+            'cancellation_reason' => 'Private draft cancellation reason.',
         ]);
 
         Sanctum::actingAs($member);
@@ -257,6 +266,16 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
             ->assertJsonPath('data.status', 'cancelled');
 
         $this->assertArrayNotHasKey('cancellation_reason', $response->json('data'));
+
+        $this->getJson("/api/v1/clubs/{$club->id}/events/{$cancelledDraft->id}")
+            ->assertNotFound();
+
+        $list = $this->getJson("/api/v1/clubs/{$club->id}/events?per_page=50")
+            ->assertOk()
+            ->json('data');
+
+        $this->assertContains($cancelled->id, array_column($list, 'id'));
+        $this->assertNotContains($cancelledDraft->id, array_column($list, 'id'));
     }
 
     public function test_unauthenticated_inactive_cross_club_and_wrong_club_access_fail_closed(): void

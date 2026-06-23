@@ -33,11 +33,13 @@ class ClubEventReadService
         }
 
         return $event->visibility === ClubEvent::VISIBILITY_MEMBERS
-            && in_array($event->status, [
-                ClubEvent::STATUS_PUBLISHED,
-                ClubEvent::STATUS_COMPLETED,
-                ClubEvent::STATUS_CANCELLED,
-            ], true);
+            && (
+                in_array($event->status, [
+                    ClubEvent::STATUS_PUBLISHED,
+                    ClubEvent::STATUS_COMPLETED,
+                ], true)
+                || ($event->status === ClubEvent::STATUS_CANCELLED && $event->published_at !== null)
+            );
     }
 
     private function applyVisibilityRules(Builder $query, bool $isManagement): void
@@ -48,11 +50,18 @@ class ClubEventReadService
 
         $query
             ->where('visibility', ClubEvent::VISIBILITY_MEMBERS)
-            ->whereIn('status', [
-                ClubEvent::STATUS_PUBLISHED,
-                ClubEvent::STATUS_COMPLETED,
-                ClubEvent::STATUS_CANCELLED,
-            ]);
+            ->where(function (Builder $query): void {
+                $query
+                    ->whereIn('status', [
+                        ClubEvent::STATUS_PUBLISHED,
+                        ClubEvent::STATUS_COMPLETED,
+                    ])
+                    ->orWhere(function (Builder $query): void {
+                        $query
+                            ->where('status', ClubEvent::STATUS_CANCELLED)
+                            ->whereNotNull('published_at');
+                    });
+            });
     }
 
     private function applyFilters(Builder $query, array $filters, bool $isManagement): void
