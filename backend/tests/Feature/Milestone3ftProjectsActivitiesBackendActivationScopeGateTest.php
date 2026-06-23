@@ -165,8 +165,23 @@ class Milestone3ftProjectsActivitiesBackendActivationScopeGateTest extends TestC
         );
     }
 
-    public function test_3ft_does_not_add_runtime_projects_files_or_delete_route(): void
+    public function test_3ft_does_not_authorize_runtime_projects_files_or_delete_route(): void
     {
+        $commit = $this->findUniqueCommitBySubject(self::COMMIT_SUBJECT);
+
+        if ($commit !== null) {
+            $files = $this->changedFilesInCommit($commit);
+
+            foreach ($files as $file) {
+                $this->assertFalse(str_starts_with($file, 'backend/app/'));
+                $this->assertFalse(str_starts_with($file, 'backend/database/migrations/'));
+                $this->assertNotSame('backend/routes/api.php', $file);
+                $this->assertNotSame('app/page.tsx', $file);
+            }
+
+            return;
+        }
+
         foreach ([
             app_path('Models/ClubProject.php'),
             app_path('Services/Projects/ClubProjectReadService.php'),

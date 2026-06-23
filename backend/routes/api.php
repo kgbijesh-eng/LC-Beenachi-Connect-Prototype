@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\Finance\PaymentHistoryController;
 use App\Http\Controllers\Api\V1\Finance\PaymentReceiptPdfController;
 use App\Http\Controllers\Api\V1\Finance\ReceiptController;
 use App\Http\Controllers\Api\V1\Member\MemberController;
+use App\Http\Controllers\Api\V1\Projects\ClubProjectController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportPreviewController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportCommitController;
 use App\Http\Controllers\Api\V1\Members\MemberProfileDocumentController;
@@ -59,6 +60,11 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/events/{event}', [ClubEventController::class, 'show']);
         });
 
+
+        Route::middleware('club.permission:projects.view,club')->group(function (): void {
+            Route::get('/clubs/{club}/projects', [ClubProjectController::class, 'index']);
+            Route::get('/clubs/{club}/projects/{project}', [ClubProjectController::class, 'show']);
+        });
         Route::middleware('club.permission:events.manage,club')->group(function (): void {
             Route::post('/clubs/{club}/events', [ClubEventController::class, 'store']);
             Route::patch('/clubs/{club}/events/{event}', [ClubEventController::class, 'update']);

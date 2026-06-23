@@ -186,8 +186,23 @@ class Milestone3fuProjectsActivitiesAuthorizationContractApprovalTest extends Te
         $this->assertSameSorted(self::AUTHORIZED_FILES, $this->currentChangedFiles(), 'Before the 3FU commit exists, the working tree must contain only the two authorized 3FU files.');
     }
 
-    public function test_3fu_does_not_add_runtime_projects_files_or_routes(): void
+    public function test_3fu_does_not_authorize_runtime_projects_files_or_routes(): void
     {
+        $commit = $this->findUniqueCommitBySubject(self::COMMIT_SUBJECT);
+
+        if ($commit !== null) {
+            $files = $this->changedFilesInCommit($commit);
+
+            foreach ($files as $file) {
+                $this->assertFalse(str_starts_with($file, 'backend/app/'));
+                $this->assertFalse(str_starts_with($file, 'backend/database/migrations/'));
+                $this->assertNotSame('backend/routes/api.php', $file);
+                $this->assertNotSame('app/page.tsx', $file);
+            }
+
+            return;
+        }
+
         foreach ([
             app_path('Models/ClubProject.php'),
             app_path('Services/Projects/ClubProjectReadService.php'),
