@@ -6,7 +6,10 @@ use Tests\TestCase;
 
 class Milestone3fmEventsMeetingsBackendActivationScopeGateTest extends TestCase
 {
+    private const VERIFIED_3FM_COMMIT = 'd3fb29775c83f8c16b99fd53808a5d0e27278eb4';
+
     private string $docPath = __DIR__ . '/../../docs/milestone_3fm_events_meetings_backend_activation_scope_gate.md';
+    private string $repoPath = __DIR__ . '/../../..';
 
     public function test_3fm_document_exists_and_is_scope_gate_only(): void
     {
@@ -183,7 +186,7 @@ class Milestone3fmEventsMeetingsBackendActivationScopeGateTest extends TestCase
         }
     }
 
-    public function test_3fm_contract_still_blocks_mutation_and_frontend_activation_until_later_milestones(): void
+    public function test_historical_3fm_contract_blocked_mutation_and_frontend_activation(): void
     {
         foreach ([
             app_path('Http/Requests/Events/PublishClubEventRequest.php'),
@@ -201,7 +204,8 @@ class Milestone3fmEventsMeetingsBackendActivationScopeGateTest extends TestCase
             $this->assertStringNotContainsString($blockedRoute, $routes);
         }
 
-        $frontend = file_get_contents(base_path('../app/page.tsx'));
+        $frontend = $this->gitOutput(['show', self::VERIFIED_3FM_COMMIT.':app/page.tsx']);
+        $frontend = $this->normalizeLineEndings($frontend);
         $this->assertStringContainsString('The Events & Meetings workflow is not connected to a verified operational source yet.', $frontend);
         $this->assertStringContainsString('Real events and meeting records will appear here only after a verified source is connected.', $frontend);
     }
@@ -211,5 +215,26 @@ class Milestone3fmEventsMeetingsBackendActivationScopeGateTest extends TestCase
         $this->assertFileExists($this->docPath);
 
         return file_get_contents($this->docPath);
+    }
+    private function gitOutput(array $arguments): string
+    {
+        $repoRoot = realpath($this->repoPath) ?: $this->repoPath;
+        $command = array_merge(['git', '-C', $repoRoot], $arguments);
+        $escapedCommand = implode(' ', array_map('escapeshellarg', $command));
+
+        exec($escapedCommand . ' 2>&1', $output, $exitCode);
+
+        $this->assertSame(0, $exitCode, sprintf(
+            'Expected local Git command to succeed: %s. Output: %s',
+            $escapedCommand,
+            implode("\n", $output)
+        ));
+
+        return implode("\n", $output);
+    }
+
+    private function normalizeLineEndings(string $value): string
+    {
+        return str_replace(["\r\n", "\r"], "\n", $value);
     }
 }

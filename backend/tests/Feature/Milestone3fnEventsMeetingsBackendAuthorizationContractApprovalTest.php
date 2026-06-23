@@ -6,7 +6,10 @@ use Tests\TestCase;
 
 class Milestone3fnEventsMeetingsBackendAuthorizationContractApprovalTest extends TestCase
 {
+    private const VERIFIED_3FN_COMMIT = '02206652d88317b94c025b29d5ed0a205f107ff8';
+
     private string $docPath = __DIR__ . '/../../docs/milestone_3fn_events_meetings_backend_authorization_contract_approval.md';
+    private string $repoPath = __DIR__ . '/../../..';
 
     public function test_3fn_document_exists_and_is_docs_tests_only_contract_approval(): void
     {
@@ -247,7 +250,7 @@ class Milestone3fnEventsMeetingsBackendAuthorizationContractApprovalTest extends
         }
     }
 
-    public function test_3fn_contract_still_blocks_mutation_and_frontend_activation_until_later_milestones(): void
+    public function test_historical_3fn_contract_blocked_mutation_and_frontend_activation(): void
     {
         foreach ([
             app_path('Http/Requests/Events/PublishClubEventRequest.php'),
@@ -265,7 +268,8 @@ class Milestone3fnEventsMeetingsBackendAuthorizationContractApprovalTest extends
             $this->assertStringNotContainsString($blockedRoute, $routes);
         }
 
-        $frontend = file_get_contents(base_path('../app/page.tsx'));
+        $frontend = $this->gitOutput(['show', self::VERIFIED_3FN_COMMIT.':app/page.tsx']);
+        $frontend = $this->normalizeLineEndings($frontend);
         $this->assertStringContainsString('The Events & Meetings workflow is not connected to a verified operational source yet.', $frontend);
         $this->assertStringContainsString('Real events and meeting records will appear here only after a verified source is connected.', $frontend);
     }
@@ -275,5 +279,26 @@ class Milestone3fnEventsMeetingsBackendAuthorizationContractApprovalTest extends
         $this->assertFileExists($this->docPath);
 
         return file_get_contents($this->docPath);
+    }
+    private function gitOutput(array $arguments): string
+    {
+        $repoRoot = realpath($this->repoPath) ?: $this->repoPath;
+        $command = array_merge(['git', '-C', $repoRoot], $arguments);
+        $escapedCommand = implode(' ', array_map('escapeshellarg', $command));
+
+        exec($escapedCommand . ' 2>&1', $output, $exitCode);
+
+        $this->assertSame(0, $exitCode, sprintf(
+            'Expected local Git command to succeed: %s. Output: %s',
+            $escapedCommand,
+            implode("\n", $output)
+        ));
+
+        return implode("\n", $output);
+    }
+
+    private function normalizeLineEndings(string $value): string
+    {
+        return str_replace(["\r\n", "\r"], "\n", $value);
     }
 }

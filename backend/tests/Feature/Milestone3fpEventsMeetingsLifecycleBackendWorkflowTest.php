@@ -19,8 +19,11 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const VERIFIED_3FP_COMMIT = '9e27a7ab75d10cf2a9affab3b4d85fd576c43617';
+
     private string $docPath = __DIR__ . '/../../docs/milestone_3fp_events_meetings_lifecycle_backend_workflow.md';
-    private string $frontendPath = __DIR__ . '/../../../app/page.tsx';
+    private string $repoPath = __DIR__ . '/../../..';
+
 
     protected function tearDown(): void
     {
@@ -271,9 +274,10 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
         $this->assertNotContains('DELETE api/v1/clubs/{club}/events/{event}', $routes);
     }
 
-    public function test_frontend_remains_not_connected_in_3fp(): void
+    public function test_historical_3fp_frontend_remained_not_connected(): void
     {
-        $frontend = file_get_contents($this->frontendPath);
+        $frontend = $this->gitOutput(['show', self::VERIFIED_3FP_COMMIT.':app/page.tsx']);
+        $frontend = $this->normalizeLineEndings($frontend);
 
         $this->assertStringContainsString('The Events & Meetings workflow is not connected to a verified operational source yet.', $frontend);
         $this->assertStringContainsString('Real events and meeting records will appear here only after a verified source is connected.', $frontend);
@@ -284,6 +288,30 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
         $this->assertFileExists($this->docPath);
 
         return file_get_contents($this->docPath);
+    }
+
+    private function gitOutput(array $arguments): string
+    {
+        $repoRoot = realpath($this->repoPath) ?: $this->repoPath;
+        $command = array_merge(['git', '-C', $repoRoot], $arguments);
+        $escapedCommand = implode(' ', array_map('escapeshellarg', $command));
+
+        $output = [];
+        $exitCode = 0;
+        exec($escapedCommand.' 2>&1', $output, $exitCode);
+
+        $this->assertSame(
+            0,
+            $exitCode,
+            'Expected local Git command to succeed: '.implode(' ', $command)."\n".implode("\n", $output)
+        );
+
+        return implode("\n", $output);
+    }
+
+    private function normalizeLineEndings(string $value): string
+    {
+        return str_replace(["\r\n", "\r"], "\n", $value);
     }
 
     private function validPayload(array $overrides = []): array

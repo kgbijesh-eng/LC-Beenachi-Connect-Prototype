@@ -18,8 +18,14 @@ class Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest extends 
 {
     use RefreshDatabase;
 
+    private const VERIFIED_3FPA_COMMIT = '3d8c9adb164815382171d5628548ea64023463ba';
+
+    private const AUTHORIZED_3FPA_FILES = [
+        'backend/docs/milestone_3fpa_events_meetings_isolated_browser_permission_alignment.md',
+        'backend/tests/Feature/Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest.php',
+    ];
+
     private string $docPath = __DIR__ . '/../../docs/milestone_3fpa_events_meetings_isolated_browser_permission_alignment.md';
-    private string $frontendPath = __DIR__ . '/../../../app/page.tsx';
     private string $backendPath = __DIR__ . '/../..';
     private string $repoPath = __DIR__ . '/../../..';
 
@@ -41,8 +47,30 @@ class Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest extends 
             $this->assertStringContainsString($expected, $document);
         }
 
-        $this->assertFileExists($this->frontendPath);
-        $this->assertStringContainsString('The Events & Meetings workflow is not connected to a verified operational source yet.', file_get_contents($this->frontendPath));
+        $historicalFrontend = $this->gitOutput(['show', self::VERIFIED_3FPA_COMMIT.':app/page.tsx']);
+        $this->assertStringContainsString(
+            'The Events & Meetings workflow is not connected to a verified operational source yet.',
+            $this->normalizeLineEndings($historicalFrontend),
+            'The verified 3FPA commit must preserve the historical pre-frontend Events state.'
+        );
+
+        $changedFiles = collect(explode("\n", $this->normalizeLineEndings($this->gitOutput([
+            'diff-tree',
+            '--no-commit-id',
+            '--name-only',
+            '-r',
+            self::VERIFIED_3FPA_COMMIT,
+        ]))))
+            ->filter()
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame(
+            collect(self::AUTHORIZED_3FPA_FILES)->sort()->values()->all(),
+            $changedFiles,
+            'The verified 3FPA commit must contain only the authorized governance doc and test files.'
+        );
     }
 
     public function test_isolated_synthetic_roster_preserves_event_permissions_for_browser_api_alignment(): void
@@ -174,6 +202,30 @@ class Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest extends 
         $this->assertFileExists($this->docPath);
 
         return file_get_contents($this->docPath);
+    }
+
+    private function gitOutput(array $arguments): string
+    {
+        $repoRoot = realpath($this->repoPath) ?: $this->repoPath;
+        $command = array_merge(['git', '-C', $repoRoot], $arguments);
+        $escapedCommand = implode(' ', array_map('escapeshellarg', $command));
+
+        $output = [];
+        $exitCode = 0;
+        exec($escapedCommand.' 2>&1', $output, $exitCode);
+
+        $this->assertSame(
+            0,
+            $exitCode,
+            'Expected local Git command to succeed: '.implode(' ', $command)."\n".implode("\n", $output)
+        );
+
+        return implode("\n", $output);
+    }
+
+    private function normalizeLineEndings(string $value): string
+    {
+        return str_replace(["\r\n", "\r"], "\n", $value);
     }
 
     private function validPayload(array $overrides = []): array

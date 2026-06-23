@@ -19,8 +19,11 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const VERIFIED_3FO_COMMIT = '360c6f6a60f91bf406ce71101d17e23228ad3176';
+
     private string $docPath = __DIR__ . '/../../docs/milestone_3fo_events_meetings_database_read_api_foundation.md';
-    private string $frontendPath = __DIR__ . '/../../../app/page.tsx';
+    private string $repoPath = __DIR__ . '/../../..';
+
 
     protected function tearDown(): void
     {
@@ -378,9 +381,10 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
         $this->deleteJson("/api/v1/clubs/{$club->id}/events/{$event->id}")->assertMethodNotAllowed();
     }
 
-    public function test_frontend_remains_fail_closed_and_not_connected_in_3fo(): void
+    public function test_historical_3fo_frontend_remained_fail_closed_and_not_connected(): void
     {
-        $frontend = file_get_contents($this->frontendPath);
+        $frontend = $this->gitOutput(['show', self::VERIFIED_3FO_COMMIT.':app/page.tsx']);
+        $frontend = $this->normalizeLineEndings($frontend);
 
         $this->assertStringContainsString('The Events & Meetings workflow is not connected to a verified operational source yet.', $frontend);
         $this->assertStringContainsString('Real events and meeting records will appear here only after a verified source is connected.', $frontend);
@@ -391,6 +395,30 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
         $this->assertFileExists($this->docPath);
 
         return file_get_contents($this->docPath);
+    }
+
+    private function gitOutput(array $arguments): string
+    {
+        $repoRoot = realpath($this->repoPath) ?: $this->repoPath;
+        $command = array_merge(['git', '-C', $repoRoot], $arguments);
+        $escapedCommand = implode(' ', array_map('escapeshellarg', $command));
+
+        $output = [];
+        $exitCode = 0;
+        exec($escapedCommand.' 2>&1', $output, $exitCode);
+
+        $this->assertSame(
+            0,
+            $exitCode,
+            'Expected local Git command to succeed: '.implode(' ', $command)."\n".implode("\n", $output)
+        );
+
+        return implode("\n", $output);
+    }
+
+    private function normalizeLineEndings(string $value): string
+    {
+        return str_replace(["\r\n", "\r"], "\n", $value);
     }
 
     private function createClub(string $code = 'EVT-CLUB', string $timezone = 'Asia/Kolkata'): Club
