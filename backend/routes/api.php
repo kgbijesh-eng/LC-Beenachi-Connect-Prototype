@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Club\ClubController;
+use App\Http\Controllers\Api\V1\Events\ClubEventController;
 use App\Http\Controllers\Api\V1\Finance\ClubFinanceReportController;
 use App\Http\Controllers\Api\V1\Finance\MemberFinanceSummaryController;
 use App\Http\Controllers\Api\V1\Finance\MemberLedgerBalanceController;
@@ -51,6 +52,11 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/members/{member}/payments/{payment}/receipt', [ReceiptController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf', [PaymentReceiptPdfController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}', [MemberController::class, 'show']);
+        });
+
+        Route::middleware('club.permission:events.view,club')->group(function (): void {
+            Route::get('/clubs/{club}/events', [ClubEventController::class, 'index']);
+            Route::get('/clubs/{club}/events/{event}', [ClubEventController::class, 'show']);
         });
 
         Route::middleware('club.permission:members.manage,club')->group(function (): void {

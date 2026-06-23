@@ -183,21 +183,31 @@ class Milestone3fmEventsMeetingsBackendActivationScopeGateTest extends TestCase
         }
     }
 
-    public function test_3fm_does_not_add_events_runtime_implementation(): void
+    public function test_3fm_contract_still_blocks_mutation_and_frontend_activation_until_later_milestones(): void
     {
         foreach ([
-            app_path('Models/ClubEvent.php'),
-            app_path('Http/Controllers/Api/V1/Events/ClubEventController.php'),
-            app_path('Services/Events/ClubEventService.php'),
+            app_path('Http/Requests/Events/StoreClubEventRequest.php'),
+            app_path('Http/Requests/Events/UpdateClubEventRequest.php'),
+            app_path('Http/Requests/Events/PublishClubEventRequest.php'),
+            app_path('Http/Requests/Events/CancelClubEventRequest.php'),
+            app_path('Http/Requests/Events/CompleteClubEventRequest.php'),
+            app_path('Services/Events/ClubEventWriteService.php'),
             app_path('Policies/ClubEventPolicy.php'),
         ] as $blockedPath) {
             $this->assertFileDoesNotExist($blockedPath);
         }
 
-        $this->assertEmpty(glob(database_path('migrations/*event*')) ?: []);
-
         $routes = file_get_contents(base_path('routes/api.php'));
-        $this->assertStringNotContainsString('/events', $routes);
+        foreach ([
+            "Route::post('/clubs/{club}/events'",
+            "Route::patch('/clubs/{club}/events/{event}'",
+            "Route::post('/clubs/{club}/events/{event}/publish'",
+            "Route::post('/clubs/{club}/events/{event}/cancel'",
+            "Route::post('/clubs/{club}/events/{event}/complete'",
+            "Route::delete('/clubs/{club}/events/{event}'",
+        ] as $blockedRoute) {
+            $this->assertStringNotContainsString($blockedRoute, $routes);
+        }
 
         $frontend = file_get_contents(base_path('../app/page.tsx'));
         $this->assertStringContainsString('The Events & Meetings workflow is not connected to a verified operational source yet.', $frontend);

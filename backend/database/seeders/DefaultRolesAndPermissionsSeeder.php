@@ -83,6 +83,18 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                 'group' => 'audit_logs',
                 'description' => 'View audit log records.',
             ],
+            [
+                'name' => 'View Events and Meetings',
+                'slug' => 'events.view',
+                'group' => 'events',
+                'description' => 'View authorized Events and Meetings records.',
+            ],
+            [
+                'name' => 'Manage Events and Meetings',
+                'slug' => 'events.manage',
+                'group' => 'events',
+                'description' => 'Create, update and transition Events and Meetings records.',
+            ],
         ];
 
         foreach ($permissions as $permission) {
@@ -109,6 +121,8 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'roles.manage',
                     'permissions.view',
                     'audit_logs.view',
+                    'events.view',
+                    'events.manage',
                 ],
             ],
             'secretary' => [
@@ -121,6 +135,8 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'members.view',
                     'members.manage',
                     'audit_logs.view',
+                    'events.view',
+                    'events.manage',
                 ],
             ],
             'treasurer' => [
@@ -132,6 +148,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'memberships.view',
                     'members.view',
                     'audit_logs.view',
+                    'events.view',
                 ],
             ],
             'member' => [
@@ -140,6 +157,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                 'permissions' => [
                     'club.view',
                     'members.view',
+                    'events.view',
                 ],
             ],
         ];

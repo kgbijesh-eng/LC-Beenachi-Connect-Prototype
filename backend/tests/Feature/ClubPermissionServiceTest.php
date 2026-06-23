@@ -31,12 +31,16 @@ class ClubPermissionServiceTest extends TestCase
         $this->assertTrue($service->userHasPermission($user, 'members.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'members.manage', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'audit_logs.view', $club->id));
+        $this->assertTrue($service->userHasPermission($user, 'events.view', $club->id));
+        $this->assertTrue($service->userHasPermission($user, 'events.manage', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'payments.record', $club->id));
 
         $this->assertSame([
             'audit_logs.view',
             'club.manage',
             'club.view',
+            'events.manage',
+            'events.view',
             'members.manage',
             'members.view',
             'memberships.manage',
@@ -75,13 +79,16 @@ class ClubPermissionServiceTest extends TestCase
         $this->assertTrue($service->userCanAccessClub($user, $club->id));
         $this->assertTrue($service->userHasPermission($user, 'club.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'members.view', $club->id));
+        $this->assertTrue($service->userHasPermission($user, 'events.view', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'club.manage', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'members.manage', $club->id));
+        $this->assertFalse($service->userHasPermission($user, 'events.manage', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'users.manage', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'audit_logs.view', $club->id));
 
         $this->assertSame([
             'club.view',
+            'events.view',
             'members.view',
         ], $service->userPermissionSlugs($user, $club->id));
     }
@@ -122,6 +129,8 @@ class ClubPermissionServiceTest extends TestCase
         $service = new ClubPermissionService();
 
         $this->assertTrue($service->userHasPermission($user, 'club.manage'));
+        $this->assertTrue($service->userHasPermission($user, 'events.manage'));
         $this->assertContains('club.manage', $service->userPermissionSlugs($user));
+        $this->assertContains('events.manage', $service->userPermissionSlugs($user));
     }
 }
