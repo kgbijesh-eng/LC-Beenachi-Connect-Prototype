@@ -250,12 +250,9 @@ class Milestone3fnEventsMeetingsBackendAuthorizationContractApprovalTest extends
     public function test_3fn_contract_still_blocks_mutation_and_frontend_activation_until_later_milestones(): void
     {
         foreach ([
-            app_path('Http/Requests/Events/StoreClubEventRequest.php'),
-            app_path('Http/Requests/Events/UpdateClubEventRequest.php'),
             app_path('Http/Requests/Events/PublishClubEventRequest.php'),
             app_path('Http/Requests/Events/CancelClubEventRequest.php'),
             app_path('Http/Requests/Events/CompleteClubEventRequest.php'),
-            app_path('Services/Events/ClubEventWriteService.php'),
             app_path('Policies/ClubEventPolicy.php'),
         ] as $blockedPath) {
             $this->assertFileDoesNotExist($blockedPath);
@@ -263,11 +260,6 @@ class Milestone3fnEventsMeetingsBackendAuthorizationContractApprovalTest extends
 
         $routes = file_get_contents(base_path('routes/api.php'));
         foreach ([
-            "Route::post('/clubs/{club}/events'",
-            "Route::patch('/clubs/{club}/events/{event}'",
-            "Route::post('/clubs/{club}/events/{event}/publish'",
-            "Route::post('/clubs/{club}/events/{event}/cancel'",
-            "Route::post('/clubs/{club}/events/{event}/complete'",
             "Route::delete('/clubs/{club}/events/{event}'",
         ] as $blockedRoute) {
             $this->assertStringNotContainsString($blockedRoute, $routes);

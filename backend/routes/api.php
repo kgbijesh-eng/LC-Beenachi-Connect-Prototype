@@ -59,6 +59,14 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/events/{event}', [ClubEventController::class, 'show']);
         });
 
+        Route::middleware('club.permission:events.manage,club')->group(function (): void {
+            Route::post('/clubs/{club}/events', [ClubEventController::class, 'store']);
+            Route::patch('/clubs/{club}/events/{event}', [ClubEventController::class, 'update']);
+            Route::post('/clubs/{club}/events/{event}/publish', [ClubEventController::class, 'publish']);
+            Route::post('/clubs/{club}/events/{event}/cancel', [ClubEventController::class, 'cancel']);
+            Route::post('/clubs/{club}/events/{event}/complete', [ClubEventController::class, 'complete']);
+        });
+
         Route::middleware('club.permission:members.manage,club')->group(function (): void {
             Route::post('/clubs/{club}/members', [MemberController::class, 'store']);
             Route::patch('/clubs/{club}/members/{member}', [MemberController::class, 'update']);

@@ -4,11 +4,15 @@ namespace App\Http\Controllers\Api\V1\Events;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Events\ListClubEventsRequest;
+use App\Http\Requests\Events\StoreClubEventRequest;
+use App\Http\Requests\Events\TransitionClubEventRequest;
+use App\Http\Requests\Events\UpdateClubEventRequest;
 use App\Http\Resources\Events\ClubEventResource;
 use App\Models\Club;
 use App\Models\ClubEvent;
 use App\Models\User;
 use App\Services\Events\ClubEventReadService;
+use App\Services\Events\ClubEventWriteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -66,6 +70,107 @@ class ClubEventController extends Controller
         }
 
         $request->attributes->set('events_management_reader', $isManagement);
+
+        return response()->json([
+            'data' => (new ClubEventResource($event))->resolve($request),
+        ]);
+    }
+
+    public function store(StoreClubEventRequest $request, Club $club, ClubEventWriteService $events): JsonResponse
+    {
+        if (! $this->userCanManageEvents($request->user(), $club)) {
+            return response()->json([
+                'message' => 'This action is unauthorized.',
+            ], 403);
+        }
+
+        $request->attributes->set('events_management_reader', true);
+        $event = $events->create($club, $request->user(), $request->validated());
+
+        return response()->json([
+            'data' => (new ClubEventResource($event))->resolve($request),
+        ], 201);
+    }
+
+    public function update(
+        UpdateClubEventRequest $request,
+        Club $club,
+        ClubEvent $event,
+        ClubEventWriteService $events
+    ): JsonResponse {
+        if (! $this->userCanManageEvents($request->user(), $club)) {
+            return response()->json([
+                'message' => 'This action is unauthorized.',
+            ], 403);
+        }
+
+        $request->attributes->set('events_management_reader', true);
+        $event = $events->update($club, $event, $request->user(), $request->validated());
+
+        return response()->json([
+            'data' => (new ClubEventResource($event))->resolve($request),
+        ]);
+    }
+
+    public function publish(
+        TransitionClubEventRequest $request,
+        Club $club,
+        ClubEvent $event,
+        ClubEventWriteService $events
+    ): JsonResponse {
+        return $this->transition($request, $club, $event, $events, 'publish');
+    }
+
+    public function cancel(
+        TransitionClubEventRequest $request,
+        Club $club,
+        ClubEvent $event,
+        ClubEventWriteService $events
+    ): JsonResponse {
+        return $this->transition($request, $club, $event, $events, 'cancel');
+    }
+
+    public function complete(
+        TransitionClubEventRequest $request,
+        Club $club,
+        ClubEvent $event,
+        ClubEventWriteService $events
+    ): JsonResponse {
+        return $this->transition($request, $club, $event, $events, 'complete');
+    }
+
+    private function transition(
+        TransitionClubEventRequest $request,
+        Club $club,
+        ClubEvent $event,
+        ClubEventWriteService $events,
+        string $transition
+    ): JsonResponse {
+        if (! $this->userCanManageEvents($request->user(), $club)) {
+            return response()->json([
+                'message' => 'This action is unauthorized.',
+            ], 403);
+        }
+
+        $request->attributes->set('events_management_reader', true);
+        $validated = $request->validated();
+
+        if ($transition !== 'cancel' && array_key_exists('cancellation_reason', $validated)) {
+            return response()->json([
+                'message' => 'The cancellation reason field is not allowed for this transition.',
+                'errors' => [
+                    'cancellation_reason' => ['The cancellation reason field is not allowed for this transition.'],
+                ],
+            ], 422);
+        }
+
+        $lockVersion = (int) $validated['lock_version'];
+
+        $event = match ($transition) {
+            'publish' => $events->publish($club, $event, $request->user(), $lockVersion),
+            'cancel' => $events->cancel($club, $event, $request->user(), $lockVersion, $validated['cancellation_reason'] ?? null),
+            'complete' => $events->complete($club, $event, $request->user(), $lockVersion),
+        };
 
         return response()->json([
             'data' => (new ClubEventResource($event))->resolve($request),

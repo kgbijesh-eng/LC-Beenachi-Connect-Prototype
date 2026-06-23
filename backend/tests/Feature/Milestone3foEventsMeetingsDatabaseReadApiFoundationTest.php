@@ -350,7 +350,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
             ->assertJsonPath('data.0.title', 'Past Meeting');
     }
 
-    public function test_non_management_filters_are_forbidden_and_mutation_routes_do_not_exist(): void
+    public function test_non_management_filters_are_forbidden_and_delete_route_does_not_exist(): void
     {
         $club = $this->createClub();
         $member = $this->createUserWithRole($club, 'member');
@@ -371,14 +371,10 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
             ->values()
             ->all();
 
-        $this->assertSame([
-            'GET|HEAD api/v1/clubs/{club}/events',
-            'GET|HEAD api/v1/clubs/{club}/events/{event}',
-        ], $routes);
+        foreach ($routes as $route) {
+            $this->assertFalse(str_starts_with($route, 'DELETE '));
+        }
 
-        $this->postJson("/api/v1/clubs/{$club->id}/events", [])->assertMethodNotAllowed();
-        $this->patchJson("/api/v1/clubs/{$club->id}/events/{$event->id}", [])->assertMethodNotAllowed();
-        $this->postJson("/api/v1/clubs/{$club->id}/events/{$event->id}/publish", [])->assertNotFound();
         $this->deleteJson("/api/v1/clubs/{$club->id}/events/{$event->id}")->assertMethodNotAllowed();
     }
 
