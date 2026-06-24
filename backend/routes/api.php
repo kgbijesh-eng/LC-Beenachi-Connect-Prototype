@@ -69,6 +69,7 @@ Route::prefix('v1')->group(function (): void {
         });
         Route::middleware('club.permission:reports.view,club')->group(function (): void {
             Route::get('/clubs/{club}/reports', [ClubReportController::class, 'index']);
+            Route::get('/clubs/{club}/reports/{reportKey}', [ClubReportController::class, 'show']);
         });
 
         Route::middleware('club.permission:reminders.view,club')->group(function (): void {

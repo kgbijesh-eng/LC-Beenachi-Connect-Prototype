@@ -28,6 +28,7 @@ class Milestone3gjReportsCatalogSharedQueryFoundationTest extends TestCase
         }
         Sanctum::actingAs($this->user($club,'member'));
         $this->getJson("/api/v1/clubs/{$club->id}/reports")->assertForbidden();
+        Sanctum::actingAs($this->user($club,'president-admin'));
         $this->getJson("/api/v1/clubs/{$club->id}/reports/unknown")->assertNotFound();
     }
 
