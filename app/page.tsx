@@ -2,6 +2,7 @@
 
 import { createContext, type FormEvent, type ReactNode, useContext, useEffect, useMemo, useState, useRef } from "react";
 import RemindersBackend from "./RemindersBackend";
+import ReportsBackend from "./ReportsBackend";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 type FinanceSummaryStatus = "loading" | "ready" | "error";
@@ -2539,7 +2540,7 @@ export default function Prototype() {
           />
         )}
         {screen === "reports-tools-module" && (
-          <ReportsToolsModule section={reportsSection} setSection={setReportsSection} role={role} setScreen={handleSetScreen} />
+          <ReportsBackend role={role} onReminders={() => handleSetScreen("notifications-reminders")} />
         )}
         {screen === "notifications-reminders" && (
           <RemindersBackend role={role} onBack={() => handleSetScreen("reports-tools-module")} />
