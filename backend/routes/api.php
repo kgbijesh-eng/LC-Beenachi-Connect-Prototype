@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\Member\MemberController;
 use App\Http\Controllers\Api\V1\Projects\ClubProjectController;
 use App\Http\Controllers\Api\V1\Reminders\ClubReminderController;
 use App\Http\Controllers\Api\V1\Reports\ClubReportController;
+use App\Http\Controllers\Api\V1\FinanceCollections\FinanceReadController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportPreviewController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportCommitController;
 use App\Http\Controllers\Api\V1\Members\MemberProfileDocumentController;
@@ -70,6 +71,20 @@ Route::prefix('v1')->group(function (): void {
         Route::middleware('club.permission:reports.view,club')->group(function (): void {
             Route::get('/clubs/{club}/reports', [ClubReportController::class, 'index']);
             Route::get('/clubs/{club}/reports/{reportKey}', [ClubReportController::class, 'show']);
+        });
+Route::middleware('club.permission:finance.club.view,club')->group(function (): void {
+            Route::get('/clubs/{club}/finance/charges', [FinanceReadController::class, 'charges']);
+            Route::get('/clubs/{club}/finance/charges/{charge}', [FinanceReadController::class, 'charge']);
+            Route::get('/clubs/{club}/finance/members/{member}/summary', [FinanceReadController::class, 'summary']);
+            Route::get('/clubs/{club}/finance/members/{member}/charges', [FinanceReadController::class, 'memberCharges']);
+            Route::get('/clubs/{club}/finance/members/{member}/payments', [FinanceReadController::class, 'memberPayments']);
+            Route::get('/clubs/{club}/finance/payments/{payment}', [FinanceReadController::class, 'payment']);
+            Route::get('/clubs/{club}/finance/receipts/{receipt}', [FinanceReadController::class, 'receipt']);
+        });
+        Route::middleware('club.permission:finance.self.view,club')->group(function (): void {
+            Route::get('/clubs/{club}/finance/me/summary', [FinanceReadController::class, 'ownSummary']);
+            Route::get('/clubs/{club}/finance/me/charges', [FinanceReadController::class, 'ownCharges']);
+            Route::get('/clubs/{club}/finance/me/payments', [FinanceReadController::class, 'ownPayments']);
         });
 
         Route::middleware('club.permission:reminders.view,club')->group(function (): void {

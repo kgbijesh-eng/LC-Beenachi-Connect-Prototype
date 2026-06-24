@@ -41,6 +41,10 @@ class ClubPermissionServiceTest extends TestCase
             'club.view',
             'events.manage',
             'events.view',
+            'finance.club.view',
+            'finance.manage',
+            'finance.self.view',
+            'finance.void',
             'members.manage',
             'members.view',
             'memberships.manage',
@@ -98,6 +102,7 @@ class ClubPermissionServiceTest extends TestCase
         $this->assertSame([
             'club.view',
             'events.view',
+            'finance.self.view',
             'members.view',
             'projects.view',
             'reminders.view',

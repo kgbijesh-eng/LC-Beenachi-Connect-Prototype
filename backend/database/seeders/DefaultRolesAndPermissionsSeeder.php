@@ -123,6 +123,10 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                 'group' => 'reports',
                 'description' => 'View authorized club reports.',
             ],
+            ['name'=>'View Own Finance','slug'=>'finance.self.view','group'=>'finance','description'=>'View own obligations, payments, receipts and balance.'],
+            ['name'=>'View Club Finance','slug'=>'finance.club.view','group'=>'finance','description'=>'View club member collection records.'],
+            ['name'=>'Manage Club Finance','slug'=>'finance.manage','group'=>'finance','description'=>'Create charges and record allocated member payments.'],
+            ['name'=>'Void Club Payments','slug'=>'finance.void','group'=>'finance','description'=>'Void incorrect member payments.'],
         ];
 
         foreach ($permissions as $permission) {
@@ -156,6 +160,10 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'reminders.view',
                     'reminders.manage',
                     'reports.view',
+                    'finance.self.view',
+                    'finance.club.view',
+                    'finance.manage',
+                    'finance.void',
                 ],
             ],
             'secretary' => [
@@ -175,6 +183,9 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'reminders.view',
                     'reminders.manage',
                     'reports.view',
+                    'finance.self.view',
+                    'finance.club.view',
+                    'finance.manage',
                 ],
             ],
             'treasurer' => [
@@ -190,6 +201,10 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'projects.view',
                     'reminders.view',
                     'reports.view',
+                    'finance.self.view',
+                    'finance.club.view',
+                    'finance.manage',
+                    'finance.void',
                 ],
             ],
             'member' => [
@@ -201,6 +216,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'events.view',
                     'projects.view',
                     'reminders.view',
+                    'finance.self.view',
                 ],
             ],
         ];
