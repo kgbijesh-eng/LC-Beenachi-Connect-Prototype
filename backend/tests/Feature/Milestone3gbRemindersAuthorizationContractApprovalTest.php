@@ -51,7 +51,7 @@ class Milestone3gbRemindersAuthorizationContractApprovalTest extends TestCase
         if ($commit !== null) {
             $this->assertSameSorted(self::FILES, $this->gitLines(['diff-tree', '--no-commit-id', '--name-only', '-r', $commit]));
             $historical = $this->git(['show', $commit.':backend/docs/milestone_3gb_reminders_authorization_contract_approval.md']);
-            $this->assertStringContainsString('No runtime', $historical);
+            $this->assertStringContainsString('runtime implementation is authorized', $historical);
             $this->assertStringContainsString('GO - 3GC may open', $historical);
             return;
         }
