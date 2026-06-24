@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, type FormEvent, type ReactNode, useContext, useEffect, useMemo, useState, useRef } from "react";
+import RemindersBackend from "./RemindersBackend";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 type FinanceSummaryStatus = "loading" | "ready" | "error";
@@ -1264,6 +1265,7 @@ const navByRole: Record<Role, NavGroup[]> = {
       { label: "My Fellowship", screen: "my-fellowship" },
       { label: "Events & Meetings", screen: "events-meetings" },
       { label: "Projects / Activities", screen: "projects" },
+      { label: "Reminders", screen: "notifications-reminders" },
       { label: "Announcements", screen: "announcements" },
       { label: "My Documents", screen: "my-documents" },
       { label: "Celebrations", screen: "celebrations" },
@@ -2540,7 +2542,7 @@ export default function Prototype() {
           <ReportsToolsModule section={reportsSection} setSection={setReportsSection} role={role} setScreen={handleSetScreen} />
         )}
         {screen === "notifications-reminders" && (
-          <NotificationsReminders role={role} setScreen={handleSetScreen} />
+          <RemindersBackend role={role} onBack={() => handleSetScreen("reports-tools-module")} />
         )}
         {screen === "report-detail" && (
           reportDetail === "Profile Update Pending Report" && role !== "president" && role !== "secretary"
