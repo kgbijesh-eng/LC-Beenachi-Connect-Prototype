@@ -23,6 +23,13 @@ export default function ReportsBackend({role,onReminders}:{role:Role;onReminders
   const [filters,setFilters]=useState({q:"",status:"",date_from:"",date_to:""});
 
   function clearOutput(){setReport(null);setMeta(null);}
+  function hasReportValue(value:unknown):boolean {
+    if(typeof value==="number")return value!==0;
+    if(typeof value==="string")return value!==""&&value!=="0";
+    if(Array.isArray(value))return value.some(hasReportValue);
+    if(value&&typeof value==="object")return Object.values(value).some(hasReportValue);
+    return Boolean(value);
+  }
   async function errorText(r:Response,fallback:string){try{const b=await r.json();return Object.values(b.errors??{}).flat()[0] as string||b.message||fallback}catch{return fallback}}
   async function loadCatalog(access:string,club:number){
     clearOutput();setCatalog([]);setState("loading");setMessage("Loading authorized report catalog...");
@@ -43,7 +50,7 @@ export default function ReportsBackend({role,onReminders}:{role:Role;onReminders
     for(const [k,v] of Object.entries(chosen))if(v&&def.allowed_filters.includes(k))q.set(k,v);
     try{const r=await fetch(`${API}/clubs/${clubId}/reports/${def.key}?${q}`,{headers:{Accept:"application/json",Authorization:`Bearer ${token}`}});
       if(!r.ok){setState(r.status===403?"forbidden":"error");setMessage(await errorText(r,"Report unavailable."));return}
-      const b=await r.json();setReport(b.data);setMeta(b.meta);const empty=Object.keys(b.data?.summary??{}).length===0&&(b.data?.rows??[]).length===0;setState(empty?"empty":"ready");setMessage(empty?"This verified report is empty.":"Backend report loaded.");
+      const b=await r.json();setReport(b.data);setMeta(b.meta);const empty=(b.data?.rows??[]).length===0&&!Object.values(b.data?.summary??{}).some(hasReportValue);setState(empty?"empty":"ready");setMessage(empty?"This verified report is empty.":"Backend report loaded.");
     }catch{setState("error");setMessage("Report unavailable. Previous rows and totals were cleared.");}
   }
   return <section className="stack">
