@@ -47,6 +47,10 @@ class ClubPermissionServiceTest extends TestCase
             'memberships.view',
             'payments.record',
             'permissions.view',
+            'projects.manage',
+            'projects.view',
+            'reminders.manage',
+            'reminders.view',
             'roles.manage',
             'roles.view',
             'users.manage',
@@ -80,9 +84,13 @@ class ClubPermissionServiceTest extends TestCase
         $this->assertTrue($service->userHasPermission($user, 'club.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'members.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'events.view', $club->id));
+        $this->assertTrue($service->userHasPermission($user, 'projects.view', $club->id));
+        $this->assertTrue($service->userHasPermission($user, 'reminders.view', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'club.manage', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'members.manage', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'events.manage', $club->id));
+        $this->assertFalse($service->userHasPermission($user, 'projects.manage', $club->id));
+        $this->assertFalse($service->userHasPermission($user, 'reminders.manage', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'users.manage', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'audit_logs.view', $club->id));
 
@@ -90,6 +98,8 @@ class ClubPermissionServiceTest extends TestCase
             'club.view',
             'events.view',
             'members.view',
+            'projects.view',
+            'reminders.view',
         ], $service->userPermissionSlugs($user, $club->id));
     }
 

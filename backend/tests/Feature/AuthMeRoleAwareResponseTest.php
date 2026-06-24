@@ -56,6 +56,32 @@ class AuthMeRoleAwareResponseTest extends TestCase
                 'slug' => 'payments.record',
             ]);
 
-        $this->assertCount(13, $response->json('club_memberships.0.permissions'));
+        $actualPermissions = collect($response->json('club_memberships.0.permissions'))
+            ->pluck('slug')
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame([
+            'audit_logs.view',
+            'club.manage',
+            'club.view',
+            'events.manage',
+            'events.view',
+            'members.manage',
+            'members.view',
+            'memberships.manage',
+            'memberships.view',
+            'payments.record',
+            'permissions.view',
+            'projects.manage',
+            'projects.view',
+            'reminders.manage',
+            'reminders.view',
+            'roles.manage',
+            'roles.view',
+            'users.manage',
+            'users.view',
+        ], $actualPermissions);
     }
 }
