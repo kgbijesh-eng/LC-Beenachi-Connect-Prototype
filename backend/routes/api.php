@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\Member\MemberController;
 use App\Http\Controllers\Api\V1\Projects\ClubProjectController;
 use App\Http\Controllers\Api\V1\Reminders\ClubReminderController;
 use App\Http\Controllers\Api\V1\Reports\ClubReportController;
+use App\Http\Controllers\Api\V1\ProfileUpdates\ProfileUpdateRequestController;
 use App\Http\Controllers\Api\V1\FinanceCollections\FinanceReadController;
 use App\Http\Controllers\Api\V1\FinanceCollections\FinanceWriteController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportPreviewController;
@@ -97,6 +98,15 @@ Route::middleware('club.permission:finance.manage,club')->group(function (): voi
         });
         Route::middleware('club.permission:finance.void,club')->group(function (): void {
             Route::post('/clubs/{club}/finance/payments/{payment}/void', [FinanceWriteController::class, 'void']);
+        });
+
+        Route::middleware('club.permission:profile_updates.self.view,club')->group(function (): void {
+            Route::get('/clubs/{club}/profile-update-requests/me', [ProfileUpdateRequestController::class, 'ownIndex']);
+            Route::get('/clubs/{club}/profile-update-requests/me/{profileUpdateRequest}', [ProfileUpdateRequestController::class, 'ownShow']);
+        });
+        Route::middleware('club.permission:profile_updates.review,club')->group(function (): void {
+            Route::get('/clubs/{club}/profile-update-requests', [ProfileUpdateRequestController::class, 'index']);
+            Route::get('/clubs/{club}/profile-update-requests/{profileUpdateRequest}', [ProfileUpdateRequestController::class, 'show']);
         });
 
         Route::middleware('club.permission:reminders.view,club')->group(function (): void {

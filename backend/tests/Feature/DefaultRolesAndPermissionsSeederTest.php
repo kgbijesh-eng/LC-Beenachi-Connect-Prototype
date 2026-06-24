@@ -17,8 +17,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 23);
-        $this->assertDatabaseCount('role_permissions', 58);
+        $this->assertDatabaseCount('permissions', 27);
+        $this->assertDatabaseCount('role_permissions', 70);
 
         $president = Role::where('slug', 'president-admin')->firstOrFail();
         $secretary = Role::where('slug', 'secretary')->firstOrFail();
@@ -28,10 +28,10 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertSame('President/Admin', $president->name);
         $this->assertTrue($president->is_system);
 
-        $this->assertSame(23, $president->permissions()->count());
-        $this->assertSame(16, $secretary->permissions()->count());
-        $this->assertSame(13, $treasurer->permissions()->count());
-        $this->assertSame(6, $member->permissions()->count());
+        $this->assertSame(27, $president->permissions()->count());
+        $this->assertSame(20, $secretary->permissions()->count());
+        $this->assertSame(15, $treasurer->permissions()->count());
+        $this->assertSame(8, $member->permissions()->count());
 
         $this->assertTrue($president->permissions->contains('slug', 'club.manage'));
         $this->assertTrue($president->permissions->contains('slug', 'roles.manage'));
@@ -94,6 +94,10 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertNotNull(Permission::where('slug', 'finance.club.view')->first());
         $this->assertNotNull(Permission::where('slug', 'finance.manage')->first());
         $this->assertNotNull(Permission::where('slug', 'finance.void')->first());
+        $this->assertNotNull(Permission::where('slug', 'profile_updates.self.submit')->first());
+        $this->assertNotNull(Permission::where('slug', 'profile_updates.self.view')->first());
+        $this->assertNotNull(Permission::where('slug', 'profile_updates.review')->first());
+        $this->assertNotNull(Permission::where('slug', 'profile_updates.approve')->first());
     }
 
     public function test_default_roles_and_permissions_seeder_is_idempotent(): void
@@ -102,8 +106,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 23);
-        $this->assertDatabaseCount('role_permissions', 58);
+        $this->assertDatabaseCount('permissions', 27);
+        $this->assertDatabaseCount('role_permissions', 70);
     }
 
     public function test_database_seeder_calls_default_roles_and_permissions_seeder(): void

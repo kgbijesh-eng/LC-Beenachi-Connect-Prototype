@@ -127,6 +127,10 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
             ['name'=>'View Club Finance','slug'=>'finance.club.view','group'=>'finance','description'=>'View club member collection records.'],
             ['name'=>'Manage Club Finance','slug'=>'finance.manage','group'=>'finance','description'=>'Create charges and record allocated member payments.'],
             ['name'=>'Void Club Payments','slug'=>'finance.void','group'=>'finance','description'=>'Void incorrect member payments.'],
+            ['name'=>'Submit Own Profile Updates','slug'=>'profile_updates.self.submit','group'=>'profile_updates','description'=>'Submit and withdraw own profile update requests.'],
+            ['name'=>'View Own Profile Updates','slug'=>'profile_updates.self.view','group'=>'profile_updates','description'=>'View own profile update request history.'],
+            ['name'=>'Review Profile Updates','slug'=>'profile_updates.review','group'=>'profile_updates','description'=>'View the same-club profile update review queue.'],
+            ['name'=>'Approve Profile Updates','slug'=>'profile_updates.approve','group'=>'profile_updates','description'=>'Approve or reject same-club profile update requests.'],
         ];
 
         foreach ($permissions as $permission) {
@@ -164,6 +168,10 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'finance.club.view',
                     'finance.manage',
                     'finance.void',
+                    'profile_updates.self.submit',
+                    'profile_updates.self.view',
+                    'profile_updates.review',
+                    'profile_updates.approve',
                 ],
             ],
             'secretary' => [
@@ -186,6 +194,10 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'finance.self.view',
                     'finance.club.view',
                     'finance.manage',
+                    'profile_updates.self.submit',
+                    'profile_updates.self.view',
+                    'profile_updates.review',
+                    'profile_updates.approve',
                 ],
             ],
             'treasurer' => [
@@ -205,6 +217,8 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'finance.club.view',
                     'finance.manage',
                     'finance.void',
+                    'profile_updates.self.submit',
+                    'profile_updates.self.view',
                 ],
             ],
             'member' => [
@@ -217,6 +231,8 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'projects.view',
                     'reminders.view',
                     'finance.self.view',
+                    'profile_updates.self.submit',
+                    'profile_updates.self.view',
                 ],
             ],
         ];
