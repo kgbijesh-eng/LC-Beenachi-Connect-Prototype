@@ -100,9 +100,17 @@ Route::middleware('club.permission:finance.manage,club')->group(function (): voi
             Route::post('/clubs/{club}/finance/payments/{payment}/void', [FinanceWriteController::class, 'void']);
         });
 
+        Route::middleware('club.permission:profile_updates.self.submit,club')->group(function (): void {
+            Route::post('/clubs/{club}/profile-update-requests', [ProfileUpdateRequestController::class, 'store']);
+            Route::post('/clubs/{club}/profile-update-requests/{profileUpdateRequest}/withdraw', [ProfileUpdateRequestController::class, 'withdraw']);
+        });
         Route::middleware('club.permission:profile_updates.self.view,club')->group(function (): void {
             Route::get('/clubs/{club}/profile-update-requests/me', [ProfileUpdateRequestController::class, 'ownIndex']);
             Route::get('/clubs/{club}/profile-update-requests/me/{profileUpdateRequest}', [ProfileUpdateRequestController::class, 'ownShow']);
+        });
+        Route::middleware('club.permission:profile_updates.approve,club')->group(function (): void {
+            Route::post('/clubs/{club}/profile-update-requests/{profileUpdateRequest}/approve', [ProfileUpdateRequestController::class, 'approve']);
+            Route::post('/clubs/{club}/profile-update-requests/{profileUpdateRequest}/reject', [ProfileUpdateRequestController::class, 'reject']);
         });
         Route::middleware('club.permission:profile_updates.review,club')->group(function (): void {
             Route::get('/clubs/{club}/profile-update-requests', [ProfileUpdateRequestController::class, 'index']);
