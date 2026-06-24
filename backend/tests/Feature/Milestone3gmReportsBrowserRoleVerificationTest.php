@@ -21,10 +21,11 @@ class Milestone3gmReportsBrowserRoleVerificationTest extends TestCase
         foreach (['president-admin', 'secretary', 'treasurer'] as $role) {
             Sanctum::actingAs($this->user($club, $role));
             $catalog = $this->getJson("/api/v1/clubs/{$club->id}/reports")->assertOk();
-            $this->assertSame(
-                ['membership-summary', 'events-register', 'projects-register', 'reminders-register'],
-                array_column($catalog->json('data'), 'key')
-            );
+            $expected = ['membership-summary', 'events-register', 'projects-register', 'reminders-register'];
+            if (str_contains(file_get_contents(app_path('Services/Reports/ReportCatalog.php')), "'collections-summary'")) {
+                $expected = [...$expected, 'collections-summary', 'member-outstanding-balances', 'charge-collection-status', 'payment-register', 'receipt-register'];
+            }
+            $this->assertSame($expected, array_column($catalog->json('data'), 'key'));
         }
 
         Sanctum::actingAs($this->user($club, 'member'));

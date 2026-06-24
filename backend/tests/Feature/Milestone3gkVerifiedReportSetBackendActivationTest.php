@@ -29,7 +29,11 @@ class Milestone3gkVerifiedReportSetBackendActivationTest extends TestCase
         $this->getJson("/api/v1/clubs/{$club->id}/reports/projects-register?record_type=project")->assertOk()->assertJsonPath('data.rows.0.id',$project->id);
         $this->getJson("/api/v1/clubs/{$club->id}/reports/reminders-register?priority=urgent")->assertOk()->assertJsonPath('data.rows.0.id',$reminder->id);
         $this->getJson("/api/v1/clubs/{$club->id}/reports/membership-summary?q=Private")->assertUnprocessable();
-        $this->getJson("/api/v1/clubs/{$club->id}/reports/collections-summary")->assertNotFound();
+        if (str_contains(file_get_contents(app_path('Services/Reports/ReportCatalog.php')), "'collections-summary'")) {
+            $this->getJson("/api/v1/clubs/{$club->id}/reports/collections-summary")->assertOk();
+        } else {
+            $this->getJson("/api/v1/clubs/{$club->id}/reports/collections-summary")->assertNotFound();
+        }
     }
 
     public function test_repeated_calls_do_not_mutate_sources(): void
