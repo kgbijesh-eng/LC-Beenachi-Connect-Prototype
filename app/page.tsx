@@ -3,6 +3,7 @@
 import { createContext, type FormEvent, type ReactNode, useContext, useEffect, useMemo, useState, useRef } from "react";
 import RemindersBackend from "./RemindersBackend";
 import ReportsBackend from "./ReportsBackend";
+import FinanceBackend from "./FinanceBackend";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 type FinanceSummaryStatus = "loading" | "ready" | "error";
@@ -2526,19 +2527,7 @@ export default function Prototype() {
             setSelectedMonthKey={setSelectedFellowshipMonthKey}
           />
         )}
-        {screen === "finance-module" && (
-          <FinanceModule
-            section={financeSection}
-            statementSection={clubStatementSection}
-            role={role}
-            member={activeMember}
-            setScreen={handleSetScreen}
-            collectionDetail={collectionDetail}
-            setCollectionDetail={setCollectionDetail}
-            fellowshipPaymentView={fellowshipPaymentView}
-            amountPerSponsor={amountPerSponsor}
-          />
-        )}
+                {screen === "finance-module" && <FinanceBackend role={role} />}
         {screen === "reports-tools-module" && (
           <ReportsBackend role={role} onReminders={() => handleSetScreen("notifications-reminders")} />
         )}
@@ -2720,17 +2709,17 @@ export default function Prototype() {
             />
           ) : null
         )}
-        {screen === "my-dues" && <Ledger role={role} member={activeMember} setScreen={handleSetScreen} isPersonal amountPerSponsor={amountPerSponsor} />}
-        {screen === "ledger" && <Ledger role={role} member={activeMember} setScreen={handleSetScreen} amountPerSponsor={amountPerSponsor} />}
-        {screen === "member-dues-detail" && <MemberDuesDetail role={role} member={activeMember} setScreen={handleSetScreen} amountPerSponsor={amountPerSponsor} />}
-        {screen === "special-collection" && <SpecialCollection setScreen={handleSetScreen} />}
-        {screen === "record-member-payment" && <RecordMemberPayment role={role} />}
+        {screen === "my-dues" && <FinanceBackend role={role} />}
+        {screen === "ledger" && <FinanceBackend role={role} />}
+        {screen === "member-dues-detail" && <FinanceBackend role={role} />}
+        {screen === "special-collection" && <FinanceBackend role={role} />}
+        {screen === "record-member-payment" && <FinanceBackend role={role} />}
         {screen === "collection-box" && <CollectionBoxReceipt role={role} />}
-        {screen === "receipt-list" && <ReceiptList role={role} />}
-        {screen === "payment-history" && <PaymentHistory role={role} />}
+        {screen === "receipt-list" && <FinanceBackend role={role} />}
+        {screen === "payment-history" && <FinanceBackend role={role} />}
         {screen === "member-import-preview" && <MemberImportPreview role={role} />}
-        {screen === "outstanding-dues" && <OutstandingDues setScreen={handleSetScreen} amountPerSponsor={amountPerSponsor} />}
-        {screen === "collection-summary" && <CollectionSummary detail={collectionDetail} setDetail={setCollectionDetail} amountPerSponsor={amountPerSponsor} />}
+        {screen === "outstanding-dues" && <FinanceBackend role={role} />}
+        {screen === "collection-summary" && <FinanceBackend role={role} />}
         {screen === "fellowship-payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={handleSetScreen} amountPerSponsor={amountPerSponsor} />}
         {screen === "events-meetings" && (
           <EventsMeetings
@@ -5124,6 +5113,7 @@ function Dashboard({
       {role === "member" ? (
         <>
           <MemberFinanceSummaryPanel role={role} compact />
+      {member.backendId && <FinanceBackend role={role} memberId={member.backendId} />}
           <section className="compactPanel dashboardPanel">
             <DashboardSectionHeader title="Member dashboard sources" label="Own authorized records only" />
             <div className="compactDashboardGrid">
@@ -6272,6 +6262,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
       </div>
       <div className="notice memberHelperText">Member Details: review the member profile here, then use the finance summary and Profile Documents metadata section below. Backend authorization remains the source of truth.</div>
       <MemberFinanceSummaryPanel role={role} compact />
+      {member.backendId && <FinanceBackend role={role} memberId={member.backendId} />}
       {renderProfileDocumentsSection()}
     </section>
   );
