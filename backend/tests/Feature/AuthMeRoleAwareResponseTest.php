@@ -78,6 +78,7 @@ class AuthMeRoleAwareResponseTest extends TestCase
             'projects.view',
             'reminders.manage',
             'reminders.view',
+            'reports.view',
             'roles.manage',
             'roles.view',
             'users.manage',

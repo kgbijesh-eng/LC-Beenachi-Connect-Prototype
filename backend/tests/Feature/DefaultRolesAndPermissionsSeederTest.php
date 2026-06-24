@@ -17,8 +17,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 18);
-        $this->assertDatabaseCount('role_permissions', 43);
+        $this->assertDatabaseCount('permissions', 19);
+        $this->assertDatabaseCount('role_permissions', 46);
 
         $president = Role::where('slug', 'president-admin')->firstOrFail();
         $secretary = Role::where('slug', 'secretary')->firstOrFail();
@@ -28,9 +28,9 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertSame('President/Admin', $president->name);
         $this->assertTrue($president->is_system);
 
-        $this->assertSame(18, $president->permissions()->count());
-        $this->assertSame(12, $secretary->permissions()->count());
-        $this->assertSame(8, $treasurer->permissions()->count());
+        $this->assertSame(19, $president->permissions()->count());
+        $this->assertSame(13, $secretary->permissions()->count());
+        $this->assertSame(9, $treasurer->permissions()->count());
         $this->assertSame(5, $member->permissions()->count());
 
         $this->assertTrue($president->permissions->contains('slug', 'club.manage'));
@@ -43,6 +43,7 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertTrue($president->permissions->contains('slug', 'projects.view'));
         $this->assertTrue($president->permissions->contains('slug', 'projects.manage'));
         $this->assertTrue($president->permissions->contains('slug', 'reminders.manage'));
+        $this->assertTrue($president->permissions->contains('slug', 'reports.view'));
 
         $this->assertTrue($secretary->permissions->contains('slug', 'club.view'));
         $this->assertTrue($secretary->permissions->contains('slug', 'members.view'));
@@ -52,6 +53,7 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertTrue($secretary->permissions->contains('slug', 'projects.view'));
         $this->assertTrue($secretary->permissions->contains('slug', 'projects.manage'));
         $this->assertTrue($secretary->permissions->contains('slug', 'reminders.manage'));
+        $this->assertTrue($secretary->permissions->contains('slug', 'reports.view'));
         $this->assertFalse($secretary->permissions->contains('slug', 'club.manage'));
 
         $this->assertTrue($treasurer->permissions->contains('slug', 'memberships.view'));
@@ -63,6 +65,7 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertFalse($treasurer->permissions->contains('slug', 'projects.manage'));
         $this->assertTrue($treasurer->permissions->contains('slug', 'reminders.view'));
         $this->assertFalse($treasurer->permissions->contains('slug', 'reminders.manage'));
+        $this->assertTrue($treasurer->permissions->contains('slug', 'reports.view'));
         $this->assertFalse($treasurer->permissions->contains('slug', 'users.manage'));
 
         $this->assertTrue($member->permissions->contains('slug', 'club.view'));
@@ -74,6 +77,7 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertFalse($member->permissions->contains('slug', 'projects.manage'));
         $this->assertTrue($member->permissions->contains('slug', 'reminders.view'));
         $this->assertFalse($member->permissions->contains('slug', 'reminders.manage'));
+        $this->assertFalse($member->permissions->contains('slug', 'reports.view'));
         $this->assertFalse($member->permissions->contains('slug', 'audit_logs.view'));
 
         $this->assertNotNull(Permission::where('slug', 'permissions.view')->first());
@@ -85,6 +89,7 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertNotNull(Permission::where('slug', 'projects.manage')->first());
         $this->assertNotNull(Permission::where('slug', 'reminders.view')->first());
         $this->assertNotNull(Permission::where('slug', 'reminders.manage')->first());
+        $this->assertNotNull(Permission::where('slug', 'reports.view')->first());
     }
 
     public function test_default_roles_and_permissions_seeder_is_idempotent(): void
@@ -93,8 +98,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 18);
-        $this->assertDatabaseCount('role_permissions', 43);
+        $this->assertDatabaseCount('permissions', 19);
+        $this->assertDatabaseCount('role_permissions', 46);
     }
 
     public function test_database_seeder_calls_default_roles_and_permissions_seeder(): void

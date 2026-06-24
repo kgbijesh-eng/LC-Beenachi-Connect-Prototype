@@ -117,6 +117,11 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                 'slug' => 'reminders.manage',
                 'group' => 'reminders',
                 'description' => 'Create, update and transition club reminder records.',
+            ],            [
+                'name' => 'View Reports',
+                'slug' => 'reports.view',
+                'group' => 'reports',
+                'description' => 'View authorized club reports.',
             ],
         ];
 
@@ -150,6 +155,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'projects.manage',
                     'reminders.view',
                     'reminders.manage',
+                    'reports.view',
                 ],
             ],
             'secretary' => [
@@ -168,6 +174,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'projects.manage',
                     'reminders.view',
                     'reminders.manage',
+                    'reports.view',
                 ],
             ],
             'treasurer' => [
@@ -182,6 +189,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'events.view',
                     'projects.view',
                     'reminders.view',
+                    'reports.view',
                 ],
             ],
             'member' => [

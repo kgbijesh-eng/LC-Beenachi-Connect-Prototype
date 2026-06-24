@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\Finance\ReceiptController;
 use App\Http\Controllers\Api\V1\Member\MemberController;
 use App\Http\Controllers\Api\V1\Projects\ClubProjectController;
 use App\Http\Controllers\Api\V1\Reminders\ClubReminderController;
+use App\Http\Controllers\Api\V1\Reports\ClubReportController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportPreviewController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportCommitController;
 use App\Http\Controllers\Api\V1\Members\MemberProfileDocumentController;
@@ -66,6 +67,10 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/projects', [ClubProjectController::class, 'index']);
             Route::get('/clubs/{club}/projects/{project}', [ClubProjectController::class, 'show']);
         });
+        Route::middleware('club.permission:reports.view,club')->group(function (): void {
+            Route::get('/clubs/{club}/reports', [ClubReportController::class, 'index']);
+        });
+
         Route::middleware('club.permission:reminders.view,club')->group(function (): void {
             Route::get('/clubs/{club}/reminders', [ClubReminderController::class, 'index']);
             Route::get('/clubs/{club}/reminders/{reminder}', [ClubReminderController::class, 'show']);
