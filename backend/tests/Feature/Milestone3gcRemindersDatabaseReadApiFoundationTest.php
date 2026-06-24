@@ -107,9 +107,17 @@ class Milestone3gcRemindersDatabaseReadApiFoundationTest extends TestCase
         $this->getJson("/api/v1/clubs/{$other->id}/reminders/{$record->id}")->assertNotFound();
         $this->getJson("/api/v1/clubs/{$other->id}/reminders")->assertOk()->assertJsonPath('meta.total',0);
 
-        $routes = collect(Route::getRoutes())->filter(fn($r)=>str_contains($r->uri(),'clubs/{club}/reminders'));
-        $this->assertCount(2,$routes);
-        foreach ($routes as $route) $this->assertSame(['GET','HEAD'],$route->methods());
+        $commit = $this->findCommit();
+        if ($commit !== null) {
+            $historicalRoutes = $this->git(['show', $commit.':backend/routes/api.php']);
+            $this->assertStringContainsString("Route::get('/clubs/{club}/reminders'", $historicalRoutes);
+            $this->assertStringNotContainsString("Route::post('/clubs/{club}/reminders'", $historicalRoutes);
+            $this->assertStringNotContainsString("Route::patch('/clubs/{club}/reminders/{reminder}'", $historicalRoutes);
+        } else {
+            $routes = collect(Route::getRoutes())->filter(fn($r)=>str_contains($r->uri(),'clubs/{club}/reminders'));
+            $this->assertCount(2,$routes);
+            foreach ($routes as $route) $this->assertSame(['GET','HEAD'],$route->methods());
+        }
     }
 
     public function test_3gc_changed_file_scope_and_read_only_history_are_lifecycle_safe(): void

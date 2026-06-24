@@ -70,6 +70,13 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/reminders', [ClubReminderController::class, 'index']);
             Route::get('/clubs/{club}/reminders/{reminder}', [ClubReminderController::class, 'show']);
         });
+        Route::middleware('club.permission:reminders.manage,club')->group(function (): void {
+            Route::post('/clubs/{club}/reminders', [ClubReminderController::class, 'store']);
+            Route::patch('/clubs/{club}/reminders/{reminder}', [ClubReminderController::class, 'update']);
+            Route::post('/clubs/{club}/reminders/{reminder}/activate', [ClubReminderController::class, 'activate']);
+            Route::post('/clubs/{club}/reminders/{reminder}/complete', [ClubReminderController::class, 'complete']);
+            Route::post('/clubs/{club}/reminders/{reminder}/cancel', [ClubReminderController::class, 'cancel']);
+        });
 
         Route::middleware('club.permission:projects.manage,club')->group(function (): void {
             Route::post('/clubs/{club}/projects', [ClubProjectController::class, 'store']);
