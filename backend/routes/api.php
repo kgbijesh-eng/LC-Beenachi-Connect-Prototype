@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\Projects\ClubProjectController;
 use App\Http\Controllers\Api\V1\Reminders\ClubReminderController;
 use App\Http\Controllers\Api\V1\Reports\ClubReportController;
 use App\Http\Controllers\Api\V1\FinanceCollections\FinanceReadController;
+use App\Http\Controllers\Api\V1\FinanceCollections\FinanceWriteController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportPreviewController;
 use App\Http\Controllers\Api\V1\Members\MemberDataImportCommitController;
 use App\Http\Controllers\Api\V1\Members\MemberProfileDocumentController;
@@ -85,6 +86,17 @@ Route::middleware('club.permission:finance.club.view,club')->group(function (): 
             Route::get('/clubs/{club}/finance/me/summary', [FinanceReadController::class, 'ownSummary']);
             Route::get('/clubs/{club}/finance/me/charges', [FinanceReadController::class, 'ownCharges']);
             Route::get('/clubs/{club}/finance/me/payments', [FinanceReadController::class, 'ownPayments']);
+        });
+Route::middleware('club.permission:finance.manage,club')->group(function (): void {
+            Route::post('/clubs/{club}/finance/charges', [FinanceWriteController::class, 'store']);
+            Route::patch('/clubs/{club}/finance/charges/{charge}', [FinanceWriteController::class, 'update']);
+            Route::post('/clubs/{club}/finance/charges/{charge}/issue', [FinanceWriteController::class, 'issue']);
+            Route::post('/clubs/{club}/finance/charges/{charge}/close', [FinanceWriteController::class, 'close']);
+            Route::post('/clubs/{club}/finance/charges/{charge}/cancel', [FinanceWriteController::class, 'cancel']);
+            Route::post('/clubs/{club}/finance/members/{member}/payments', [FinanceWriteController::class, 'payment']);
+        });
+        Route::middleware('club.permission:finance.void,club')->group(function (): void {
+            Route::post('/clubs/{club}/finance/payments/{payment}/void', [FinanceWriteController::class, 'void']);
         });
 
         Route::middleware('club.permission:reminders.view,club')->group(function (): void {

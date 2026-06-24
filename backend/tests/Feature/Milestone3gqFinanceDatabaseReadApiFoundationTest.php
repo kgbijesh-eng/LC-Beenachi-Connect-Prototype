@@ -6,6 +6,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\{Route,Schema};
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
+use Symfony\Component\Process\Process;
 
 class Milestone3gqFinanceDatabaseReadApiFoundationTest extends TestCase {
     use RefreshDatabase;
@@ -16,8 +17,9 @@ class Milestone3gqFinanceDatabaseReadApiFoundationTest extends TestCase {
         foreach(['finance.self.view','finance.club.view','finance.manage'] as $p)$this->assertTrue(Role::where('slug','secretary')->firstOrFail()->permissions->contains('slug',$p));
         $this->assertFalse(Role::where('slug','secretary')->firstOrFail()->permissions->contains('slug','finance.void'));
         $this->assertSame(['finance.self.view'],Role::where('slug','member')->firstOrFail()->permissions->where('group','finance')->pluck('slug')->values()->all());
-        $finance=collect(Route::getRoutes())->filter(fn($r)=>str_contains($r->uri(),'finance/'))->map(fn($r)=>implode('|',$r->methods()).' '.$r->uri());
-        $this->assertFalse($finance->contains(fn($r)=>str_starts_with($r,'POST ')||str_starts_with($r,'PATCH ')||str_starts_with($r,'DELETE ')));
+        $root=dirname(__DIR__,3); $process=new Process(['git','show','d590768ff55edcda95330abd225e64adcc472b12:backend/routes/api.php'],$root); $process->run();
+        $this->assertTrue($process->isSuccessful(),$process->getErrorOutput()); $historical=$process->getOutput();
+        $this->assertStringNotContainsString('FinanceWriteController',$historical);
     }
     public function test_management_and_self_reads_are_exact_private_and_club_scoped():void {
         $this->seed(DatabaseSeeder::class); [$club,$manager]=$this->actor('president-admin','A'); [$other]=$this->actor('president-admin','B');

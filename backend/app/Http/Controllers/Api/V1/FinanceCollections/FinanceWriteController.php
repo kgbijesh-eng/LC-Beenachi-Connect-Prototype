@@ -1,0 +1,18 @@
+<?php
+namespace App\Http\Controllers\Api\V1\FinanceCollections;
+use App\Http\Controllers\Controller;
+use App\Models\{Club,ClubCharge,Member,MemberPayment};
+use App\Services\FinanceCollections\{FinanceReadService,FinanceWriteService};
+use Illuminate\Http\{JsonResponse,Request};
+use Illuminate\Validation\Rule;
+class FinanceWriteController extends Controller {
+    public function __construct(private FinanceWriteService $write,private FinanceReadService $read){}
+    private function chargeRules(bool $update=false):array{return ['title'=>['required','string','max:160'],'description'=>['nullable','string','max:2000'],'category'=>['required',Rule::in(ClubCharge::CATEGORIES)],'amount_paise'=>['required','integer','min:1'],'due_date'=>['required','date_format:Y-m-d'],'financial_year'=>['required','regex:/^\\d{4}-\\d{2}$/'],'member_ids'=>['nullable','array'],'member_ids.*'=>['integer','distinct'],'assign_all_active_members'=>['nullable','boolean'],'lock_version'=>$update?['required','integer','min:1']:['prohibited'],'status'=>['prohibited'],'club_id'=>['prohibited']];}
+    public function store(Request $r,Club $club):JsonResponse{$v=$r->validate($this->chargeRules());return response()->json(['data'=>$this->read->charge($club,$this->write->createCharge($r->user(),$club,$v))],201);}
+    public function update(Request $r,Club $club,ClubCharge $charge):JsonResponse{$v=$r->validate($this->chargeRules(true));return response()->json(['data'=>$this->read->charge($club,$this->write->updateCharge($r->user(),$club,$charge,$v))]);}
+    public function issue(Request $r,Club $club,ClubCharge $charge):JsonResponse{$v=$r->validate(['lock_version'=>['required','integer','min:1']]);return response()->json(['data'=>$this->read->charge($club,$this->write->issue($r->user(),$club,$charge,$v['lock_version']))]);}
+    public function close(Request $r,Club $club,ClubCharge $charge):JsonResponse{$v=$r->validate(['lock_version'=>['required','integer','min:1']]);return response()->json(['data'=>$this->read->charge($club,$this->write->close($r->user(),$club,$charge,$v['lock_version']))]);}
+    public function cancel(Request $r,Club $club,ClubCharge $charge):JsonResponse{$v=$r->validate(['lock_version'=>['required','integer','min:1'],'reason'=>['required','string','max:1000']]);return response()->json(['data'=>$this->read->charge($club,$this->write->cancel($r->user(),$club,$charge,$v['lock_version'],$v['reason']))]);}
+    public function payment(Request $r,Club $club,Member $member):JsonResponse{$v=$r->validate(['payment_date'=>['required','date_format:Y-m-d'],'payment_mode'=>['required',Rule::in(MemberPayment::MODES)],'external_reference'=>['nullable','string','max:120','required_if:payment_mode,upi,bank_transfer,cheque'],'amount_paise'=>['required','integer','min:1'],'allocations'=>['required','array','min:1'],'allocations.*.member_charge_id'=>['required','integer','distinct'],'allocations.*.amount_paise'=>['required','integer','min:1'],'internal_note'=>['nullable','string','max:1000'],'idempotency_key'=>['required','uuid']]);$result=$this->write->recordPayment($r->user(),$club,$member,$v);return response()->json(['data'=>$this->read->payment($club,$result['payment']),'replayed'=>$result['replayed']],$result['replayed']?200:201);}
+    public function void(Request $r,Club $club,MemberPayment $payment):JsonResponse{$v=$r->validate(['reason'=>['required','string','max:1000'],'lock_version'=>['required','integer','min:1'],'replacement_payment_id'=>['nullable','integer']]);return response()->json(['data'=>$this->read->payment($club,$this->write->void($r->user(),$club,$payment,$v['lock_version'],$v['reason'],$v['replacement_payment_id']??null))]);}
+}
