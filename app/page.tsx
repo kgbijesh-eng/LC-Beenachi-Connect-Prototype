@@ -3,6 +3,7 @@
 import { createContext, type FormEvent, type ReactNode, useContext, useEffect, useMemo, useState, useRef } from "react";
 import RemindersBackend from "./RemindersBackend";
 import ReportsBackend from "./ReportsBackend";
+import ProfileUpdatesBackend from "./ProfileUpdatesBackend";
 import FinanceBackend from "./FinanceBackend";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
@@ -2538,7 +2539,7 @@ export default function Prototype() {
           reportDetail === "Profile Update Pending Report" && role !== "president" && role !== "secretary"
             ? <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>
             : reportDetail === "Profile Update Pending Report"
-              ? <PendingMemberUpdatesDetail />
+              ? <ProfileUpdatesBackend role={role} mode="review" />
               : <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} amountPerSponsor={activeAmountPerSponsor} selectedSponsors={activeConfirmedSponsors.length ? activeConfirmedSponsors : activeSelectedSponsors} sponsorPayments={activeSponsorPayments} />
         )}
         {screen === "nav-detail" && (
@@ -2596,7 +2597,7 @@ export default function Prototype() {
         )}
         {screen === "profile-update-detail" && (
           role === "president" || role === "secretary"
-            ? <PendingMemberUpdatesDetail />
+            ? <ProfileUpdatesBackend role={role} mode="review" />
             : <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>
         )}
         {screen === "announcement-detail" && (
@@ -5392,7 +5393,7 @@ function DashboardDetailScreen({
   return (
     <section className="stack">
       <DetailHeader title={dashboardDetailTitle(detail)} label={dashboardDetailLabel(role, detail)} setScreen={setScreen} />
-      {detail === "pending-member-updates" && <PendingMemberUpdatesDetail />}
+      {detail === "pending-member-updates" && <ProfileUpdatesBackend role={role} mode="review" />}
       {detail === "upcoming-events" && <UpcomingEventsDetail role={role} />}
       {detail === "fellowship-status" && <FellowshipStatusDetail setScreen={setScreen} />}
       {detail === "pending-dues" && <PendingDuesDetail role={role} member={member} setScreen={setScreen} amountPerSponsor={amountPerSponsor} />}
@@ -6261,6 +6262,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
         )}
       </div>
       <div className="notice memberHelperText">Member Details: review the member profile here, then use the finance summary and Profile Documents metadata section below. Backend authorization remains the source of truth.</div>
+      <ProfileUpdatesBackend role={role} mode="own" />
       <MemberFinanceSummaryPanel role={role} compact />
       {member.backendId && <FinanceBackend role={role} memberId={member.backendId} />}
       {renderProfileDocumentsSection()}
