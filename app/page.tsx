@@ -1093,9 +1093,7 @@ const peopleMenuItems: NavItem[] = [
 const treasurerPeopleMenuItems = peopleMenuItems.map((item) => item.label === "Members"
   ? {
       ...item,
-      children: item.children?.filter((child) =>
-        child.detailTitle !== "Profile Update Pending" && child.screen !== "member-import-preview"
-      )
+      children: item.children?.filter((child) => child.detailTitle !== "Profile Update Pending")
     }
   : item
 );
@@ -8548,7 +8546,7 @@ function memberImportCommitStatusLabel(status?: string | null): string {
 
 function MemberImportPreview({ role }: { role: Role }) {
   const { session } = useDevAuth();
-  const canUseMemberImportPreview = role === "president" || role === "secretary";
+  const canUseMemberImportPreview = role === "president" || role === "secretary" || role === "treasurer";
   const [status, setStatus] = useState<MemberImportPreviewStatus>(canUseMemberImportPreview ? "initializing" : "ready");
   const [message, setMessage] = useState(
     canUseMemberImportPreview
@@ -8581,9 +8579,9 @@ function MemberImportPreview({ role }: { role: Role }) {
         setPreviewToken(null);
         setPreviewClubId(null);
         setPreview(null);
-        resetMemberImportCommitState("Commit behavior is hidden from this unauthorized role and no commit API call is made.");
+        resetMemberImportCommitState("Commit behavior is hidden from Normal Member role and no commit API call is made.");
         setStatus("ready");
-        setMessage("Member import preview is hidden from this unauthorized role and no preview API call is made.");
+        setMessage("Member import preview is hidden from Normal Member role and no preview API call is made.");
         return;
       }
 
@@ -8633,7 +8631,7 @@ function MemberImportPreview({ role }: { role: Role }) {
 
     if (!canUseMemberImportPreview) {
       setStatus("error");
-      setMessage("This role cannot use member import preview.");
+      setMessage("Normal Member role cannot use member import preview.");
       return;
     }
 
@@ -8700,7 +8698,7 @@ function MemberImportPreview({ role }: { role: Role }) {
   async function runMemberImportCommit() {
     if (!canUseMemberImportPreview) {
       setCommitStatus("error");
-      setCommitMessage("This role cannot use member import commit.");
+      setCommitMessage("Normal Member role cannot use member import commit.");
       return;
     }
 
@@ -8769,7 +8767,7 @@ function MemberImportPreview({ role }: { role: Role }) {
       <section className="stack">
         <Toolbar title="Member Import Preview" actionLabel="Officer only" />
         <div className="notice">
-          Member import preview is unavailable for this role. No preview API call is made and no import preview data is loaded.
+          Member import preview is hidden from Normal Member role. No preview API call is made and no import preview data is loaded.
         </div>
       </section>
     );
