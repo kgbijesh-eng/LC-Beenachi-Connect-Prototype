@@ -1,20 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useDevAuth } from "./DevAuthSession";
 
 type Role = "president"|"secretary"|"treasurer"|"member";
 type Definition = { key:string; title:string; description:string; allowed_filters:string[]; aggregate_only:boolean; sensitivity:string; financial?:boolean };
 type Report = { key:string; title:string; description:string; generated_at:string; club_timezone:string; date_basis:string; applied_filters:Record<string,unknown>; summary:Record<string,unknown>; rows:Record<string,unknown>[] };
 type Meta = { current_page:number; last_page:number; per_page:number; total:number };
 const API="http://127.0.0.1:8000/api/v1";
-const logins:Record<Role,{email:string;password:string}>={
-  president:{email:"president@lcbeenachi.test",password:"password"},
-  secretary:{email:"secretary@lcbeenachi.test",password:"password"},
-  treasurer:{email:"treasurer@lcbeenachi.test",password:"password"},
-  member:{email:"local.member@lcbeenachi.test",password:"password"}
-};
-
 export default function ReportsBackend({role,onReminders}:{role:Role;onReminders:()=>void}) {
+  const { session } = useDevAuth();
   const [token,setToken]=useState(""); const [clubId,setClubId]=useState(0);
   const [catalog,setCatalog]=useState<Definition[]>([]); const [selected,setSelected]=useState<Definition|null>(null);
   const [report,setReport]=useState<Report|null>(null); const [meta,setMeta]=useState<Meta|null>(null);
@@ -39,11 +34,9 @@ export default function ReportsBackend({role,onReminders}:{role:Role;onReminders
     }catch{setState("error");setMessage("Reports are unavailable. Previous report output was cleared.");}
   }
   useEffect(()=>{let cancelled=false;setToken("");setClubId(0);setCatalog([]);clearOutput();setSelected(null);setState("loading");
-    (async()=>{try{const l=await fetch(`${API}/auth/login`,{method:"POST",headers:{Accept:"application/json","Content-Type":"application/json"},body:JSON.stringify(logins[role])});
-      if(!l.ok)throw new Error("Report role login failed.");const a=await l.json();const m=await fetch(`${API}/auth/me`,{headers:{Accept:"application/json",Authorization:`Bearer ${a.token}`}});
-      if(!m.ok)throw new Error("Report club context is unavailable.");const me=await m.json();const club=me.club_memberships?.[0]?.club?.id;
-      if(!a.token||typeof club!=="number")throw new Error("Report club context is unavailable.");if(!cancelled){setToken(a.token);setClubId(club);await loadCatalog(a.token,club)}}
-      catch(e){if(!cancelled){setState("error");setMessage(e instanceof Error?e.message:"Reports are unavailable.")}}})();return()=>{cancelled=true}},[role]);
+    (async()=>{try{if(!session)throw new Error("No verified development session is available.");const club=session.membership.club.id;
+      if(!cancelled){setToken(session.token);setClubId(club);await loadCatalog(session.token,club)}}
+      catch(e){if(!cancelled){setState("error");setMessage(e instanceof Error?e.message:"Reports are unavailable.")}}})();return()=>{cancelled=true}},[role,session]);
   async function run(def:Definition,page=1,chosen=filters){
     clearOutput();setSelected(def);setState("loading");setMessage(`Loading ${def.title} from verified backend sources...`);
     const q=new URLSearchParams();if(def.allowed_filters.includes("page")){q.set("page",String(page));q.set("per_page","10")}

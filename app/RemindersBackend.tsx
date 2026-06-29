@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useDevAuth } from "./DevAuthSession";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 type Reminder = {
@@ -13,14 +14,8 @@ type Reminder = {
 type Meta = { current_page: number; last_page: number; total: number };
 
 const API = "http://127.0.0.1:8000/api/v1";
-const logins: Record<Role, { email: string; password: string }> = {
-  president: { email: "president@lcbeenachi.test", password: "password" },
-  secretary: { email: "secretary@lcbeenachi.test", password: "password" },
-  treasurer: { email: "treasurer@lcbeenachi.test", password: "password" },
-  member: { email: "local.member@lcbeenachi.test", password: "password" }
-};
-
 export default function RemindersBackend({ role, onBack }: { role: Role; onBack: () => void }) {
+  const { session } = useDevAuth();
   const canManage = role === "president" || role === "secretary";
   const [token, setToken] = useState("");
   const [clubId, setClubId] = useState(0);
@@ -71,22 +66,13 @@ export default function RemindersBackend({ role, onBack }: { role: Role; onBack:
     setToken(""); setClubId(0); setRows([]); setMeta(null); setSelected(null); setState("loading");
     (async () => {
       try {
-        const login = await fetch(`${API}/auth/login`, {
-          method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify(logins[role])
-        });
-        if (!login.ok) throw new Error("Reminder role login failed.");
-        const auth = await login.json();
-        const meResponse = await fetch(`${API}/auth/me`, { headers: { Accept: "application/json", Authorization: `Bearer ${auth.token}` } });
-        if (!meResponse.ok) throw new Error("Reminder club context is unavailable.");
-        const me = await meResponse.json();
-        const activeClub = me.club_memberships?.[0]?.club?.id;
-        if (!auth.token || typeof activeClub !== "number") throw new Error("Reminder club context is unavailable.");
-        if (!cancelled) { setToken(auth.token); setClubId(activeClub); await load(auth.token, activeClub, 1, { status: "", priority: "", q: "" }); }
+        if (!session) throw new Error("No verified development session is available.");
+        const activeClub = session.membership.club.id;
+        if (!cancelled) { setToken(session.token); setClubId(activeClub); await load(session.token, activeClub, 1, { status: "", priority: "", q: "" }); }
       } catch (error) { if (!cancelled) fail(0, error instanceof Error ? error.message : "Reminders are unavailable."); }
     })();
     return () => { cancelled = true; };
-  }, [role]);
+  }, [role, session]);
 
   async function open(id: number) {
     setRows([]); setMeta(null); setState("loading");

@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { useDevAuth } from "./DevAuthSession";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 
@@ -24,13 +25,6 @@ type Row = {
 };
 
 const API = "http://127.0.0.1:8000/api/v1";
-const logins: Record<Role, string> = {
-  president: "president@lcbeenachi.test",
-  secretary: "secretary@lcbeenachi.test",
-  treasurer: "treasurer@lcbeenachi.test",
-  member: "local.member@lcbeenachi.test",
-};
-
 const RESTRICTED = [
   "birth_date",
   "spouse_name",
@@ -56,6 +50,7 @@ export default function ProfileUpdatesBackend({
   role: Role;
   mode: "own" | "review";
 }) {
+  const { session } = useDevAuth();
   const [token, setToken] = useState("");
   const [club, setClub] = useState(0);
   const [rows, setRows] = useState<Row[]>([]);
@@ -173,66 +168,23 @@ export default function ProfileUpdatesBackend({
 
     (async () => {
       try {
-        const l = await fetch(`${API}/auth/login`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({ email: logins[role], password: "password" }),
-        });
-        if (!l.ok) {
-          if (!off) {
-            setState("error");
-            setMsg("Authentication failed.");
-          }
-          return;
-        }
-        const a = await l.json();
-        const m = await fetch(`${API}/auth/me`, {
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${a.token}`,
-          },
-        });
-        if (!m.ok) {
-          if (!off) {
-            setState(m.status === 403 ? "forbidden" : "error");
-            setMsg("Failed to resolve user profile.");
-          }
-          return;
-        }
-        const me = await m.json();
-        const c = me.club_memberships?.[0]?.club?.id;
-        if (!off && a.token && c) {
-          setToken(a.token);
+        if (!session) throw new Error("No verified development session is available.");
+        const access = session.token;
+        const c = session.membership.club.id;
+        if (!off) {
+          setToken(access);
           setClub(c);
-
-          // Fetch current member details
-          const mListRes = await fetch(`${API}/clubs/${c}/members`, {
-            headers: {
-              Accept: "application/json",
-              Authorization: `Bearer ${a.token}`,
-            },
-          });
-          if (mListRes.ok) {
-            const mListData = await mListRes.json();
-            const found = mListData.members?.find((member: any) => member.user_id === me.user?.id);
-            if (found) {
-              const profileRes = await fetch(`${API}/clubs/${c}/members/${found.id}`, {
-                headers: {
-                  Accept: "application/json",
-                  Authorization: `Bearer ${a.token}`,
-                },
-              });
-              if (profileRes.ok) {
-                const profileData = await profileRes.json();
-                setCurrentMember(profileData.member);
-              }
+          const linkedMemberInfo = session.membership.member;
+          if (linkedMemberInfo?.id) {
+            const profileRes = await fetch(`${API}/clubs/${c}/members/me`, {
+              headers: { Accept: "application/json", Authorization: `Bearer ${access}` },
+            });
+            if (profileRes.ok) {
+              const profileData = await profileRes.json();
+              setCurrentMember(profileData.member);
             }
           }
-
-          await load(a.token, c, 1);
+          await load(access, c, 1);
         }
       } catch {
         if (!off) {
@@ -246,7 +198,7 @@ export default function ProfileUpdatesBackend({
     return () => {
       off = true;
     };
-  }, [role, mode]);
+  }, [role, mode, session]);
 
   async function detail(row: Row) {
     setSelected(null);

@@ -53,6 +53,39 @@ class MemberController extends Controller
         ]);
     }
 
+    public function own(Request $request, Club $club): JsonResponse
+    {
+        $user = $request->user();
+
+        $hasActiveMembership = $user->clubMemberships()
+            ->where('club_id', $club->id)
+            ->where('status', 'active')
+            ->exists();
+
+        if (! $hasActiveMembership) {
+            return response()->json([
+                'message' => 'This action is unauthorized.',
+            ], 403);
+        }
+
+        $members = $user->members()
+            ->where('club_id', $club->id)
+            ->get();
+
+        if ($members->count() !== 1) {
+            return response()->json([
+                'message' => $members->isEmpty()
+                    ? 'Member record not linked.'
+                    : 'Multiple member records are linked to this account.',
+            ], $members->isEmpty() ? 403 : 500);
+        }
+
+        $member = $members->firstOrFail();
+
+        return response()->json([
+            'member' => $this->memberPayload($member, true),
+        ]);
+    }
     public function show(Request $request, Club $club, Member $member): JsonResponse
     {
         if ($member->club_id !== $club->id) {

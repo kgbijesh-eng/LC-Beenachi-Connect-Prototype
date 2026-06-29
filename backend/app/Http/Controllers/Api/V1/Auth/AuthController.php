@@ -50,6 +50,7 @@ class AuthController extends Controller
         $user->load([
             'clubMemberships.club',
             'clubMemberships.role.permissions',
+            'members:id,club_id,user_id,member_code,full_name',
         ]);
 
         return response()->json([
@@ -58,7 +59,32 @@ class AuthController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
             ],
-            'club_memberships' => $user->clubMemberships->map(function ($membership): array {
+            'club_memberships' => $user->clubMemberships->map(function ($membership) use ($user): array {
+                $clubId = $membership->club_id;
+
+                $clubMembers = $user->members->filter(function ($member) use ($user, $clubId) {
+                    return (int) $member->user_id === (int) $user->id && (int) $member->club_id === (int) $clubId;
+                });
+
+                if ($clubMembers->count() > 1) {
+                    \Illuminate\Support\Facades\Log::error(
+                        "Data integrity error: multiple same-club linked members found for user ID {$user->id} in club ID {$clubId}."
+                    );
+                    abort(response()->json([
+                        'message' => 'Data integrity error.',
+                    ], 500));
+                }
+
+                $member = $clubMembers->first();
+                $memberData = null;
+                if ($member) {
+                    $memberData = [
+                        'id' => $member->id,
+                        'member_code' => $member->member_code,
+                        'full_name' => $member->full_name,
+                    ];
+                }
+
                 return [
                     'id' => $membership->id,
                     'status' => $membership->status,
@@ -86,6 +112,7 @@ class AuthController extends Controller
                             'group' => $permission->group,
                         ])
                         ->all(),
+                    'member' => $memberData,
                 ];
             })->values()->all(),
         ]);

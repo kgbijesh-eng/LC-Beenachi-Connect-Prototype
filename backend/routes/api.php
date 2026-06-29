@@ -37,6 +37,7 @@ Route::prefix('v1')->group(function (): void {
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::get('/clubs/{club}/members/me', [MemberController::class, 'own']);
 
         Route::middleware('club.permission:club.view,club')->group(function (): void {
             Route::get('/clubs/{club}', [ClubController::class, 'show']);
@@ -45,7 +46,6 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/finance/reports', [ClubFinanceReportController::class, 'reports']);
             Route::get('/clubs/{club}/finance/balance-sheet', [ClubFinanceReportController::class, 'balanceSheet']);
 
-            Route::get('/clubs/{club}/members', [MemberController::class, 'index']);
             Route::post('/clubs/{club}/members/import-preview', [MemberDataImportPreviewController::class, 'store']);
             Route::post('/clubs/{club}/members/import-commit', [MemberDataImportCommitController::class, 'store']);
             Route::get('/clubs/{club}/members/me/balance', [MemberLedgerBalanceController::class, 'own']);
@@ -57,6 +57,10 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/members/{member}/profile-documents/{document}', [MemberProfileDocumentController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/payments/{payment}/receipt', [ReceiptController::class, 'show']);
             Route::get('/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf', [PaymentReceiptPdfController::class, 'show']);
+        });
+
+        Route::middleware('club.permission:members.view,club')->group(function (): void {
+            Route::get('/clubs/{club}/members', [MemberController::class, 'index']);
             Route::get('/clubs/{club}/members/{member}', [MemberController::class, 'show']);
         });
 

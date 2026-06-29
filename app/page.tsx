@@ -5,8 +5,9 @@ import RemindersBackend from "./RemindersBackend";
 import ReportsBackend from "./ReportsBackend";
 import ProfileUpdatesBackend from "./ProfileUpdatesBackend";
 import FinanceBackend from "./FinanceBackend";
+import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";
 
-type Role = "president" | "secretary" | "treasurer" | "member";
+type Role = DevRole;
 type FinanceSummaryStatus = "loading" | "ready" | "error";
 type ReceiptLookupStatus = "initializing" | "ready" | "loading" | "success" | "error";
 type ClubFinanceReportStatus = "loading" | "ready" | "empty" | "missing-club" | "unauthenticated" | "forbidden" | "error";
@@ -92,11 +93,14 @@ type ClubBalanceSheet = {
 };
 
 const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
-const LOCAL_MEMBER_FINANCE_LOGIN = {
-  email: "local.member@lcbeenachi.test",
-  password: "password"
-};
-
+const devIdentityOptions: Array<{ identity: DevIdentity; label: string; description: string }> = [
+  { identity: "ranjith-treasurer", label: "Ranjith MR — Linked Treasurer", description: "Genuine member 26766860" },
+  { identity: "sajith-member", label: "Sajith K — Linked Normal Member", description: "Genuine member 4794369" },
+  { identity: "generic-president", label: "Generic President — Unlinked", description: "Truthful unlinked development account" },
+  { identity: "generic-secretary", label: "Generic Secretary — Unlinked", description: "Truthful unlinked development account" },
+  { identity: "generic-treasurer", label: "Generic Treasurer — Unlinked", description: "Truthful unlinked development account" },
+  { identity: "generic-member", label: "Generic Normal Member — Unlinked", description: "Truthful unlinked development account" }
+];
 type ClubProjectRecord = {
   id: number;
   club_id?: number;
@@ -142,15 +146,16 @@ type ClubProjectsMeta = { current_page: number; last_page: number; total: number
 type PaymentRecordingStatus = "initializing" | "ready" | "submitting" | "success" | "error";
 type PaymentRecordingMode = "cash" | "bank_transfer" | "upi" | "cheque" | "card" | "adjustment";
 
-type PaymentRecordingLogin = {
-  email: string;
-  password: string;
-};
-
 type BackendClubMembership = {
+  club_id?: number;
   club?: {
     id?: number;
   };
+  member: {
+    id: number;
+    member_code: string;
+    full_name: string;
+  } | null;
 };
 
 type BackendAuthenticatedUser = {
@@ -353,21 +358,6 @@ type ProfileDocumentFormState = {
   status: string;
   external_reference: string;
   remarks: string;
-};
-
-const LOCAL_PAYMENT_RECORDING_LOGINS: Record<Exclude<Role, "member">, PaymentRecordingLogin> = {
-  president: {
-    email: "president@lcbeenachi.test",
-    password: "password"
-  },
-  secretary: {
-    email: "secretary@lcbeenachi.test",
-    password: "password"
-  },
-  treasurer: {
-    email: "treasurer@lcbeenachi.test",
-    password: "password"
-  }
 };
 
 const PAYMENT_RECORDING_MODES: PaymentRecordingMode[] = [
@@ -610,9 +600,9 @@ type Activity = {
 
 const roleTestMembers: Member[] = [
   {
-    id: "MEM-001",
-    name: "Lion Bijesh",
-    dashboardName: "Lion Bijesh",
+    id: "GENERIC-PRESIDENT",
+    name: "LC Beenachi President",
+    dashboardName: "LC Beenachi President",
     clubRole: "President",
     status: "Active",
     bloodGroup: "O+",
@@ -627,9 +617,9 @@ const roleTestMembers: Member[] = [
     wishStatus: "Pending"
   },
   {
-    id: "MEM-002",
-    name: "Lion Secretary User",
-    dashboardName: "Lion Secretary User",
+    id: "GENERIC-SECRETARY",
+    name: "LC Beenachi Secretary",
+    dashboardName: "LC Beenachi Secretary",
     clubRole: "Secretary",
     status: "Active",
     bloodGroup: "A+",
@@ -644,9 +634,9 @@ const roleTestMembers: Member[] = [
     wishStatus: "Sent"
   },
   {
-    id: "MEM-003",
-    name: "Lion Treasurer User",
-    dashboardName: "Lion Treasurer User",
+    id: "GENERIC-TREASURER",
+    name: "LC Beenachi Treasurer",
+    dashboardName: "LC Beenachi Treasurer",
     clubRole: "Treasurer",
     status: "Active",
     bloodGroup: "B+",
@@ -661,9 +651,9 @@ const roleTestMembers: Member[] = [
     wishStatus: "Pending"
   },
   {
-    id: "MEM-004",
-    name: "Lion Ajith Kumar - Member",
-    dashboardName: "Lion Ajith Kumar",
+    id: "GENERIC-MEMBER",
+    name: "LC Beenachi Member",
+    dashboardName: "LC Beenachi Member",
     clubRole: "Member",
     status: "Active",
     bloodGroup: "AB+",
@@ -1353,6 +1343,8 @@ const MemberDataContext = createContext<MemberDataContextValue>({
   retry: () => undefined
 });
 
+const PersonalProfileContext = createContext(false);
+
 function useCurrentMemberData() {
   return useContext(MemberDataContext);
 }
@@ -1549,8 +1541,20 @@ function emptyFellowshipMonth(key: string, lifecycle: FellowshipMonthLifecycle =
   };
 }
 export default function Prototype() {
-  const [role, setRole] = useState<Role>("president");
-  const [screen, setScreen] = useState<Screen>("login");
+  return <DevAuthProvider><PrototypeGate /></DevAuthProvider>;
+}
+
+function PrototypeGate() {
+  const auth = useDevAuth();
+  if (auth.status === "loading") return <main className="shell"><section className="compactPanel"><h2>Development authentication</h2><div className="notice">Verifying the local development session...</div></section></main>;
+  if (auth.status === "disabled") return <main className="shell"><section className="compactPanel"><h2>Sign in unavailable</h2><div className="notice">Development test authentication is disabled for this host or environment.</div></section></main>;
+  if (auth.status === "error" || !auth.session) return <main className="shell"><section className="compactPanel"><h2>Development authentication failed</h2><div className="notice">{auth.error || "No verified development session is available."}</div></section></main>;
+  return <PrototypeWorkspace key={auth.session.identity} identity={auth.session.identity} role={auth.session.role} changeAuthIdentity={auth.switchIdentity} authError={auth.error} switchingIdentity={auth.switching} initialScreen={auth.restoredFromStorage ? "dashboard" : "login"} />;
+}
+
+function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, switchingIdentity, initialScreen }: { identity: DevIdentity; role: Role; changeAuthIdentity: (identity: DevIdentity) => Promise<boolean>; authError: string | null; switchingIdentity: boolean; initialScreen: Screen }) {
+  const { session } = useDevAuth();
+  const [screen, setScreen] = useState<Screen>(initialScreen);
   const [currentMembers, setCurrentMembers] = useState<Member[]>([]);
   const [memberStatus, setMemberStatus] = useState<MemberLoadStatus>("loading");
   const [memberLoadError, setMemberLoadError] = useState<string | null>(null);
@@ -1677,36 +1681,45 @@ export default function Prototype() {
       setAuthenticatedUserId(null);
 
       try {
-        const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
-        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
-          method: "POST",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify(login),
-          signal: controller.signal
-        });
-        if (!loginResponse.ok) throw new Error("Member authentication failed.");
-        const loginPayload = await loginResponse.json();
-        const token = loginPayload.token as string | undefined;
-        if (!token) throw new Error("Member authentication token is unavailable.");
-
+        if (!session) throw new Error("No verified development session is available.");
+        const token = session.token;
         const authHeaders = { Accept: "application/json", Authorization: "Bearer " + token };
-        const meResponse = await fetch(API_BASE_URL + "/auth/me", { headers: authHeaders, signal: controller.signal });
-        if (!meResponse.ok) throw new Error("Club context could not be loaded.");
-        const mePayload = await meResponse.json();
+        const mePayload = { user: session.user, club_memberships: [session.membership] };
         const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
         const authenticatedId = authenticatedUser?.id;
         const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
         const clubId = memberships?.[0]?.club?.id;
         if (typeof clubId !== "number") throw new Error("No active club context is available.");
 
-        const listResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members", { headers: authHeaders, signal: controller.signal });
-        if (!listResponse.ok) throw new Error("Current member data could not be loaded.");
-        const listPayload = await listResponse.json();
-        const importedRecords = ((listPayload.members as BackendMemberRecord[] | undefined) || []).filter(isImportedCurrentMember);
-        if (importedRecords.length !== 47) throw new Error("The expected 47 imported current members are not safely distinguishable.");
+        const activeMembership = (memberships || []).find(
+          (membership) =>
+            Number(membership.club_id ?? membership.club?.id) === Number(clubId)
+        );
 
-        let records = importedRecords;
-        if (role !== "member") {
+        const linkedMemberInfo = activeMembership?.member ?? null;
+
+        let records: BackendMemberRecord[] = [];
+        if (role === "member") {
+          if (!activeMembership || !linkedMemberInfo || !linkedMemberInfo.id) {
+            throw new Error("No genuine club member profile is linked.");
+          }
+          const profileResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members/me", { headers: authHeaders, signal: controller.signal });
+          if (!profileResponse.ok) {
+            throw new Error("No genuine club member profile is linked.");
+          }
+          const profilePayload = await profileResponse.json();
+          const selfRecord = profilePayload.member as BackendMemberRecord | undefined;
+          if (!selfRecord || Number(selfRecord.id) !== Number(linkedMemberInfo.id)) {
+            throw new Error("No genuine club member profile is linked.");
+          }
+          records = [selfRecord];
+        } else {
+          const listResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members", { headers: authHeaders, signal: controller.signal });
+          if (!listResponse.ok) throw new Error("Current member data could not be loaded.");
+          const listPayload = await listResponse.json();
+          const importedRecords = ((listPayload.members as BackendMemberRecord[] | undefined) || []).filter(isImportedCurrentMember);
+          if (importedRecords.length !== 47) throw new Error("The expected 47 imported current members are not safely distinguishable.");
+
           records = await Promise.all(importedRecords.map(async (record) => {
             const profileResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members/" + record.id, { headers: authHeaders, signal: controller.signal });
             if (!profileResponse.ok) throw new Error("An imported member profile could not be loaded.");
@@ -1740,7 +1753,7 @@ export default function Prototype() {
       cancelled = true;
       controller.abort();
     };
-  }, [role, memberRefreshKey]);
+  }, [role, memberRefreshKey, session]);
   const expenseTrimmed = totalFellowshipExpenseInput.trim();
   const isValidExpenseFormat = /^\d+(\.\d*)?$/.test(expenseTrimmed) || expenseTrimmed === ".";
   const parsedExpense = parseFloat(expenseTrimmed);
@@ -1820,9 +1833,17 @@ export default function Prototype() {
   const activeFellowshipMonthLabel = isJulyRotationActive ? "July 2026" : "June 2026";
   const activeConfirmationTitle = `Review & Confirm ${activeFellowshipMonthLabel} Sponsors`;
 
-  const activeMember = roleUser[role];
+  const resolvedAuthenticatedMember = authenticatedUserId !== null
+    ? currentMembers.find((m) => m.userId === authenticatedUserId)
+    : null;
+  const activeMember =
+    resolvedAuthenticatedMember ??
+    (role === "member" ? null : roleUser[role]);
   const canAccessFellowshipAdministration = role === "president" || role === "secretary";
   const canManageClubDocuments = role === "president" || role === "secretary";
+  const isPersonalFinanceScreen =
+    screen === "my-dues" ||
+    screen === "payment-history";
 
   function handleSetScreen(nextScreen: Screen) {
     if (nextScreen === "fellowship-queue") {
@@ -1989,54 +2010,8 @@ export default function Prototype() {
     [bloodGroup, currentMembers]
   );
 
-  function switchRole(nextRole: Role) {
-    setRole(nextRole);
-    setSelectedMember(null);
-    setSelectedUpdate(null);
-    setSelectedCommittee(null);
-    setSelectedEventMeeting(null);
-    setSelectedAnnouncement(null);
-    setSelectedDocument(null);
-    setSelectedPersonalDocumentId(null);
-    setSelectedAdministrativeDocumentId(null);
-    setDocumentEditDraft(null);
-    setSelectedActivity(null);
-    setProfileBackContext(null);
-    setSelectedSponsor(null);
-    setSelectedSponsorPayment(null);
-    setFellowshipConfirmationMessage(null);
-    setTotalFellowshipExpenseInput("10000");
-    setSponsorPayments({});
-    setSponsorPaymentHistories({});
-    setSponsorPaymentInputs({});
-    setIsFellowshipConfirmed(false);
-    setConfirmedSponsors([]);
-    setConfirmedSharePerSponsor(0);
-    setIsFellowshipMonthClosed(false);
-    setIsJulyRotationActive(false);
-    setJuneSnapshot(null);
-    setFellowshipOutstandingDues([]);
-    setLastRecordedPayment(null);
-    setHighlightedSponsor(null);
-    setExpandedHistories({});
-    setJulySelectedSponsors([]);
-    setJulyTempQueueStatuses({});
-    setJulyTotalFellowshipExpenseInput("");
-    setJulySponsorPayments({});
-    setJulySponsorPaymentHistories({});
-    setJulySponsorPaymentInputs({});
-    setIsJulyFellowshipConfirmed(false);
-    setJulyConfirmedSponsors([]);
-    setJulyConfirmedSharePerSponsor(0);
-    setJulyLastRecordedPayment(null);
-    setJulyHighlightedSponsor(null);
-    setJulyExpandedHistories({});
-    setScreen("dashboard");
-    setExpandedGroups([]);
-    setExpandedSubItems([]);
-    setCollectionDetail(null);
-    setEventMeetingSection(null);
-    setDashboardDetail(null);
+  function switchIdentity(nextIdentity: DevIdentity) {
+    void changeAuthIdentity(nextIdentity);
   }
 
   function navItemMatches(item: NavItem) {
@@ -2288,16 +2263,17 @@ export default function Prototype() {
         </div>
 
         <div className="prototypeSwitcher">
-          <span>Developer testing role switcher</span>
-          <small>Local development control only</small>
+          <span>Developer testing identity switcher</span>
+          <small>Linked and generic-unlinked local accounts</small>
           <select
-            aria-label="Prototype-only role switcher"
-            value={role}
-            onChange={(event) => switchRole(event.target.value as Role)}
+            aria-label="Prototype-only identity switcher"
+            value={identity}
+            disabled={switchingIdentity}
+            onChange={(event) => switchIdentity(event.target.value as DevIdentity)}
           >
-            {Object.entries(roleLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
+            {devIdentityOptions.map((option) => (
+              <option key={option.identity} value={option.identity}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -2374,145 +2350,174 @@ export default function Prototype() {
       </aside>
 
       <section className="workspace">
-        <Header role={roleLabels[role]} user={activeMember.dashboardName} screen={screen} reportDetail={reportDetail} navTitle={navDetailTitle(navDetail.parent, navDetail.title)} selectedMember={selectedMember} fellowshipConfirmationTitle={activeConfirmationTitle} backendMemberLabel={backendMemberHeaderLabel} />
-        {screen === "my-fellowship" && (
-          <ContextBack
-            parent="My Member Area"
-            onBack={() => {
-              setScreen("dashboard");
-              setExpandedGroups(role === "member" ? [] : ["My Member Area"]);
-            }}
-          />
-        )}
-        {screen === "my-documents" && (
-          <ContextBack
-            parent="My Member Area"
-            onBack={() => {
-              setScreen("dashboard");
-              setExpandedGroups(role === "member" ? [] : ["My Member Area"]);
-            }}
-          />
-        )}
-        {screen === "documents-administration" && canManageClubDocuments && (
-          <ContextBack
-            parent="Operations"
-            onBack={() => {
-              setScreen("operations-module");
-              setOperationsSection(null);
-              setExpandedGroups(["Operations"]);
-            }}
-          />
-        )}
-        {screen === "member-profile" && profileBackContext ? (
-          <ContextBack
-            parent={profileBackContext.screen === "nav-detail" ? (profileBackContext.title === "PST Profiles" ? "PST Profiles" : profileBackContext.title || "Back") : (profileBackContext.screen === "members" ? "Member Directory" : "Back")}
-            onBack={() => {
-              if (profileBackContext.screen === "nav-detail") {
-                setNavDetail({
-                  parent: profileBackContext.parent || "People",
-                  title: profileBackContext.title || "Detail"
-                });
-                setExpandedGroups([profileBackContext.parent || "People"]);
-              }
-              setScreen(profileBackContext.screen);
-              setProfileBackContext(null);
-            }}
-          />
+        {role === "member" && activeMember === null ? (
+          <>
+            <Header
+              role={roleLabels[role]}
+              user="Unavailable"
+              screen={screen}
+              reportDetail={reportDetail}
+              navTitle={navDetailTitle(navDetail.parent, navDetail.title)}
+              selectedMember={selectedMember}
+              fellowshipConfirmationTitle={activeConfirmationTitle}
+              backendMemberLabel={backendMemberHeaderLabel}
+            />
+            <section className="compactPanel">
+              <div className="notice">
+                Personal member information is unavailable. No genuine club member profile is linked.
+              </div>
+            </section>
+          </>
         ) : (
-          activeParent && screen !== "my-fellowship" && screen !== "my-documents" && screen !== "documents-administration" && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
-            <ContextBack
-              parent={screen === "fellowship-administration" ? "Operations" : activeParent}
-              onBack={() => {
-                if (screen === "fellowship-administration") {
+          <>
+            <Header
+              role={roleLabels[role]}
+              user={activeMember!.dashboardName}
+              screen={screen}
+              reportDetail={reportDetail}
+              navTitle={navDetailTitle(navDetail.parent, navDetail.title)}
+              selectedMember={selectedMember}
+              fellowshipConfirmationTitle={activeConfirmationTitle}
+              backendMemberLabel={backendMemberHeaderLabel}
+            />
+            {screen === "my-fellowship" && (
+              <ContextBack
+                parent="My Member Area"
+                onBack={() => {
+                  setScreen("dashboard");
+                  setExpandedGroups(role === "member" ? [] : ["My Member Area"]);
+                }}
+              />
+            )}
+            {screen === "my-documents" && (
+              <ContextBack
+                parent="My Member Area"
+                onBack={() => {
+                  setScreen("dashboard");
+                  setExpandedGroups(role === "member" ? [] : ["My Member Area"]);
+                }}
+              />
+            )}
+            {screen === "documents-administration" && canManageClubDocuments && (
+              <ContextBack
+                parent="Operations"
+                onBack={() => {
                   setScreen("operations-module");
                   setOperationsSection(null);
-                  setEventMeetingSection(null);
                   setExpandedGroups(["Operations"]);
-                  setLastRecordedPayment(null);
-                  setHighlightedSponsor(null);
-                } else {
-                  setScreen(parentScreen(activeParent));
-                  setCollectionDetail(null);
-                  setEventMeetingSection(null);
-                  setExpandedGroups([activeParent]);
-                }
-              }}
-            />
-          )
-        )}
-        {screen === "login" && <LoginScreen switchRole={switchRole} />}
-        {screen === "dashboard" && (
-          <Dashboard
-            role={role}
-            member={activeMember}
-            setScreen={handleSetScreen}
-            openDashboardDetail={openDashboardDetail}
-            totalOutstanding={totalOutstanding}
-            months={fellowshipMonths}
-            selectedMonthKey={selectedFellowshipMonthKey}
-            setSelectedMonthKey={setSelectedFellowshipMonthKey}
-          />
-        )}
-        {screen === "dashboard-detail" && dashboardDetail && (
-          <DashboardDetailScreen
-            detail={dashboardDetail}
-            role={role}
-            member={activeMember}
-            setScreen={handleSetScreen}
-            openDashboardDetail={openDashboardDetail}
-            amountPerSponsor={amountPerSponsor}
-          />
-        )}
-        {screen === "people-module" && (
-          <PeopleModule
-            section={peopleSection}
-            setSection={setPeopleSection}
-            role={role}
-            setScreen={handleSetScreen}
-            onSelectMember={selectAndOpenMemberProfile}
-          />
-        )}
-        {screen === "operations-module" && (
-          <OperationsModule
-            section={operationsSection}
-            setSection={setOperationsSection}
-            role={role}
-            member={activeMember}
-            setScreen={handleSetScreen}
-            tab={fellowshipTab}
-            setTab={setFellowshipTab}
-            selectedSponsors={activeSelectedSponsors}
-            setSelectedSponsors={activeSetSelectedSponsors}
-            tempQueueStatuses={activeTempQueueStatuses}
-            setTempQueueStatuses={activeSetTempQueueStatuses}
-            handleSelectSponsor={handleSelectSponsor}
-            handleSkipHoldSponsor={handleSkipHoldSponsor}
-            handleResetSponsor={handleResetSponsor}
-            setSelectedSponsor={setSelectedSponsor}
-            setSelectedSponsorPayment={setSelectedSponsorPayment}
-            fellowshipConfirmationMessage={fellowshipConfirmationMessage}
-            setFellowshipConfirmationMessage={setFellowshipConfirmationMessage}
-            totalFellowshipExpense={activeTotalFellowshipExpense}
-            totalFellowshipExpenseInput={activeTotalFellowshipExpenseInput}
-            setTotalFellowshipExpenseInput={activeSetTotalFellowshipExpenseInput}
-            sponsorPayments={activeSponsorPayments}
-            setSponsorPayments={activeSetSponsorPayments}
-            sponsorPaymentHistories={activeSponsorPaymentHistories}
-            setSponsorPaymentHistories={activeSetSponsorPaymentHistories}
-            sponsorPaymentInputs={activeSponsorPaymentInputs}
-            setSponsorPaymentInputs={activeSetSponsorPaymentInputs}
-            isFellowshipConfirmed={activeIsFellowshipConfirmed}
-            setIsFellowshipConfirmed={activeSetIsFellowshipConfirmed}
-            confirmedSponsors={activeConfirmedSponsors}
-            setConfirmedSponsors={activeSetConfirmedSponsors}
-            confirmedSharePerSponsor={activeConfirmedSharePerSponsor}
-            setConfirmedSharePerSponsor={activeSetConfirmedSharePerSponsor}
-            isFellowshipMonthClosed={isFellowshipMonthClosed}
-            setIsFellowshipMonthClosed={setIsFellowshipMonthClosed}
-            isJulyRotationActive={isJulyRotationActive}
-            setIsJulyRotationActive={setIsJulyRotationActive}
-            juneSnapshot={juneSnapshot}
-            setJuneSnapshot={setJuneSnapshot}
+                }}
+              />
+            )}
+            {screen === "member-profile" && profileBackContext ? (
+              <ContextBack
+                parent={profileBackContext.screen === "nav-detail" ? (profileBackContext.title === "PST Profiles" ? "PST Profiles" : profileBackContext.title || "Back") : (profileBackContext.screen === "members" ? "Member Directory" : "Back")}
+                onBack={() => {
+                  if (profileBackContext.screen === "nav-detail") {
+                    setNavDetail({
+                      parent: profileBackContext.parent || "People",
+                      title: profileBackContext.title || "Detail"
+                    });
+                    setExpandedGroups([profileBackContext.parent || "People"]);
+                  }
+                  setScreen(profileBackContext.screen);
+                  setProfileBackContext(null);
+                }}
+              />
+            ) : (
+              activeParent && screen !== "my-fellowship" && screen !== "my-documents" && screen !== "documents-administration" && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
+                <ContextBack
+                  parent={screen === "fellowship-administration" ? "Operations" : activeParent}
+                  onBack={() => {
+                    if (screen === "fellowship-administration") {
+                      setScreen("operations-module");
+                      setOperationsSection(null);
+                      setEventMeetingSection(null);
+                      setExpandedGroups(["Operations"]);
+                      setLastRecordedPayment(null);
+                      setHighlightedSponsor(null);
+                    } else {
+                      setScreen(parentScreen(activeParent));
+                      setCollectionDetail(null);
+                      setEventMeetingSection(null);
+                      setExpandedGroups([activeParent]);
+                    }
+                  }}
+                />
+              )
+            )}
+            {screen === "login" && <LoginScreen switchIdentity={switchIdentity} error={authError} switching={switchingIdentity} />}
+            {screen === "dashboard" && (
+              <Dashboard
+                role={role}
+                member={activeMember!}
+                setScreen={handleSetScreen}
+                openDashboardDetail={openDashboardDetail}
+                totalOutstanding={totalOutstanding}
+                months={fellowshipMonths}
+                selectedMonthKey={selectedFellowshipMonthKey}
+                setSelectedMonthKey={setSelectedFellowshipMonthKey}
+              />
+            )}
+            {screen === "dashboard-detail" && dashboardDetail && (
+              <DashboardDetailScreen
+                detail={dashboardDetail}
+                role={role}
+                member={activeMember!}
+                setScreen={handleSetScreen}
+                openDashboardDetail={openDashboardDetail}
+                amountPerSponsor={amountPerSponsor}
+              />
+            )}
+            {screen === "people-module" && (
+              <PeopleModule
+                section={peopleSection}
+                setSection={setPeopleSection}
+                role={role}
+                setScreen={handleSetScreen}
+                onSelectMember={selectAndOpenMemberProfile}
+              />
+            )}
+            {screen === "operations-module" && (
+              <OperationsModule
+                section={operationsSection}
+                setSection={setOperationsSection}
+                role={role}
+                member={activeMember!}
+                setScreen={handleSetScreen}
+                tab={fellowshipTab}
+                setTab={setFellowshipTab}
+                selectedSponsors={activeSelectedSponsors}
+                setSelectedSponsors={activeSetSelectedSponsors}
+                tempQueueStatuses={activeTempQueueStatuses}
+                setTempQueueStatuses={activeSetTempQueueStatuses}
+                handleSelectSponsor={handleSelectSponsor}
+                handleSkipHoldSponsor={handleSkipHoldSponsor}
+                handleResetSponsor={handleResetSponsor}
+                setSelectedSponsor={setSelectedSponsor}
+                setSelectedSponsorPayment={setSelectedSponsorPayment}
+                fellowshipConfirmationMessage={fellowshipConfirmationMessage}
+                setFellowshipConfirmationMessage={setFellowshipConfirmationMessage}
+                totalFellowshipExpense={activeTotalFellowshipExpense}
+                totalFellowshipExpenseInput={activeTotalFellowshipExpenseInput}
+                setTotalFellowshipExpenseInput={activeSetTotalFellowshipExpenseInput}
+                sponsorPayments={activeSponsorPayments}
+                setSponsorPayments={activeSetSponsorPayments}
+                sponsorPaymentHistories={activeSponsorPaymentHistories}
+                setSponsorPaymentHistories={activeSetSponsorPaymentHistories}
+                sponsorPaymentInputs={activeSponsorPaymentInputs}
+                setSponsorPaymentInputs={activeSetSponsorPaymentInputs}
+                isFellowshipConfirmed={activeIsFellowshipConfirmed}
+                setIsFellowshipConfirmed={activeSetIsFellowshipConfirmed}
+                confirmedSponsors={activeConfirmedSponsors}
+                setConfirmedSponsors={activeSetConfirmedSponsors}
+                confirmedSharePerSponsor={activeConfirmedSharePerSponsor}
+                setConfirmedSharePerSponsor={activeSetConfirmedSharePerSponsor}
+                isFellowshipMonthClosed={isFellowshipMonthClosed}
+                setIsFellowshipMonthClosed={setIsFellowshipMonthClosed}
+                isJulyRotationActive={isJulyRotationActive}
+                setIsJulyRotationActive={setIsJulyRotationActive}
+                juneSnapshot={juneSnapshot}
+                setJuneSnapshot={setJuneSnapshot}
             fellowshipOutstandingDues={fellowshipOutstandingDues}
             setFellowshipOutstandingDues={setFellowshipOutstandingDues}
             amountPerSponsor={activeAmountPerSponsor}
@@ -2615,7 +2620,7 @@ export default function Prototype() {
             section={clubVisibilitySection}
             setSection={setClubVisibilitySection}
             role={role}
-            member={activeMember}
+            member={activeMember!}
             selectedSponsors={selectedSponsors}
             setScreen={handleSetScreen}
             onSelectMember={selectAndOpenMemberProfile}
@@ -2710,22 +2715,22 @@ export default function Prototype() {
             />
           ) : null
         )}
-        {screen === "my-dues" && <FinanceBackend role={role} />}
-        {screen === "ledger" && <FinanceBackend role={role} />}
-        {screen === "member-dues-detail" && <FinanceBackend role={role} />}
-        {screen === "special-collection" && <FinanceBackend role={role} />}
-        {screen === "record-member-payment" && <FinanceBackend role={role} />}
+        {screen === "my-dues" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {screen === "ledger" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {screen === "member-dues-detail" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {screen === "special-collection" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {screen === "record-member-payment" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
         {screen === "collection-box" && <CollectionBoxReceipt role={role} />}
-        {screen === "receipt-list" && <FinanceBackend role={role} />}
-        {screen === "payment-history" && <FinanceBackend role={role} />}
+        {screen === "receipt-list" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {screen === "payment-history" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
         {screen === "member-import-preview" && <MemberImportPreview role={role} />}
-        {screen === "outstanding-dues" && <FinanceBackend role={role} />}
-        {screen === "collection-summary" && <FinanceBackend role={role} />}
+        {screen === "outstanding-dues" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {screen === "collection-summary" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
         {screen === "fellowship-payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={handleSetScreen} amountPerSponsor={amountPerSponsor} />}
         {screen === "events-meetings" && (
           <EventsMeetings
             role={role}
-            member={activeMember}
+            member={activeMember!}
             selectedSponsors={selectedSponsors}
             setScreen={handleSetScreen}
             selectedSection={eventMeetingSection}
@@ -2735,7 +2740,7 @@ export default function Prototype() {
         {screen === "event-meeting-detail" && (
           <EventMeetingDetail item={selectedEventMeeting} setScreen={handleSetScreen} />
         )}
-        {screen === "announcements" && <Announcements role={role} member={activeMember} selectedSponsors={selectedSponsors} />}
+        {screen === "announcements" && <Announcements role={role} member={activeMember!} selectedSponsors={selectedSponsors} />}
         {screen === "my-documents" && <MyDocuments role={role} onOpen={openPersonalDocument} />}
         {screen === "documents-administration" && (canManageClubDocuments ? (
           <DocumentAdministration onEdit={startAdministrativeDocumentEdit} />
@@ -2748,6 +2753,8 @@ export default function Prototype() {
         {screen === "donor-search" && <DonorSearch bloodGroup={bloodGroup} setBloodGroup={setBloodGroup} allowedDonors={allowedDonors} />}
         {screen === "reports" && <Reports />}
         {screen === "settings" && <Settings setScreen={handleSetScreen} />}
+          </>
+        )}
       </section>
     </main>
     </MemberDataContext.Provider>
@@ -2858,25 +2865,20 @@ function screenTitle(screen: Screen) {
   return names[screen];
 }
 
-function LoginScreen({ switchRole }: { switchRole: (role: Role) => void }) {
-  const testRoles: Array<{ role: Role; label: string; description: string }> = [
-    { role: "president", label: "President / Admin", description: "Open the local President test workflow" },
-    { role: "secretary", label: "Secretary", description: "Open the local Secretary test workflow" },
-    { role: "treasurer", label: "Treasurer", description: "Open the local Treasurer test workflow" },
-    { role: "member", label: "Normal Member", description: "Open the privacy-limited Member test workflow" }
-  ];
+function LoginScreen({ switchIdentity, error, switching }: { switchIdentity: (identity: DevIdentity) => void; error: string | null; switching: boolean }) {
   return (
     <section className="loginGrid">
       <div className="loginPanel">
-        <p className="eyebrow">DEVELOPMENT ROLE SWITCHER</p>
+        <p className="eyebrow">DEVELOPMENT IDENTITY SWITCHER</p>
         <h2>Local prototype access</h2>
-        <p>Choose a test role to inspect permissions and workflows.</p>
-        <div className="notice">This is not the production sign-in screen. These controls switch local test roles; they do not authenticate a real club member.</div>
+        <p>Choose a linked member identity or a generic-unlinked test account.</p>
+        <div className="notice">This is not the production sign-in screen. These controls authenticate local development accounts only.</div>
         <div className="notice memberHelperText"><strong>Local test credentials:</strong> handled internally by the existing prototype workflow. No imported member credentials or private information are displayed here.</div>
+        {error && <div className="notice">{error}</div>}
       </div>
       <div className="loginRoles">
-        {testRoles.map((item) => (
-          <button key={item.role} onClick={() => switchRole(item.role)}>
+        {devIdentityOptions.map((item) => (
+          <button key={item.identity} disabled={switching} onClick={() => switchIdentity(item.identity)}>
             {item.label}
             <span>{item.description}</span>
           </button>
@@ -3174,6 +3176,7 @@ function ClubFinanceReportsPanel({
   role: Role;
   displayMode: "reports" | "balance-sheet";
 }) {
+  const { session } = useDevAuth();
   const canViewClubFinanceReports = role === "president" || role === "secretary" || role === "treasurer";
   const [status, setStatus] = useState<ClubFinanceReportStatus>(canViewClubFinanceReports ? "loading" : "forbidden");
   const [report, setReport] = useState<ClubFinanceReports | null>(null);
@@ -3195,52 +3198,9 @@ function ClubFinanceReportsPanel({
       setBalanceSheet(null);
 
       try {
-        const login = LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
-
-        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(login)
-        });
-
-        if (loginResponse.status === 401) {
-          throw new Error("unauthenticated");
-        }
-
-        if (!loginResponse.ok) {
-          throw new Error("error");
-        }
-
-        const loginPayload = await loginResponse.json();
-        const token = loginPayload.token as string | undefined;
-
-        if (!token) {
-          throw new Error("unauthenticated");
-        }
-
-        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
-          headers: {
-            Accept: "application/json",
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (meResponse.status === 401) {
-          throw new Error("unauthenticated");
-        }
-
-        if (!meResponse.ok) {
-          throw new Error("error");
-        }
-
-        const mePayload = await meResponse.json();
-        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
-        const authenticatedId = authenticatedUser?.id;
-        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
-        const loadedClubId = memberships?.[0]?.club?.id;
+        if (!session) throw new Error("unauthenticated");
+        const token = session.token;
+        const loadedClubId = session.membership.club.id;
 
         if (typeof loadedClubId !== "number") {
           throw new Error("missing-club");
@@ -3306,7 +3266,7 @@ function ClubFinanceReportsPanel({
     return () => {
       cancelled = true;
     };
-  }, [canViewClubFinanceReports, role]);
+  }, [canViewClubFinanceReports, role, session]);
 
   const title = displayMode === "reports" ? "Club Finance Reports" : "Balance Sheet Summary";
 
@@ -4855,6 +4815,7 @@ function MemberFinanceSummaryPanel({
   compact?: boolean;
   showPendingItems?: boolean;
 }) {
+  const { session } = useDevAuth();
   const [status, setStatus] = useState<FinanceSummaryStatus>("loading");
   const [summary, setSummary] = useState<MemberFinanceSummary | null>(null);
 
@@ -4865,40 +4826,9 @@ function MemberFinanceSummaryPanel({
       setStatus("loading");
 
       try {
-        const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
-        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(login)
-        });
-
-        if (!loginResponse.ok) {
-          throw new Error("Member login failed");
-        }
-
-        const loginPayload = await loginResponse.json();
-        const token = loginPayload.token as string | undefined;
-
-        if (!token) {
-          throw new Error("Member token missing");
-        }
-
-        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
-          headers: {
-            Accept: "application/json",
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (!meResponse.ok) {
-          throw new Error("Club lookup failed");
-        }
-
-        const mePayload = await meResponse.json();
-        const clubId = mePayload.club_memberships?.[0]?.club?.id;
+        if (!session) throw new Error("Member session missing");
+        const token = session.token;
+        const clubId = session.membership.club.id;
 
         if (!clubId) {
           throw new Error("Club missing");
@@ -5763,6 +5693,7 @@ function Committees() {
   );
 }
 function MemberProfile({ member, role }: { member: Member; role: Role }) {
+  const isPersonal = useContext(PersonalProfileContext);
   const { token: sharedToken, clubId: sharedClubId } = useCurrentMemberData();
   const canManageProfileDocumentMetadata = role === "president" || role === "secretary";
   const [documentStatus, setDocumentStatus] = useState<ProfileDocumentStatus>("initializing");
@@ -5875,17 +5806,21 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
 
       try {
         const headers = { Accept: "application/json", Authorization: "Bearer " + sharedToken };
-        const profileResponse = await fetch(API_BASE_URL + "/clubs/" + sharedClubId + "/members/" + member.backendId, { headers });
+        const profileUrl = isPersonal
+          ? API_BASE_URL + "/clubs/" + sharedClubId + "/members/me"
+          : API_BASE_URL + "/clubs/" + sharedClubId + "/members/" + member.backendId;
+        const profileResponse = await fetch(profileUrl, { headers });
         if (!profileResponse.ok) throw new Error("The selected member profile is unavailable for this role.");
         const profilePayload = await profileResponse.json();
         const selectedBackendMember = profilePayload.member as BackendMemberRecord;
         if (selectedBackendMember.member_code !== member.id) throw new Error("The selected member identity did not match the requested Member ID.");
-        const documents = await fetchProfileDocuments(sharedToken, sharedClubId, member.backendId);
+        const resolvedMemberId = isPersonal ? selectedBackendMember.id : member.backendId;
+        const documents = await fetchProfileDocuments(sharedToken, sharedClubId, resolvedMemberId);
 
         if (!cancelled) {
           setDocumentToken(sharedToken);
           setDocumentClubId(sharedClubId);
-          setDocumentMemberId(member.backendId);
+          setDocumentMemberId(resolvedMemberId);
           setBackendMember(selectedBackendMember);
           setSelectedProfileStatus("ready");
           setProfileDocuments(documents);
@@ -5905,7 +5840,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
 
     loadSelectedProfile();
     return () => { cancelled = true; };
-  }, [member.backendId, member.id, sharedClubId, sharedToken]);
+  }, [isPersonal, member.backendId, member.id, sharedClubId, sharedToken]);
 
   function startMemberEdit() {
     if (!backendMember) return;
@@ -7534,6 +7469,7 @@ function PaymentsReceiptsHub({ setScreen }: { setScreen: (screen: Screen) => voi
 }
 
 function RecordMemberPayment({ role }: { role: Role }) {
+  const { session } = useDevAuth();
   const canRecordPayment = role === "president" || role === "secretary" || role === "treasurer";
   const [paymentStatus, setPaymentStatus] = useState<PaymentRecordingStatus>(canRecordPayment ? "initializing" : "ready");
   const [apiMessage, setApiMessage] = useState(
@@ -7633,44 +7569,10 @@ function RecordMemberPayment({ role }: { role: Role }) {
       setRecordedPayment(null);
 
       try {
-        const login = LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
-
-        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(login)
-        });
-
-        if (!loginResponse.ok) {
-          throw new Error("Payment role login failed");
-        }
-
-        const loginPayload = await loginResponse.json();
-        const token = loginPayload.token as string | undefined;
-
-        if (!token) {
-          throw new Error("Payment token missing");
-        }
-
-        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
-          headers: {
-            Accept: "application/json",
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (!meResponse.ok) {
-          throw new Error("Payment club lookup failed");
-        }
-
-        const mePayload = await meResponse.json();
-        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
-        const authenticatedId = authenticatedUser?.id;
-        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
-        const loadedClubId = memberships?.[0]?.club?.id;
+        if (!session) throw new Error("Payment session missing");
+        const token = session.token;
+        const authenticatedId = session.user.id;
+        const loadedClubId = session.membership.club.id;
 
         if (typeof loadedClubId !== "number") {
           throw new Error("Payment club missing");
@@ -7727,7 +7629,7 @@ function RecordMemberPayment({ role }: { role: Role }) {
     return () => {
       cancelled = true;
     };
-  }, [role, canRecordPayment]);
+  }, [role, canRecordPayment, session]);
 
   async function submitPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -7985,6 +7887,7 @@ function CollectionBoxReceipt({ role }: { role: Role }) {
 }
 
 function ReceiptList({ role }: { role: Role }) {
+  const { session } = useDevAuth();
   const canUsePstReceiptAccess = role === "president" || role === "secretary" || role === "treasurer";
   const [status, setStatus] = useState<ReceiptLookupStatus>("initializing");
   const [message, setMessage] = useState("Loading receipt access context...");
@@ -8016,46 +7919,10 @@ function ReceiptList({ role }: { role: Role }) {
       setReceipt(null);
 
       try {
-        const login = canUsePstReceiptAccess
-          ? LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">]
-          : LOCAL_MEMBER_FINANCE_LOGIN;
-
-        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(login)
-        });
-
-        if (!loginResponse.ok) {
-          throw new Error("Receipt role login failed");
-        }
-
-        const loginPayload = await loginResponse.json();
-        const token = loginPayload.token as string | undefined;
-
-        if (!token) {
-          throw new Error("Receipt token missing");
-        }
-
-        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
-          headers: {
-            Accept: "application/json",
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (!meResponse.ok) {
-          throw new Error("Receipt club lookup failed");
-        }
-
-        const mePayload = await meResponse.json();
-        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
-        const authenticatedId = authenticatedUser?.id;
-        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
-        const loadedClubId = memberships?.[0]?.club?.id;
+        if (!session) throw new Error("Receipt session missing");
+        const token = session.token;
+        const authenticatedId = session.user.id;
+        const loadedClubId = session.membership.club.id;
 
         if (typeof loadedClubId !== "number") {
           throw new Error("Receipt club missing");
@@ -8146,7 +8013,7 @@ function ReceiptList({ role }: { role: Role }) {
     return () => {
       cancelled = true;
     };
-  }, [canUsePstReceiptAccess, role]);
+  }, [canUsePstReceiptAccess, role, session]);
 
   async function loadIssuedReceipt() {
     if (!receiptToken || !receiptClubId || !selectedReceiptMemberId || !receiptPaymentId.trim()) {
@@ -8305,6 +8172,7 @@ function ReceiptList({ role }: { role: Role }) {
 }
 
 function PaymentHistory({ role }: { role: Role }) {
+  const { session } = useDevAuth();
   const canUseSelectedMemberHistory = role === "president" || role === "secretary" || role === "treasurer";
   const [status, setStatus] = useState<PaymentHistoryStatus>("initializing");
   const [message, setMessage] = useState("Loading payment history access context...");
@@ -8404,46 +8272,10 @@ function PaymentHistory({ role }: { role: Role }) {
       setMeta(null);
 
       try {
-        const login = canUseSelectedMemberHistory
-          ? LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">]
-          : LOCAL_MEMBER_FINANCE_LOGIN;
-
-        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(login)
-        });
-
-        if (!loginResponse.ok) {
-          throw new Error("Payment history login failed.");
-        }
-
-        const loginPayload = await loginResponse.json();
-        const token = loginPayload.token as string | undefined;
-
-        if (!token) {
-          throw new Error("Payment history token missing.");
-        }
-
-        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
-          headers: {
-            Accept: "application/json",
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (!meResponse.ok) {
-          throw new Error("Payment history club lookup failed.");
-        }
-
-        const mePayload = await meResponse.json();
-        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
-        const authenticatedId = authenticatedUser?.id;
-        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
-        const loadedClubId = memberships?.[0]?.club?.id;
+        if (!session) throw new Error("Payment history session missing.");
+        const token = session.token;
+        const authenticatedId = session.user.id;
+        const loadedClubId = session.membership.club.id;
 
         if (typeof loadedClubId !== "number") {
           throw new Error("No active club context is available for payment history.");
@@ -8524,7 +8356,7 @@ function PaymentHistory({ role }: { role: Role }) {
     return () => {
       cancelled = true;
     };
-  }, [canUseSelectedMemberHistory, role]);
+  }, [canUseSelectedMemberHistory, role, session]);
 
   function updateSelectedHistoryMember(memberId: number) {
     setSelectedHistoryMemberId(memberId);
@@ -8715,6 +8547,7 @@ function memberImportCommitStatusLabel(status?: string | null): string {
 }
 
 function MemberImportPreview({ role }: { role: Role }) {
+  const { session } = useDevAuth();
   const canUseMemberImportPreview = role === "president" || role === "secretary";
   const [status, setStatus] = useState<MemberImportPreviewStatus>(canUseMemberImportPreview ? "initializing" : "ready");
   const [message, setMessage] = useState(
@@ -8760,44 +8593,10 @@ function MemberImportPreview({ role }: { role: Role }) {
       resetMemberImportCommitState();
 
       try {
-        const login = LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
-
-        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(login)
-        });
-
-        if (!loginResponse.ok) {
-          throw new Error(loginResponse.status === 401 ? "Please sign in again before previewing member rows." : "Member import preview login failed.");
-        }
-
-        const loginPayload = await loginResponse.json();
-        const token = loginPayload.token as string | undefined;
-
-        if (!token) {
-          throw new Error("Member import preview token missing.");
-        }
-
-        const meResponse = await fetch(API_BASE_URL + "/auth/me", {
-          headers: {
-            Accept: "application/json",
-            Authorization: "Bearer " + token
-          }
-        });
-
-        if (!meResponse.ok) {
-          throw new Error(meResponse.status === 403 ? "This role is not authorized for member import preview." : "No active club context is available for member import preview.");
-        }
-
-        const mePayload = await meResponse.json();
-        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
-        const authenticatedId = authenticatedUser?.id;
-        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
-        const loadedClubId = memberships?.[0]?.club?.id;
+        if (!session) throw new Error("Member import preview session missing.");
+        const token = session.token;
+        const authenticatedId = session.user.id;
+        const loadedClubId = session.membership.club.id;
 
         if (typeof loadedClubId !== "number") {
           throw new Error("No active club context is available for member import preview.");
@@ -8826,7 +8625,7 @@ function MemberImportPreview({ role }: { role: Role }) {
     return () => {
       cancelled = true;
     };
-  }, [canUseMemberImportPreview, role]);
+  }, [canUseMemberImportPreview, role, session]);
 
   async function runMemberImportPreview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -9351,6 +9150,7 @@ function EventsMeetings({
   selectedSection?: EventMeetingSection | null;
   onSelectEventMeeting?: (item: BackendEventMeeting) => void;
 }) {
+  const { session } = useDevAuth();
   const canManageEvents = role === "president" || role === "secretary";
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "missing-club" | "unauthenticated" | "forbidden" | "error">("loading");
   const [message, setMessage] = useState("Loading Events & Meetings from the backend...");
@@ -9374,30 +9174,10 @@ function EventsMeetings({
       setCancelReason("");
 
       try {
-        const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
-        const loginResponse = await fetch(API_BASE_URL + "/auth/login", {
-          method: "POST",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify(login),
-          signal: controller.signal
-        });
-
-        if (loginResponse.status === 401) throw new Error("unauthenticated");
-        if (!loginResponse.ok) throw new Error("Event role login failed.");
-
-        const loginPayload = await loginResponse.json();
-        const loadedToken = loginPayload.token as string | undefined;
-        if (!loadedToken) throw new Error("Event token missing.");
-
+        if (!session) throw new Error("unauthenticated");
+        const loadedToken = session.token;
         const authHeaders = { Accept: "application/json", Authorization: "Bearer " + loadedToken };
-        const meResponse = await fetch(API_BASE_URL + "/auth/me", { headers: authHeaders, signal: controller.signal });
-        if (meResponse.status === 401) throw new Error("unauthenticated");
-        if (meResponse.status === 403) throw new Error("forbidden");
-        if (!meResponse.ok) throw new Error("Unable to load active club context for Events & Meetings.");
-
-        const mePayload = await meResponse.json();
-        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
-        const loadedClubId = memberships?.[0]?.club?.id;
+        const loadedClubId = session.membership.club.id;
         if (typeof loadedClubId !== "number") throw new Error("missing-club");
 
         const url = API_BASE_URL + "/clubs/" + loadedClubId + "/events" + eventMeetingQuery(selectedSection, canManageEvents);
@@ -9435,7 +9215,7 @@ function EventsMeetings({
     loadEvents();
 
     return () => controller.abort();
-  }, [role, selectedSection, canManageEvents, refreshKey]);
+  }, [role, selectedSection, canManageEvents, refreshKey, session]);
 
   function sectionForEvent(event: BackendEventMeeting): EventMeetingSection {
     if (event.status === "draft") return "Meeting Notices";
@@ -9885,6 +9665,7 @@ function clubProjectForm(project: ClubProjectRecord): ClubProjectForm {
 }
 
 function ProjectsActivities({ role, setScreen }: { role: Role; setScreen: (screen: Screen) => void }) {
+  const { session } = useDevAuth();
   const canManage = role === "president" || role === "secretary";
   const [token, setToken] = useState<string | null>(null);
   const [clubId, setClubId] = useState<number | null>(null);
@@ -9959,26 +9740,18 @@ function ProjectsActivities({ role, setScreen }: { role: Role; setScreen: (scree
     setMessage("Loading role-authorized Projects and Activities...");
     async function initialize() {
       try {
-        const login = role === "member" ? LOCAL_MEMBER_FINANCE_LOGIN : LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">];
-        const loginResponse = await fetch(`${API_BASE_URL}/auth/login`, {
-          method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(login)
-        });
-        if (!loginResponse.ok) throw new Error("Projects role login failed.");
-        const loginPayload = await loginResponse.json() as { token?: string };
-        if (!loginPayload.token) throw new Error("Projects access token is missing.");
-        const meResponse = await fetch(`${API_BASE_URL}/auth/me`, { headers: { Accept: "application/json", Authorization: `Bearer ${loginPayload.token}` } });
-        if (!meResponse.ok) throw new Error("Active club context is unavailable.");
-        const me = await meResponse.json() as { club_memberships?: BackendClubMembership[] };
-        const activeClubId = me.club_memberships?.[0]?.club?.id;
+        if (!session) throw new Error("Projects session missing.");
+        const accessToken = session.token;
+        const activeClubId = session.membership.club.id;
         if (typeof activeClubId !== "number") throw new Error("Active club context is unavailable.");
-        if (!cancelled) { setToken(loginPayload.token); setClubId(activeClubId); await loadList(loginPayload.token, activeClubId, 1); }
+        if (!cancelled) { setToken(accessToken); setClubId(activeClubId); await loadList(accessToken, activeClubId, 1); }
       } catch (error) {
         if (!cancelled) { setState("error"); setMessage(error instanceof Error ? error.message : "Projects and Activities are unavailable."); }
       }
     }
     void initialize();
     return () => { cancelled = true; };
-  }, [role]);
+  }, [role, session]);
 
   async function openRecord(id: number) {
     if (!token || !clubId) return;
@@ -10174,7 +9947,7 @@ function PersonalMemberIdentityState({ children }: { children: (member: Member) 
 function PersonalMemberProfile({ role }: { role: Role }) {
   return (
     <PersonalMemberIdentityState>
-      {(member) => <MemberProfile key={member.backendId} member={member} role={role} />}
+      {(member) => <PersonalProfileContext.Provider value><MemberProfile key={member.backendId} member={member} role={role} /></PersonalProfileContext.Provider>}
     </PersonalMemberIdentityState>
   );
 }

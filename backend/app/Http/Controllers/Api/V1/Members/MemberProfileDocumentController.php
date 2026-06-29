@@ -149,13 +149,17 @@ class MemberProfileDocumentController extends Controller
 
     private function userCanReadMemberDocuments(User $user, Club $club, Member $member): bool
     {
+        if ((int) $member->user_id === (int) $user->id) {
+            return true;
+        }
+
         $roleSlug = $this->activeRoleSlug($user, $club);
 
         if (in_array($roleSlug, self::OFFICER_READ_ROLE_SLUGS, true)) {
             return true;
         }
 
-        return $roleSlug === 'member' && (int) $member->user_id === (int) $user->id;
+        return false;
     }
 
     private function userCanWriteMemberDocuments(User $user, Club $club): bool
