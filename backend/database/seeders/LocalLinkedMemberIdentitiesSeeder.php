@@ -15,6 +15,20 @@ class LocalLinkedMemberIdentitiesSeeder extends Seeder
 {
     private const IDENTITIES = [
         [
+            'name' => 'Bijesh K G',
+            'email' => 'bijesh.president@lcbeenachi.test',
+            'role_slug' => 'president-admin',
+            'member_code' => '4794370',
+            'member_name' => 'Bijesh K G',
+        ],
+        [
+            'name' => 'Rajeesh PR',
+            'email' => 'rajeesh.secretary@lcbeenachi.test',
+            'role_slug' => 'secretary',
+            'member_code' => '26766796',
+            'member_name' => 'Rajeesh PR',
+        ],
+        [
             'name' => 'Ranjith MR',
             'email' => 'ranjith.treasurer@lcbeenachi.test',
             'role_slug' => 'treasurer',

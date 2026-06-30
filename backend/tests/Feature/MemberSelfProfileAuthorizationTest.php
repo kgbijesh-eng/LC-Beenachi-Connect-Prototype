@@ -27,6 +27,18 @@ class MemberSelfProfileAuthorizationTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         $this->club = Club::where('code', 'LCB')->firstOrFail();
+        Member::create([
+            'club_id' => $this->club->id,
+            'member_code' => '4794370',
+            'full_name' => 'Bijesh K G',
+            'status' => 'active',
+        ]);
+        Member::create([
+            'club_id' => $this->club->id,
+            'member_code' => '26766796',
+            'full_name' => 'Rajeesh PR',
+            'status' => 'active',
+        ]);
         $this->ranjith = Member::create([
             'club_id' => $this->club->id,
             'member_code' => '26766860',

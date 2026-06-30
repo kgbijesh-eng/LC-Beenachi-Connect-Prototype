@@ -94,6 +94,8 @@ type ClubBalanceSheet = {
 
 const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
 const devIdentityOptions: Array<{ identity: DevIdentity; label: string; description: string }> = [
+  { identity: "bijesh-president", label: "Bijesh K. G. — Linked President", description: "Genuine member 4794370" },
+  { identity: "rajeesh-secretary", label: "Rajeesh P. R. — Linked Secretary", description: "Genuine member 26766796" },
   { identity: "ranjith-treasurer", label: "Ranjith MR — Linked Treasurer", description: "Genuine member 26766860" },
   { identity: "sajith-member", label: "Sajith K — Linked Normal Member", description: "Genuine member 4794369" },
   { identity: "generic-president", label: "Generic President — Unlinked", description: "Truthful unlinked development account" },

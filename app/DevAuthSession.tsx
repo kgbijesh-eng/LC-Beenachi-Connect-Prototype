@@ -4,6 +4,8 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 
 export type DevRole = "president" | "secretary" | "treasurer" | "member";
 export type DevIdentity =
+  | "bijesh-president"
+  | "rajeesh-secretary"
   | "ranjith-treasurer"
   | "sajith-member"
   | "generic-president"
@@ -50,6 +52,8 @@ type TestAccount = {
   linkedMember?: { memberCode: string; fullName: string };
 };
 const TEST_ACCOUNTS: Record<DevIdentity, TestAccount> = {
+  "bijesh-president": { email: "bijesh.president@lcbeenachi.test", password: "password", role: "president", roleSlug: "president-admin", linkedMember: { memberCode: "4794370", fullName: "Bijesh K G" } },
+  "rajeesh-secretary": { email: "rajeesh.secretary@lcbeenachi.test", password: "password", role: "secretary", roleSlug: "secretary", linkedMember: { memberCode: "26766796", fullName: "Rajeesh PR" } },
   "ranjith-treasurer": { email: "ranjith.treasurer@lcbeenachi.test", password: "password", role: "treasurer", roleSlug: "treasurer", linkedMember: { memberCode: "26766860", fullName: "Ranjith MR" } },
   "sajith-member": { email: "sajith.member@lcbeenachi.test", password: "password", role: "member", roleSlug: "member", linkedMember: { memberCode: "4794369", fullName: "Sajith K" } },
   "generic-president": { email: "president@lcbeenachi.test", password: "password", role: "president", roleSlug: "president-admin" },

@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Club;
+use App\Models\ClubMembership;
 use App\Models\Member;
+use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\LocalLinkedMemberIdentitiesSeeder;
@@ -25,6 +27,18 @@ class Milestone3hfNormalMemberIdentityTest extends TestCase
 
         Member::create([
             'club_id' => $this->club->id,
+            'member_code' => '4794370',
+            'full_name' => 'Bijesh K G',
+            'status' => 'active',
+        ]);
+        Member::create([
+            'club_id' => $this->club->id,
+            'member_code' => '26766796',
+            'full_name' => 'Rajeesh PR',
+            'status' => 'active',
+        ]);
+        Member::create([
+            'club_id' => $this->club->id,
             'member_code' => '26766860',
             'full_name' => 'Ranjith MR',
             'status' => 'active',
@@ -42,6 +56,8 @@ class Milestone3hfNormalMemberIdentityTest extends TestCase
     public function test_auth_me_exposes_only_verified_linked_identity_fields(): void
     {
         $expectations = [
+            'bijesh.president@lcbeenachi.test' => ['president-admin', '4794370', 'Bijesh K G'],
+            'rajeesh.secretary@lcbeenachi.test' => ['secretary', '26766796', 'Rajeesh PR'],
             'ranjith.treasurer@lcbeenachi.test' => ['treasurer', '26766860', 'Ranjith MR'],
             'sajith.member@lcbeenachi.test' => ['member', '4794369', 'Sajith K'],
         ];
@@ -97,17 +113,40 @@ class Milestone3hfNormalMemberIdentityTest extends TestCase
             ->assertJsonPath('member.member_code', '4794369');
     }
 
-    public function test_linking_is_idempotent_and_uses_codes_instead_of_numeric_database_ids(): void
+    public function test_linking_is_idempotent_and_preserves_all_fixture_identifiers(): void
     {
-        $originalLinks = Member::whereIn('member_code', ['26766860', '4794369'])
-            ->pluck('user_id', 'member_code')
+        $memberCodes = ['4794370', '26766796', '26766860', '4794369'];
+        $emails = [
+            'bijesh.president@lcbeenachi.test',
+            'rajeesh.secretary@lcbeenachi.test',
+            'ranjith.treasurer@lcbeenachi.test',
+            'sajith.member@lcbeenachi.test',
+        ];
+        $originalUserIds = User::whereIn('email', $emails)->pluck('id', 'email')->all();
+        $originalMemberIds = Member::whereIn('member_code', $memberCodes)->pluck('id', 'member_code')->all();
+        $originalLinks = Member::whereIn('member_code', $memberCodes)->pluck('user_id', 'member_code')->all();
+        $originalMembershipIds = ClubMembership::where('club_id', $this->club->id)
+            ->whereIn('user_id', array_values($originalUserIds))
+            ->pluck('id', 'user_id')
             ->all();
+        $originalRoleCount = Role::count();
 
         $this->seed(LocalLinkedMemberIdentitiesSeeder::class);
+        $this->seed(LocalLinkedMemberIdentitiesSeeder::class);
 
-        $this->assertSame($originalLinks, Member::whereIn('member_code', ['26766860', '4794369'])
-            ->pluck('user_id', 'member_code')
+        $this->assertSame($originalUserIds, User::whereIn('email', $emails)->pluck('id', 'email')->all());
+        $this->assertSame($originalMemberIds, Member::whereIn('member_code', $memberCodes)->pluck('id', 'member_code')->all());
+        $this->assertSame($originalLinks, Member::whereIn('member_code', $memberCodes)->pluck('user_id', 'member_code')->all());
+        $this->assertSame($originalMembershipIds, ClubMembership::where('club_id', $this->club->id)
+            ->whereIn('user_id', array_values($originalUserIds))
+            ->pluck('id', 'user_id')
             ->all());
+        $this->assertSame(4, User::whereIn('email', $emails)->count());
+        $this->assertSame(4, ClubMembership::where('club_id', $this->club->id)
+            ->whereIn('user_id', array_values($originalUserIds))
+            ->count());
+        $this->assertSame(4, Member::whereIn('member_code', $memberCodes)->whereNotNull('user_id')->count());
+        $this->assertSame($originalRoleCount, Role::count());
     }
 
     public function test_linking_stops_when_a_stable_code_resolves_to_the_wrong_name(): void
