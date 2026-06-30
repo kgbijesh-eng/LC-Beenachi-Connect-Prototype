@@ -5695,6 +5695,13 @@ function Committees() {
 function MemberProfile({ member, role }: { member: Member; role: Role }) {
   const isPersonal = useContext(PersonalProfileContext);
   const { token: sharedToken, clubId: sharedClubId } = useCurrentMemberData();
+  const { session } = useDevAuth();
+  const linkedMemberCode = session?.membership?.member?.member_code;
+  const isOwnProfile = Boolean(
+    linkedMemberCode &&
+    member.id &&
+    linkedMemberCode === member.id
+  );
   const canManageProfileDocumentMetadata = role === "president" || role === "secretary";
   const [documentStatus, setDocumentStatus] = useState<ProfileDocumentStatus>("initializing");
   const [documentMessage, setDocumentMessage] = useState("Loading profile document metadata...");
@@ -6197,7 +6204,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
         )}
       </div>
       <div className="notice memberHelperText">Member Details: review the member profile here, then use the finance summary and Profile Documents metadata section below. Backend authorization remains the source of truth.</div>
-      <ProfileUpdatesBackend role={role} mode="own" />
+      {isOwnProfile && <ProfileUpdatesBackend role={role} mode="own" />}
       <MemberFinanceSummaryPanel role={role} compact />
       {member.backendId && <FinanceBackend role={role} memberId={member.backendId} />}
       {renderProfileDocumentsSection()}
