@@ -113,11 +113,12 @@ class Milestone3bhClubFinanceReportsBalanceSheetFrontendDisplayNarrowImplementat
         $this->assertStringContainsString('Members continue to see only member-safe finance information.', $component);
 
         $guardPosition = strpos($component, 'if (!canViewClubFinanceReports) {');
-        $loginPosition = strpos($component, 'const login = LOCAL_PAYMENT_RECORDING_LOGINS');
+        $tokenPosition = strpos($component, 'const token = session.token;');
 
         $this->assertNotFalse($guardPosition);
-        $this->assertNotFalse($loginPosition);
-        $this->assertLessThan($loginPosition, $guardPosition, 'Member guard must run before officer login and club-level report API calls.');
+        $this->assertNotFalse($tokenPosition);
+        $this->assertStringContainsString('const { session } = useDevAuth();', $component);
+        $this->assertLessThan($tokenPosition, $guardPosition, 'Member guard must run before authenticated session data is used for club-level report API calls.');
     }
 
     public function test_frontend_includes_required_safe_states(): void

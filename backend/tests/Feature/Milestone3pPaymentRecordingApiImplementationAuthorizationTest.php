@@ -170,6 +170,12 @@ class Milestone3pPaymentRecordingApiImplementationAuthorizationTest extends Test
             'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/history',
             'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
             'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
+            'GET|HEAD api/v1/clubs/{club}/finance/members/{member}/payments',
+            'GET|HEAD api/v1/clubs/{club}/finance/payments/{payment}',
+            'GET|HEAD api/v1/clubs/{club}/finance/receipts/{receipt}',
+            'GET|HEAD api/v1/clubs/{club}/finance/me/payments',
+            'POST api/v1/clubs/{club}/finance/members/{member}/payments',
+            'POST api/v1/clubs/{club}/finance/payments/{payment}/void',
             'POST api/v1/clubs/{club}/members/{member}/payments',
             'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
         ], $paymentRoutes);

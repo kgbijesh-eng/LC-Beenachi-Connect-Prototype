@@ -7,21 +7,18 @@ class Milestone3arPaymentRecordingFrontendNarrowImplementationTest extends TestC
     public function test_payment_recording_frontend_uses_existing_backend_api_and_authorized_roles(): void
     {
         $page = $this->frontendPage();
+        $financeBackend = $this->financeBackend();
 
-        $this->assertStringContainsString('type PaymentRecordingStatus = "initializing" | "ready" | "submitting" | "success" | "error";', $page);
-        $this->assertStringContainsString('const LOCAL_PAYMENT_RECORDING_LOGINS: Record<Exclude<Role, "member">, PaymentRecordingLogin>', $page);
-        $this->assertStringContainsString('email: "president@lcbeenachi.test"', $page);
-        $this->assertStringContainsString('email: "secretary@lcbeenachi.test"', $page);
-        $this->assertStringContainsString('email: "treasurer@lcbeenachi.test"', $page);
-
-        $component = $this->recordMemberPaymentComponent($page);
-
-        $this->assertStringContainsString('const canRecordPayment = role === "president" || role === "secretary" || role === "treasurer";', $component);
-        $this->assertStringContainsString('Payment recording is available only to President, Secretary, and Treasurer roles with backend payment permission.', $component);
-        $this->assertStringContainsString('Members can view their own dues, but cannot see or use payment recording controls.', $component);
-        $this->assertStringContainsString('API_BASE_URL + "/clubs/" + paymentClubId + "/members/" + selectedMemberId + "/payments"', $component);
-        $this->assertStringContainsString('Payment recorded. Member finance summary refreshed from backend.', $component);
-        $this->assertStringContainsString('Receipt generation is not part of Milestone 3AR.', $component);
+        $this->assertStringContainsString('import FinanceBackend from "./FinanceBackend";', $page);
+        $this->assertStringContainsString('import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";', $page);
+        $this->assertStringContainsString('{screen === "record-member-payment" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}', $page);
+        $this->assertStringContainsString('const { session } = useDevAuth();', $financeBackend);
+        $this->assertStringContainsString('const management=role!=="member";', $financeBackend);
+        $this->assertStringContainsString('if(!session)throw new Error("No verified development session is available.");', $financeBackend);
+        $this->assertStringContainsString('const access=session.token;const club=session.membership.club.id;', $financeBackend);
+        $this->assertStringContainsString('api(`/clubs/${clubId}/finance/members/${selected}/payments`', $financeBackend);
+        $this->assertStringContainsString('(role==="president"||role==="treasurer")', $financeBackend);
+        $this->assertStringNotContainsString('LOCAL_PAYMENT_RECORDING_LOGINS', $financeBackend);
     }
 
     public function test_payment_submit_payload_contains_only_frontend_allowed_payment_fields(): void
@@ -101,6 +98,15 @@ class Milestone3arPaymentRecordingFrontendNarrowImplementationTest extends TestC
     private function frontendPage(): string
     {
         $path = base_path('../app/page.tsx');
+
+        $this->assertFileExists($path);
+
+        return file_get_contents($path);
+    }
+
+    private function financeBackend(): string
+    {
+        $path = base_path('../app/FinanceBackend.tsx');
 
         $this->assertFileExists($path);
 

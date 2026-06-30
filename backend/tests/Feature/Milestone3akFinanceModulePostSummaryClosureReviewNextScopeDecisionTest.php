@@ -143,43 +143,17 @@ class Milestone3akFinanceModulePostSummaryClosureReviewNextScopeDecisionTest ext
         }
     }
 
-    public function test_3ak_does_not_register_new_finance_dashboard_report_reminder_excel_or_workflow_routes(): void
+    public function test_current_report_reminder_and_import_route_matrix_is_exact(): void
     {
-        $blockedRouteFragments = [
-            'dashboard',
-            'report',
-            'reports',
-            'reminder',
-            'reminders',
-            'excel',
-            'import',
-            'imports',
-            'correction',
-            'corrections',
-            'reversal',
-            'reversals',
-            'cancellation',
-            'cancellations',
-            'special-collection',
-            'special-collections',
-            'fellowship',
-        ];
+        $routes = collect(Route::getRoutes())
+            ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->filter(fn (string $route): bool => str_contains($route, 'report') || str_contains($route, 'reminder') || str_contains($route, 'import'))
+            ->values()->all();
 
-        foreach (Route::getRoutes() as $route) {
-            $uri = $route->uri();
+        $this->assertSame(Milestone3gPaymentRecordingScopeGateTest::CURRENT_REPORT_REMINDER_IMPORT_ROUTE_MATRIX, $routes);
 
-            if (in_array($uri, [
-                'api/v1/clubs/{club}/finance/reports',
-                'api/v1/clubs/{club}/finance/balance-sheet',
-                'api/v1/clubs/{club}/members/import-preview',
-                'api/v1/clubs/{club}/members/import-commit',
-            ], true)) {
-                continue;
-            }
-
-            foreach ($blockedRouteFragments as $blockedRouteFragment) {
-                $this->assertStringNotContainsString($blockedRouteFragment, $uri);
-            }
+        foreach (['dashboard', 'excel', 'correction', 'reversal', 'cancellation', 'special-collection', 'fellowship'] as $blockedFragment) {
+            $this->assertFalse(collect(Route::getRoutes())->contains(fn ($route): bool => str_contains($route->uri(), $blockedFragment)));
         }
     }
 

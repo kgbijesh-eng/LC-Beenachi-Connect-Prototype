@@ -75,12 +75,20 @@ class Milestone3eoMemberDirectorySelectedMemberReadHumanOperatorRetestScopeGateT
             'app/page.tsx must define selectAndOpenMemberProfile'
         );
 
-        // 3. MemberProfile uses selectedMember with fallback to activeMember / current logged-in member
-        $this->assertTrue(
-            str_contains($code, 'member={selectedMember ?? activeMember}') ||
-            str_contains($code, 'member={selectedMember || activeMember}'),
-            'app/page.tsx must pass selectedMember ?? activeMember or selectedMember || activeMember fallback to MemberProfile'
+        // 3. Directory selection and ownership-derived personal profile reads remain separate.
+        $this->assertStringContainsString(
+            'selectedMember ? <MemberProfile key={selectedMember.backendId} member={selectedMember} role={role} /> : <PersonalMemberProfile role={role} />',
+            $code
         );
+        $this->assertStringContainsString('const clubId = memberships?.[0]?.club?.id;', $code);
+        $this->assertStringContainsString('if (role === "member") {', $code);
+        $this->assertStringContainsString('API_BASE_URL + "/clubs/" + clubId + "/members/me"', $code);
+        $this->assertStringContainsString(
+            'if (!selfRecord || Number(selfRecord.id) !== Number(linkedMemberInfo.id))',
+            $code
+        );
+        $this->assertStringContainsString('records = [selfRecord];', $code);
+        $this->assertStringNotContainsString('API_BASE_URL + "/clubs/" + loadedClubId + "/members/me"', $code);
 
         // 4. general/direct navigation clears selectedMember
         $this->assertTrue(
@@ -88,13 +96,21 @@ class Milestone3eoMemberDirectorySelectedMemberReadHumanOperatorRetestScopeGateT
             'app/page.tsx must clear selectedMember to null'
         );
 
-        // 5. role switch clears selectedMember
-        $switchRolePos = strpos($code, 'function switchRole(');
-        $this->assertNotFalse($switchRolePos, 'app/page.tsx must define function switchRole');
-        $switchRoleCode = substr($code, $switchRolePos, 300);
-        $this->assertTrue(
-            str_contains($switchRoleCode, 'setSelectedMember(null)'),
-            'switchRole function must clear selectedMember to null'
+        // 5. Shared-session identity switching remounts identity-scoped workspace state.
+        $this->assertStringContainsString('const auth = useDevAuth();', $code);
+        $this->assertStringContainsString(
+            'key={auth.session.identity} identity={auth.session.identity} role={auth.session.role} changeAuthIdentity={auth.switchIdentity}',
+            $code
+        );
+        $this->assertStringContainsString(
+            'const [selectedMember, setSelectedMember] = useState<Member | null>(null);',
+            $code
+        );
+        $this->assertStringContainsString('function switchIdentity(nextIdentity: DevIdentity)', $code);
+        $this->assertStringContainsString('void changeAuthIdentity(nextIdentity);', $code);
+        $this->assertStringContainsString(
+            'onChange={(event) => switchIdentity(event.target.value as DevIdentity)}',
+            $code
         );
     }
 

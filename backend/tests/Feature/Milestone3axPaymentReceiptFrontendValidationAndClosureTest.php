@@ -56,15 +56,20 @@ class Milestone3axPaymentReceiptFrontendValidationAndClosureTest extends TestCas
     {
         $page = $this->frontendPage();
         $component = $this->receiptListComponent($page);
+        $financeBackend = $this->financeBackend();
 
         $this->assertStringContainsString('type ReceiptLookupStatus = "initializing" | "ready" | "loading" | "success" | "error";', $page);
         $this->assertStringContainsString('type ReceiptApiReceipt = {', $page);
-        $this->assertStringContainsString('{screen === "receipt-list" && <ReceiptList role={role} />}', $page);
+        $this->assertStringContainsString('{screen === "receipt-list" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}', $page);
 
         $this->assertStringContainsString('function ReceiptList({ role }: { role: Role }) {', $component);
         $this->assertStringContainsString('const canUsePstReceiptAccess = role === "president" || role === "secretary" || role === "treasurer";', $component);
-        $this->assertStringContainsString('LOCAL_PAYMENT_RECORDING_LOGINS[role as Exclude<Role, "member">]', $component);
-        $this->assertStringContainsString('LOCAL_MEMBER_FINANCE_LOGIN', $component);
+        $this->assertStringContainsString('const { session } = useDevAuth();', $component);
+        $this->assertStringContainsString('const { session } = useDevAuth();', $financeBackend);
+        $this->assertStringContainsString('const access=session.token;const club=session.membership.club.id;', $financeBackend);
+        $this->assertStringContainsString('p.receipt?`Receipt ${p.receipt.receipt_number} · ${p.receipt.status}`:"No receipt"', $financeBackend);
+        $this->assertStringNotContainsString('LOCAL_PAYMENT_RECORDING_LOGINS', $financeBackend);
+        $this->assertStringNotContainsString('LOCAL_MEMBER_FINANCE_LOGIN', $financeBackend);
         $this->assertStringContainsString('This screen uses only existing receipt view and PDF download APIs. It does not generate receipts, change payments, or show payment history.', $component);
     }
 
@@ -150,6 +155,15 @@ class Milestone3axPaymentReceiptFrontendValidationAndClosureTest extends TestCas
         return file_get_contents($path);
     }
 
+    private function financeBackend(): string
+    {
+        $path = base_path('../app/FinanceBackend.tsx');
+
+        $this->assertFileExists($path);
+
+        return file_get_contents($path);
+    }
+
     private function receiptListComponent(string $page): string
     {
         $start = strpos($page, 'function ReceiptList({ role }: { role: Role }) {');
@@ -161,4 +175,3 @@ class Milestone3axPaymentReceiptFrontendValidationAndClosureTest extends TestCas
         return substr($page, $start, $end - $start);
     }
 }
-

@@ -7,6 +7,48 @@ use Tests\TestCase;
 
 class Milestone3gPaymentRecordingScopeGateTest extends TestCase
 {
+    public const CURRENT_OPERATIONAL_ROUTE_MATRIX = [
+        'GET|HEAD api/v1/clubs/{club}/finance/reports',
+        'POST api/v1/clubs/{club}/members/import-preview',
+        'POST api/v1/clubs/{club}/members/import-commit',
+        'GET|HEAD api/v1/clubs/{club}/members/me/payments/history',
+        'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/history',
+        'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+        'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
+        'GET|HEAD api/v1/clubs/{club}/reports',
+        'GET|HEAD api/v1/clubs/{club}/reports/{reportKey}',
+        'GET|HEAD api/v1/clubs/{club}/finance/members/{member}/payments',
+        'GET|HEAD api/v1/clubs/{club}/finance/payments/{payment}',
+        'GET|HEAD api/v1/clubs/{club}/finance/receipts/{receipt}',
+        'GET|HEAD api/v1/clubs/{club}/finance/me/payments',
+        'POST api/v1/clubs/{club}/finance/members/{member}/payments',
+        'POST api/v1/clubs/{club}/finance/payments/{payment}/void',
+        'GET|HEAD api/v1/clubs/{club}/reminders',
+        'GET|HEAD api/v1/clubs/{club}/reminders/{reminder}',
+        'POST api/v1/clubs/{club}/reminders',
+        'PATCH api/v1/clubs/{club}/reminders/{reminder}',
+        'POST api/v1/clubs/{club}/reminders/{reminder}/activate',
+        'POST api/v1/clubs/{club}/reminders/{reminder}/complete',
+        'POST api/v1/clubs/{club}/reminders/{reminder}/cancel',
+        'POST api/v1/clubs/{club}/members/{member}/payments',
+        'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+    ];
+
+    public const CURRENT_REPORT_REMINDER_IMPORT_ROUTE_MATRIX = [
+        'GET|HEAD api/v1/clubs/{club}/finance/reports',
+        'POST api/v1/clubs/{club}/members/import-preview',
+        'POST api/v1/clubs/{club}/members/import-commit',
+        'GET|HEAD api/v1/clubs/{club}/reports',
+        'GET|HEAD api/v1/clubs/{club}/reports/{reportKey}',
+        'GET|HEAD api/v1/clubs/{club}/reminders',
+        'GET|HEAD api/v1/clubs/{club}/reminders/{reminder}',
+        'POST api/v1/clubs/{club}/reminders',
+        'PATCH api/v1/clubs/{club}/reminders/{reminder}',
+        'POST api/v1/clubs/{club}/reminders/{reminder}/activate',
+        'POST api/v1/clubs/{club}/reminders/{reminder}/complete',
+        'POST api/v1/clubs/{club}/reminders/{reminder}/cancel',
+    ];
+
     private string $scopeDocumentPath = 'docs/milestone_3g_payment_recording_scope_gate.md';
 
     public function test_scope_document_exists(): void
@@ -152,47 +194,18 @@ class Milestone3gPaymentRecordingScopeGateTest extends TestCase
         }
     }
 
-    public function test_3g_does_not_register_payment_receipt_or_finance_mutation_routes(): void
+    public function test_current_payment_receipt_reminder_report_and_import_route_matrix_is_exact(): void
     {
-        $blockedRouteFragments = [
-            'payment',
-            'payments',
-            'receipt',
-            'receipts',
-            'dues',
-            'special-collection',
-            'special-collections',
-            'fellowship-payment',
-            'fellowship-payments',
-            'reminder',
-            'reminders',
-            'report',
-            'reports',
-            'excel',
-            'import',
-        ];
+        $routes = collect(Route::getRoutes())
+            ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->filter(fn (string $route): bool => str_contains($route, 'payment')
+                || str_contains($route, 'receipt')
+                || str_contains($route, 'reminder')
+                || str_contains($route, 'report')
+                || str_contains($route, 'import'))
+            ->values()
+            ->all();
 
-        $registeredUris = collect(Route::getRoutes())
-            ->map(fn ($route) => $route->uri())
-            ->reject(fn (string $uri): bool => in_array($uri, [
-                'api/v1/clubs/{club}/members/{member}/payments',
-                'api/v1/clubs/{club}/members/me/payments/history',
-                'api/v1/clubs/{club}/members/{member}/payments/history',
-                'api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
-                'api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
-                'api/v1/clubs/{club}/members/import-preview',
-                'api/v1/clubs/{club}/members/import-commit',
-            ], true)) // authorized 3Q payment route, 3BM payment history routes, 3Y receipt route, 3AD PDF route, and 3BY import preview route
-            ->values();
-
-        foreach ($blockedRouteFragments as $fragment) {
-            $this->assertFalse(
-                $registeredUris->contains(fn (string $uri) => ! in_array($uri, [
-                    'api/v1/clubs/{club}/finance/reports',
-                    'api/v1/clubs/{club}/finance/balance-sheet',
-                ], true) && str_contains($uri, $fragment)),
-                "Milestone 3G must not register route containing [{$fragment}]."
-            );
-        }
+        $this->assertSame(self::CURRENT_OPERATIONAL_ROUTE_MATRIX, $routes);
     }
 }

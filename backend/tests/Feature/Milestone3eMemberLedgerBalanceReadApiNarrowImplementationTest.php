@@ -239,18 +239,7 @@ class Milestone3eMemberLedgerBalanceReadApiNarrowImplementationTest extends Test
             $this->assertNotContains('DELETE', $route->methods());
         }
 
-        $blockedRouteFragments = [
-            'payment',
-            'payments',
-            'receipt',
-            'receipts',
-            'reminder',
-            'reminders',
-            'report',
-            'reports',
-            'excel',
-            'import',
-        ];
+        $blockedRouteFragments = ['excel'];
 
         $registeredUris = collect(Route::getRoutes())
             ->map(fn ($route) => $route->uri())
@@ -274,6 +263,11 @@ class Milestone3eMemberLedgerBalanceReadApiNarrowImplementationTest extends Test
                 "Milestone 3E must not register route containing [{$fragment}]."
             );
         }
+
+        $currentRoutes = collect(Route::getRoutes())->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->filter(fn (string $route): bool => str_contains($route, 'payment') || str_contains($route, 'receipt') || str_contains($route, 'reminder') || str_contains($route, 'report') || str_contains($route, 'import'))
+            ->values()->all();
+        $this->assertSame(Milestone3gPaymentRecordingScopeGateTest::CURRENT_OPERATIONAL_ROUTE_MATRIX, $currentRoutes);
     }
 
     public function test_3e_document_records_narrow_read_only_api_boundary(): void

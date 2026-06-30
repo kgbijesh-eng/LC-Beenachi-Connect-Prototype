@@ -151,10 +151,10 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCas
 
     public function test_3n_does_not_add_public_payment_receipt_or_finance_mutation_routes(): void
     {
-        $forbiddenMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+        $mutationMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
-        $forbiddenRoutes = collect(Route::getRoutes())
-            ->filter(function ($route) use ($forbiddenMethods): bool {
+        $mutationRoutes = collect(Route::getRoutes())
+            ->filter(function ($route) use ($mutationMethods): bool {
                 $uri = $route->uri();
                 $methods = $route->methods();
 
@@ -162,18 +162,56 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCas
                     || str_contains($uri, 'receipt')
                     || str_contains($uri, 'finance');
 
-                return $isFinanceMutationUri && ! empty(array_intersect($forbiddenMethods, $methods));
+                return $isFinanceMutationUri && ! empty(array_intersect($mutationMethods, $methods));
             })
             ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
-            ->reject(fn (string $route): bool => in_array($route, [
-                'POST api/v1/clubs/{club}/members/{member}/payments',
-                'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
-                'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
-            ], true)) // authorized 3Q payment route and 3Y receipt routes
             ->values()
             ->all();
 
-        $this->assertSame([], $forbiddenRoutes);
+        $this->assertSame([
+            'POST api/v1/clubs/{club}/finance/charges',
+            'PATCH api/v1/clubs/{club}/finance/charges/{charge}',
+            'POST api/v1/clubs/{club}/finance/charges/{charge}/issue',
+            'POST api/v1/clubs/{club}/finance/charges/{charge}/close',
+            'POST api/v1/clubs/{club}/finance/charges/{charge}/cancel',
+            'POST api/v1/clubs/{club}/finance/members/{member}/payments',
+            'POST api/v1/clubs/{club}/finance/payments/{payment}/void',
+            'POST api/v1/clubs/{club}/members/{member}/payments',
+            'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
+        ], $mutationRoutes);
+
+        $expectedPermissions = [
+            'api/v1/clubs/{club}/finance/charges' => 'finance.manage',
+            'api/v1/clubs/{club}/finance/charges/{charge}' => 'finance.manage',
+            'api/v1/clubs/{club}/finance/charges/{charge}/issue' => 'finance.manage',
+            'api/v1/clubs/{club}/finance/charges/{charge}/close' => 'finance.manage',
+            'api/v1/clubs/{club}/finance/charges/{charge}/cancel' => 'finance.manage',
+            'api/v1/clubs/{club}/finance/members/{member}/payments' => 'finance.manage',
+            'api/v1/clubs/{club}/finance/payments/{payment}/void' => 'finance.void',
+            'api/v1/clubs/{club}/members/{member}/payments' => 'payments.record',
+            'api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt' => 'payments.record',
+        ];
+
+        foreach (Route::getRoutes() as $route) {
+            if (! isset($expectedPermissions[$route->uri()]) || empty(array_intersect($mutationMethods, $route->methods()))) {
+                continue;
+            }
+
+            $middleware = $route->gatherMiddleware();
+            $this->assertContains('auth:sanctum', $middleware);
+            $this->assertContains('club.permission:'.$expectedPermissions[$route->uri()].',club', $middleware);
+        }
+
+        $reportRoutes = collect(Route::getRoutes())
+            ->filter(fn ($route): bool => str_contains($route->uri(), 'clubs/{club}/reports'))
+            ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->values()
+            ->all();
+
+        $this->assertSame([
+            'GET|HEAD api/v1/clubs/{club}/reports',
+            'GET|HEAD api/v1/clubs/{club}/reports/{reportKey}',
+        ], $reportRoutes);
     }
 
     public function test_3n_does_not_add_blocked_api_frontend_receipt_report_or_excel_files(): void

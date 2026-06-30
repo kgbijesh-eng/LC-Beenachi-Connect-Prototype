@@ -15,6 +15,18 @@ class Milestone3gnReportsClosureReviewTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const REPORT_KEYS = [
+        'membership-summary',
+        'events-register',
+        'projects-register',
+        'reminders-register',
+        'collections-summary',
+        'member-outstanding-balances',
+        'charge-collection-status',
+        'payment-register',
+        'receipt-register',
+    ];
+
     private const CHAIN = [
         'cff5b5e573bd6bf16b91f169d4c46a53befed3bd' => 'Add reports scope gate and provenance review',
         'dd08c3539bfa1a5dd8383d2ee92c9dec3f002f1e' => 'Approve reports authorization and API contract',
@@ -29,10 +41,9 @@ class Milestone3gnReportsClosureReviewTest extends TestCase
         $this->seed(DatabaseSeeder::class);
         $catalog = app(ReportCatalog::class)->definitions();
         $this->assertSame(
-            ['membership-summary', 'events-register', 'projects-register', 'reminders-register'],
+            self::REPORT_KEYS,
             array_column($catalog, 'key')
         );
-        $this->assertNotContains('collections-summary', array_column($catalog, 'key'));
 
         foreach (['president-admin', 'secretary', 'treasurer'] as $slug) {
             $this->assertTrue(Role::where('slug', $slug)->firstOrFail()->permissions()->where('slug', 'reports.view')->exists());
@@ -58,9 +69,14 @@ class Milestone3gnReportsClosureReviewTest extends TestCase
             'invalid filters return 422', 'inclusive in the club timezone', 'converted to UTC',
             'duplicate-title stable IDs', 'cross-club exclusion', 'privacy-minimized',
             'no document-level horizontal overflow', 'genuine PostgreSQL database',
-            'collections-summary` remains deferred', 'PASS.',
+            'PASS.',
         ] as $expected) {
             $this->assertStringContainsString($expected, $doc);
+        }
+
+        $financialClosureDoc = file_get_contents(__DIR__.'/../../docs/milestone_3gx_financial_reports_closure_review.md');
+        foreach (['collections-summary', 'Normal Member', 'read-only', 'Phase 1 is formally closed'] as $expected) {
+            $this->assertStringContainsString($expected, $financialClosureDoc);
         }
     }
 

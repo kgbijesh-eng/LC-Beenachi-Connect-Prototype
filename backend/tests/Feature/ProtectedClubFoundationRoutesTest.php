@@ -68,7 +68,38 @@ class ProtectedClubFoundationRoutesTest extends TestCase
                 'payments.record',
             ]);
 
-        $this->assertCount(13, $response->json('permissions'));
+        $actualPermissions = collect($response->json('permissions'))->sort()->values()->all();
+
+        $this->assertSame([
+            'audit_logs.view',
+            'club.manage',
+            'club.view',
+            'events.manage',
+            'events.view',
+            'finance.club.view',
+            'finance.manage',
+            'finance.self.view',
+            'finance.void',
+            'members.manage',
+            'members.view',
+            'memberships.manage',
+            'memberships.view',
+            'payments.record',
+            'permissions.view',
+            'profile_updates.approve',
+            'profile_updates.review',
+            'profile_updates.self.submit',
+            'profile_updates.self.view',
+            'projects.manage',
+            'projects.view',
+            'reminders.manage',
+            'reminders.view',
+            'reports.view',
+            'roles.manage',
+            'roles.view',
+            'users.manage',
+            'users.view',
+        ], $actualPermissions);
     }
 
     public function test_normal_member_can_view_club_foundation_but_only_gets_limited_permissions(): void
@@ -106,7 +137,18 @@ class ProtectedClubFoundationRoutesTest extends TestCase
         $meResponse->assertOk()
             ->assertJsonPath('membership.role.slug', 'member');
 
-        $this->assertSame(['club.view', 'members.view'], $meResponse->json('permissions'));
+        $actualPermissions = collect($meResponse->json('permissions'))->sort()->values()->all();
+
+        $this->assertSame([
+            'club.view',
+            'events.view',
+            'finance.self.view',
+            'members.view',
+            'profile_updates.self.submit',
+            'profile_updates.self.view',
+            'projects.view',
+            'reminders.view',
+        ], $actualPermissions);
     }
 
     public function test_user_without_club_membership_cannot_view_club_foundation_details(): void

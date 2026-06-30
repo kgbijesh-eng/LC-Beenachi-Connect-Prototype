@@ -10,6 +10,7 @@ use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -28,6 +29,13 @@ class Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest extends 
     private string $docPath = __DIR__ . '/../../docs/milestone_3fpa_events_meetings_isolated_browser_permission_alignment.md';
     private string $backendPath = __DIR__ . '/../..';
     private string $repoPath = __DIR__ . '/../../..';
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
+    }
 
     public function test_3fpa_document_records_isolated_scope_database_boundary_and_no_runtime_source_changes(): void
     {
@@ -143,6 +151,8 @@ class Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest extends 
 
     public function test_management_only_records_are_hidden_from_non_management_browser_readers(): void
     {
+        Carbon::setTestNow('2026-06-23 00:00:00');
+
         $club = $this->createClub('3FPA-VIS');
         $managementEvent = $this->createClubEvent($club, [
             'title' => '3FPA Management Only Draft',

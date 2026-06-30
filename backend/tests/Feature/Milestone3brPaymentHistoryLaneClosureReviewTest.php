@@ -129,20 +129,22 @@ class Milestone3brPaymentHistoryLaneClosureReviewTest extends TestCase
     public function test_frontend_payment_history_closure_artifact_still_matches_role_boundary(): void
     {
         $page = $this->frontendPage();
-        $paymentHistoryBlock = $this->paymentHistoryBlock($page);
+        $financeBackend = $this->financeBackend();
 
         foreach ([
-            'canUseSelectedMemberHistory = role === "president" || role === "secretary" || role === "treasurer"',
-            'LOCAL_MEMBER_FINANCE_LOGIN',
-            'Member view loads only your own payment history.',
-            'Other members\' payment history is not requested.',
-            '"/members/" + memberId + "/payments/history?per_page=10&page="',
-            '"/members/me/payments/history?per_page=10&page="',
-            'Selected member in active club',
             '{ label: "My Payment History", screen: "payment-history" }',
+            '{ label: "Payment History", screen: "payment-history" }',
+            '{screen === "payment-history" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}',
         ] as $frontendText) {
-            $this->assertStringContainsString($frontendText, $page.$paymentHistoryBlock);
+            $this->assertStringContainsString($frontendText, $page);
         }
+
+        $this->assertStringContainsString('const { session } = useDevAuth();', $financeBackend);
+        $this->assertStringContainsString('if(isPersonal&&!session.membership.member)throw new Error("Member record not linked.");', $financeBackend);
+        $this->assertStringContainsString('const prefix=management&&!isPersonal?`/clubs/${club}/finance/members/${target}`:`/clubs/${club}/finance/me`;', $financeBackend);
+        $this->assertStringContainsString('management&&members.length>0&&!isPersonal', $financeBackend);
+        $this->assertStringNotContainsString('LOCAL_MEMBER_FINANCE_LOGIN', $financeBackend);
+        $this->assertStringNotContainsString('LOCAL_PAYMENT_RECORDING_LOGINS', $financeBackend);
     }
 
     public function test_3br_confirms_no_all_member_or_mutation_payment_history_behavior(): void
@@ -336,6 +338,15 @@ class Milestone3brPaymentHistoryLaneClosureReviewTest extends TestCase
     private function frontendPage(): string
     {
         $path = base_path('../app/page.tsx');
+
+        $this->assertFileExists($path);
+
+        return file_get_contents($path);
+    }
+
+    private function financeBackend(): string
+    {
+        $path = base_path('../app/FinanceBackend.tsx');
 
         $this->assertFileExists($path);
 

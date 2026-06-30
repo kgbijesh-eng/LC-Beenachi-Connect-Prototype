@@ -104,33 +104,38 @@ class Milestone3bpPaymentHistoryFrontendNarrowImplementationTest extends TestCas
 
     public function test_frontend_defines_normal_member_own_history_only_behavior(): void
     {
-        $paymentHistoryBlock = $this->paymentHistoryBlock($this->frontendPage());
+        $page = $this->frontendPage();
+        $financeBackend = $this->financeBackend();
 
         foreach ([
-            'canUseSelectedMemberHistory = role === "president" || role === "secretary" || role === "treasurer"',
-            'LOCAL_MEMBER_FINANCE_LOGIN',
-            'Member view loads only your own payment history.',
-            'Other members\' payment history is not requested.',
-            'Your payment history loaded from existing backend API.',
+            'screen === "my-dues" ||',
+            'screen === "payment-history";',
+            '{screen === "payment-history" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}',
         ] as $requiredText) {
-            $this->assertStringContainsString($requiredText, $paymentHistoryBlock);
+            $this->assertStringContainsString($requiredText, $page);
         }
+
+        $this->assertStringContainsString('const { session } = useDevAuth();', $financeBackend);
+        $this->assertStringContainsString('if(isPersonal&&!session.membership.member)throw new Error("Member record not linked.");', $financeBackend);
+        $this->assertStringContainsString('`/clubs/${club}/finance/me`', $financeBackend);
+        $this->assertStringNotContainsString('LOCAL_MEMBER_FINANCE_LOGIN', $financeBackend);
     }
 
     public function test_frontend_defines_officer_selected_member_history_behavior(): void
     {
-        $paymentHistoryBlock = $this->paymentHistoryBlock($this->frontendPage());
+        $financeBackend = $this->financeBackend();
 
         foreach ([
-            'LOCAL_PAYMENT_RECORDING_LOGINS',
-            '"/members/" + memberId + "/payments/history?per_page=10&page="',
-            'Selected member in active club',
-            'Selected-member payment history loaded from existing backend API.',
-            'setSelectedHistoryMemberId(defaultMemberId)',
-            'updateSelectedHistoryMember',
+            'const management=role!=="member";',
+            'const prefix=management&&!isPersonal?`/clubs/${club}/finance/members/${target}`:`/clubs/${club}/finance/me`;',
+            'if(management){setMembers(list)}',
+            'management&&members.length>0&&!isPersonal',
+            'Select a current member',
         ] as $requiredText) {
-            $this->assertStringContainsString($requiredText, $paymentHistoryBlock);
+            $this->assertStringContainsString($requiredText, $financeBackend);
         }
+
+        $this->assertStringNotContainsString('LOCAL_PAYMENT_RECORDING_LOGINS', $financeBackend);
     }
 
     public function test_frontend_displays_only_safe_payment_metadata(): void
@@ -231,7 +236,7 @@ class Milestone3bpPaymentHistoryFrontendNarrowImplementationTest extends TestCas
             '{ label: "Payment History", screen: "payment-history" }',
             '{ label: "My Payment History", screen: "payment-history" }',
             '{ label: "Payments", short: "PH", screen: "payment-history" as Screen }',
-            '{screen === "payment-history" && <PaymentHistory role={role} />}',
+            '{screen === "payment-history" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}',
         ] as $requiredText) {
             $this->assertStringContainsString($requiredText, $page);
         }
@@ -290,6 +295,15 @@ class Milestone3bpPaymentHistoryFrontendNarrowImplementationTest extends TestCas
     private function frontendPage(): string
     {
         $path = base_path('../app/page.tsx');
+
+        $this->assertFileExists($path);
+
+        return file_get_contents($path);
+    }
+
+    private function financeBackend(): string
+    {
+        $path = base_path('../app/FinanceBackend.tsx');
 
         $this->assertFileExists($path);
 

@@ -155,18 +155,7 @@ class Milestone3bMemberAccountLedgerDatabaseFoundationTest extends TestCase
 
     public function test_3b_does_not_add_payment_receipt_balance_reminder_report_or_excel_routes(): void
     {
-        $blockedRouteFragments = [
-            'payment',
-            'payments',
-            'receipt',
-            'receipts',
-            'reminder',
-            'reminders',
-            'report',
-            'reports',
-            'excel',
-            'import',
-        ];
+        $blockedRouteFragments = ['excel'];
 
         $registeredUris = collect(Route::getRoutes())
             ->map(fn ($route) => $route->uri())
@@ -190,6 +179,11 @@ class Milestone3bMemberAccountLedgerDatabaseFoundationTest extends TestCase
                 "Milestone 3B must not register route containing [{$fragment}]."
             );
         }
+
+        $currentRoutes = collect(Route::getRoutes())->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->filter(fn (string $route): bool => str_contains($route, 'payment') || str_contains($route, 'receipt') || str_contains($route, 'reminder') || str_contains($route, 'report') || str_contains($route, 'import'))
+            ->values()->all();
+        $this->assertSame(Milestone3gPaymentRecordingScopeGateTest::CURRENT_OPERATIONAL_ROUTE_MATRIX, $currentRoutes);
     }
 
     public function test_3b_document_records_database_foundation_boundary(): void

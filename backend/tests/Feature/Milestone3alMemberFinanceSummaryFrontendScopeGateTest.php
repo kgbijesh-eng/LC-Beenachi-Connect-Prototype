@@ -174,41 +174,15 @@ class Milestone3alMemberFinanceSummaryFrontendScopeGateTest extends TestCase
 
     public function test_3al_does_not_add_blocked_routes_or_runtime_files(): void
     {
-        $blockedRouteFragments = [
-            'dashboard',
-            'report',
-            'reports',
-            'reminder',
-            'reminders',
-            'excel',
-            'import',
-            'imports',
-            'correction',
-            'corrections',
-            'reversal',
-            'reversals',
-            'cancellation',
-            'cancellations',
-            'special-collection',
-            'special-collections',
-            'fellowship',
-        ];
+        $routes = collect(Route::getRoutes())
+            ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->filter(fn (string $route): bool => str_contains($route, 'report') || str_contains($route, 'reminder') || str_contains($route, 'import'))
+            ->values()->all();
 
-        foreach (Route::getRoutes() as $route) {
-            $uri = $route->uri();
+        $this->assertSame(Milestone3gPaymentRecordingScopeGateTest::CURRENT_REPORT_REMINDER_IMPORT_ROUTE_MATRIX, $routes);
 
-            if (in_array($uri, [
-                'api/v1/clubs/{club}/finance/reports',
-                'api/v1/clubs/{club}/finance/balance-sheet',
-                'api/v1/clubs/{club}/members/import-preview',
-                'api/v1/clubs/{club}/members/import-commit',
-            ], true)) {
-                continue;
-            }
-
-            foreach ($blockedRouteFragments as $blockedRouteFragment) {
-                $this->assertStringNotContainsString($blockedRouteFragment, $uri);
-            }
+        foreach (['dashboard', 'excel', 'correction', 'reversal', 'cancellation', 'special-collection', 'fellowship'] as $blockedFragment) {
+            $this->assertFalse(collect(Route::getRoutes())->contains(fn ($route): bool => str_contains($route->uri(), $blockedFragment)));
         }
 
         $blockedPaths = [

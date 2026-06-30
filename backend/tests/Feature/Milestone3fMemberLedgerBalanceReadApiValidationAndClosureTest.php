@@ -220,21 +220,7 @@ class Milestone3fMemberLedgerBalanceReadApiValidationAndClosureTest extends Test
 
     public function test_payment_receipt_report_reminder_excel_and_mutation_routes_remain_absent(): void
     {
-        $blockedRouteFragments = [
-            'payment',
-            'payments',
-            'receipt',
-            'receipts',
-            'reminder',
-            'reminders',
-            'report',
-            'reports',
-            'excel',
-            'import',
-            'dues',
-            'special-collection',
-            'special-collections',
-        ];
+        $blockedRouteFragments = ['excel', 'dues', 'special-collection', 'special-collections'];
 
         $registeredUris = collect(Route::getRoutes())
             ->map(fn ($route) => $route->uri())
@@ -258,5 +244,10 @@ class Milestone3fMemberLedgerBalanceReadApiValidationAndClosureTest extends Test
                 "Milestone 3F confirms route containing [{$fragment}] must remain absent."
             );
         }
+
+        $currentRoutes = collect(Route::getRoutes())->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->filter(fn (string $route): bool => str_contains($route, 'payment') || str_contains($route, 'receipt') || str_contains($route, 'reminder') || str_contains($route, 'report') || str_contains($route, 'import'))
+            ->values()->all();
+        $this->assertSame(Milestone3gPaymentRecordingScopeGateTest::CURRENT_OPERATIONAL_ROUTE_MATRIX, $currentRoutes);
     }
 }

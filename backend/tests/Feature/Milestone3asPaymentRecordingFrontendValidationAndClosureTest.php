@@ -9,7 +9,10 @@ class Milestone3asPaymentRecordingFrontendValidationAndClosureTest extends TestC
     {
         $document = $this->closureDocument();
 
-        $this->assertStringContainsString('Milestone 3AS — Payment Recording Frontend Validation and Closure', $document);
+        $this->assertStringContainsString(
+            'Milestone 3AS '.chr(0x97).' Payment Recording Frontend Validation and Closure',
+            $document
+        );
         $this->assertStringContainsString('Closed by validation', $document);
         $this->assertStringContainsString('ad883864a551c483e89cb0f0a5f835c92a5d33bb', $document);
         $this->assertStringContainsString('Frontend build passed', $document);
@@ -39,19 +42,18 @@ class Milestone3asPaymentRecordingFrontendValidationAndClosureTest extends TestC
     public function test_3ar_frontend_payment_recording_contract_remains_present(): void
     {
         $page = $this->frontendPage();
-        $component = $this->recordMemberPaymentComponent($page);
+        $financeBackend = $this->financeBackend();
 
-        $this->assertStringContainsString('const LOCAL_PAYMENT_RECORDING_LOGINS: Record<Exclude<Role, "member">, PaymentRecordingLogin>', $page);
-        $this->assertStringContainsString('email: "president@lcbeenachi.test"', $page);
-        $this->assertStringContainsString('email: "secretary@lcbeenachi.test"', $page);
-        $this->assertStringContainsString('email: "treasurer@lcbeenachi.test"', $page);
-
-        $this->assertStringContainsString('const canRecordPayment = role === "president" || role === "secretary" || role === "treasurer";', $component);
-        $this->assertStringContainsString('Payment recording is available only to President, Secretary, and Treasurer roles with backend payment permission.', $component);
-        $this->assertStringContainsString('Members can view their own dues, but cannot see or use payment recording controls.', $component);
-        $this->assertStringContainsString('API_BASE_URL + "/clubs/" + loadedClubId + "/members"', $component);
-        $this->assertStringContainsString('API_BASE_URL + "/clubs/" + paymentClubId + "/members/" + selectedMemberId + "/payments"', $component);
-        $this->assertStringContainsString('Payment recorded. Member finance summary refreshed from backend.', $component);
+        $this->assertStringContainsString('import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";', $page);
+        $this->assertStringContainsString('{screen === "record-member-payment" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}', $page);
+        $this->assertStringContainsString('const { session } = useDevAuth();', $financeBackend);
+        $this->assertStringContainsString('const management=role!=="member";', $financeBackend);
+        $this->assertStringContainsString('if(!session)throw new Error("No verified development session is available.");', $financeBackend);
+        $this->assertStringContainsString('const access=session.token;const club=session.membership.club.id;', $financeBackend);
+        $this->assertStringContainsString('if(isPersonal&&!session.membership.member)throw new Error("Member record not linked.");', $financeBackend);
+        $this->assertStringContainsString('api(`/clubs/${clubId}/finance/members/${selected}/payments`', $financeBackend);
+        $this->assertStringContainsString('(role==="president"||role==="treasurer")', $financeBackend);
+        $this->assertStringNotContainsString('LOCAL_PAYMENT_RECORDING_LOGINS', $financeBackend);
     }
 
     public function test_3ar_frontend_submit_payload_still_excludes_backend_controlled_fields(): void
@@ -137,6 +139,15 @@ class Milestone3asPaymentRecordingFrontendValidationAndClosureTest extends TestC
     private function frontendPage(): string
     {
         $path = base_path('../app/page.tsx');
+
+        $this->assertFileExists($path);
+
+        return file_get_contents($path);
+    }
+
+    private function financeBackend(): string
+    {
+        $path = base_path('../app/FinanceBackend.tsx');
 
         $this->assertFileExists($path);
 

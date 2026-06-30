@@ -79,12 +79,12 @@ class Milestone3emMemberDirectorySelectedMemberReadFailureNarrowImplementationTe
             'app/page.tsx row click handler must call onSelectMember callback'
         );
 
-        // 5. MemberProfile receiving selectedMember falling back to activeMember / nullish fallback
-        $this->assertTrue(
-            str_contains($code, 'member={selectedMember ?? activeMember}') ||
-            str_contains($code, 'member={selectedMember || activeMember}'),
-            'app/page.tsx must pass selectedMember ?? activeMember or selectedMember || activeMember fallback to MemberProfile'
+        // 5. Selected-directory profiles and authenticated personal profiles remain distinct.
+        $this->assertStringContainsString(
+            'selectedMember ? <MemberProfile key={selectedMember.backendId} member={selectedMember} role={role} /> : <PersonalMemberProfile role={role} />',
+            $code
         );
+        $this->assertStringContainsString('function PersonalMemberProfile({ role }: { role: Role })', $code);
 
         // 6. Direct My Profile navigation clearing selectedMember
         $this->assertTrue(
@@ -92,15 +92,20 @@ class Milestone3emMemberDirectorySelectedMemberReadFailureNarrowImplementationTe
             'app/page.tsx must clear selectedMember to null on navigation'
         );
 
-        // 7. Role switch clearing selectedMember
-        // We verify that setSelectedMember(null) occurs inside switchRole
-        $switchRolePos = strpos($code, 'function switchRole(');
-        $this->assertNotFalse($switchRolePos, 'app/page.tsx must define function switchRole');
-
-        $switchRoleCode = substr($code, $switchRolePos, 300);
-        $this->assertTrue(
-            str_contains($switchRoleCode, 'setSelectedMember(null)'),
-            'switchRole function must clear selectedMember to null'
+        // 7. Identity and role switching come from the verified shared development-auth session.
+        $this->assertStringContainsString(
+            'import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";',
+            $code
+        );
+        $this->assertStringContainsString('const auth = useDevAuth();', $code);
+        $this->assertStringContainsString(
+            'role={auth.session.role} changeAuthIdentity={auth.switchIdentity}',
+            $code
+        );
+        $this->assertStringContainsString('function switchIdentity(nextIdentity: DevIdentity)', $code);
+        $this->assertStringContainsString(
+            'onChange={(event) => switchIdentity(event.target.value as DevIdentity)}',
+            $code
         );
     }
 

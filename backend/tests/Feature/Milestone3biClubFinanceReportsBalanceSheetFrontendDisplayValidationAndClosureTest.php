@@ -148,16 +148,17 @@ class Milestone3biClubFinanceReportsBalanceSheetFrontendDisplayValidationAndClos
         $component = $this->clubFinanceReportsPanel();
 
         $guardPosition = strpos($component, 'if (!canViewClubFinanceReports) {');
-        $loginPosition = strpos($component, 'const login = LOCAL_PAYMENT_RECORDING_LOGINS');
+        $tokenPosition = strpos($component, 'const token = session.token;');
         $reportFetchPosition = strpos($component, 'API_BASE_URL + "/clubs/" + loadedClubId + "/finance/reports"');
         $balanceSheetFetchPosition = strpos($component, 'API_BASE_URL + "/clubs/" + loadedClubId + "/finance/balance-sheet"');
 
         $this->assertNotFalse($guardPosition);
-        $this->assertNotFalse($loginPosition);
+        $this->assertNotFalse($tokenPosition);
         $this->assertNotFalse($reportFetchPosition);
         $this->assertNotFalse($balanceSheetFetchPosition);
 
-        $this->assertLessThan($loginPosition, $guardPosition);
+        $this->assertStringContainsString('const { session } = useDevAuth();', $component);
+        $this->assertLessThan($tokenPosition, $guardPosition);
         $this->assertLessThan($reportFetchPosition, $guardPosition);
         $this->assertLessThan($balanceSheetFetchPosition, $guardPosition);
         $this->assertStringContainsString('setReport(null);', $component);

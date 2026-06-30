@@ -188,23 +188,7 @@ class Milestone3hPaymentRecordingDatabaseFoundationAuthorizationTest extends Tes
 
     public function test_3h_does_not_register_payment_receipt_or_finance_mutation_routes(): void
     {
-        $blockedRouteFragments = [
-            'payment',
-            'payments',
-            'receipt',
-            'receipts',
-            'dues',
-            'special-collection',
-            'special-collections',
-            'fellowship-payment',
-            'fellowship-payments',
-            'reminder',
-            'reminders',
-            'report',
-            'reports',
-            'excel',
-            'import',
-        ];
+        $blockedRouteFragments = ['dues', 'special-collection', 'special-collections', 'fellowship-payment', 'fellowship-payments', 'excel'];
 
         $registeredUris = collect(Route::getRoutes())
             ->map(fn ($route) => $route->uri())
@@ -228,6 +212,11 @@ class Milestone3hPaymentRecordingDatabaseFoundationAuthorizationTest extends Tes
                 "Milestone 3H must not register route containing [{$fragment}]."
             );
         }
+
+        $currentRoutes = collect(Route::getRoutes())->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->filter(fn (string $route): bool => str_contains($route, 'payment') || str_contains($route, 'receipt') || str_contains($route, 'reminder') || str_contains($route, 'report') || str_contains($route, 'import'))
+            ->values()->all();
+        $this->assertSame(Milestone3gPaymentRecordingScopeGateTest::CURRENT_OPERATIONAL_ROUTE_MATRIX, $currentRoutes);
     }
 
     public function test_3h_does_not_create_payment_or_receipt_database_implementation_files_before_3i(): void

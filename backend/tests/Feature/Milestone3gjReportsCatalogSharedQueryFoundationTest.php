@@ -15,16 +15,27 @@ class Milestone3gjReportsCatalogSharedQueryFoundationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const REPORT_KEYS = [
+        'membership-summary',
+        'events-register',
+        'projects-register',
+        'reminders-register',
+        'collections-summary',
+        'member-outstanding-balances',
+        'charge-collection-status',
+        'payment-register',
+        'receipt-register',
+    ];
+
     public function test_catalog_roles_and_denials(): void
     {
         $this->seed(DatabaseSeeder::class);
         $club = Club::where('code','LCB')->firstOrFail();
         foreach (['president-admin','secretary','treasurer'] as $slug) {
             $user=$this->user($club,$slug); Sanctum::actingAs($user);
-            $response=$this->getJson("/api/v1/clubs/{$club->id}/reports")->assertOk()->assertJsonCount(4,'data');
+            $response=$this->getJson("/api/v1/clubs/{$club->id}/reports")->assertOk()->assertJsonCount(9,'data');
             $keys=array_column($response->json('data'),'key');
-            $this->assertSame(['membership-summary','events-register','projects-register','reminders-register'],$keys);
-            $this->assertNotContains('collections-summary',$keys);
+            $this->assertSame(self::REPORT_KEYS,$keys);
         }
         Sanctum::actingAs($this->user($club,'member'));
         $this->getJson("/api/v1/clubs/{$club->id}/reports")->assertForbidden();

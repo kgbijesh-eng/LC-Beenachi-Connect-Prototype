@@ -94,20 +94,17 @@ class Milestone3ayFinanceModulePostReceiptFrontendClosureReviewTest extends Test
         $this->assertContains('api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf', $routeUris);
         $this->assertContains('api/v1/clubs/{club}/members/{member}/finance-summary', $routeUris);
 
-        foreach ($routeUris as $uri) {
-            if (in_array($uri, [
-                'api/v1/clubs/{club}/finance/reports',
-                'api/v1/clubs/{club}/finance/balance-sheet',
-            ], true)) {
-                continue;
-            }
+        $currentRoutes = collect(Route::getRoutes())
+            ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->filter(fn (string $route): bool => str_contains($route, 'payment') || str_contains($route, 'receipt') || str_contains($route, 'reminder'))
+            ->values()->all();
+        $expectedRoutes = array_values(array_filter(
+            \Tests\Feature\Milestone3gPaymentRecordingScopeGateTest::CURRENT_OPERATIONAL_ROUTE_MATRIX,
+            fn (string $route): bool => str_contains($route, 'payment') || str_contains($route, 'receipt') || str_contains($route, 'reminder')
+        ));
 
-            $this->assertStringNotContainsString('3ay', $uri);
-            $this->assertStringNotContainsString('balance-sheet', $uri);
-            $this->assertStringNotContainsString('finance-reports', $uri);
-            $this->assertStringNotContainsString('reminders', $uri);
-            $this->assertStringNotContainsString('excel', $uri);
-        }
+        $this->assertSame($expectedRoutes, $currentRoutes);
+        $this->assertFalse(collect($routeUris)->contains(fn (string $uri): bool => str_contains($uri, '3ay') || str_contains($uri, 'excel')));
     }
 
     public function test_3ay_records_remaining_gaps_without_implementing_them(): void
