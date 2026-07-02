@@ -6027,7 +6027,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
       <section className="compactPanel profileDocumentsSection" data-milestone="3DF-profile-documents-frontend-narrow-implementation">
         <Toolbar title="Profile Documents" actionLabel={canManageProfileDocumentMetadata ? "Metadata controls" : "Metadata view"} />
         <div className="notice memberHelperText">Document metadata only. File upload and document storage are not enabled in this version.</div>
-        <div className="notice memberHelperText">{documentMessage}</div>
+        {documentStatus !== "empty" && <div className="notice memberHelperText">{documentMessage}</div>}
 
         {canManageProfileDocumentMetadata && documentMemberId && (
           <div className="buttonRow">

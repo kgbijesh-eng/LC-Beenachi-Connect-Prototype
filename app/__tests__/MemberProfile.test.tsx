@@ -166,8 +166,31 @@ describe("MemberProfile document loading boundary", () => {
     await openSujeshProfile();
 
     expect(await screen.findByText("Profile document metadata is unavailable for this role.")).toBeInTheDocument();
+    expect(screen.queryByText("No profile document records added yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Metadata controls")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add Document Metadata" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh Metadata" })).not.toBeInTheDocument();
     expect(screen.getByTestId("finance-backend")).toHaveTextContent("FinanceBackend treasurer member 4");
     expect(screen.queryByText("This action is unauthorized.")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["president", "bijesh-president"],
+    ["secretary", "rajeesh-secretary"]
+  ] as const)("shows one empty document state with metadata controls for %s", async (role, identity) => {
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = role === "president" ? "president-admin" : role;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    await openSujeshProfile();
+
+    expect(await screen.findAllByText("No profile document records added yet.")).toHaveLength(1);
+    expect(screen.getByText("Metadata controls")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Document Metadata" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh Metadata" })).toBeInTheDocument();
+    expect(screen.queryByText("Profile document metadata is unavailable for this role.")).not.toBeInTheDocument();
   });
 
   it.each([
@@ -227,5 +250,22 @@ describe("MemberProfile document loading boundary", () => {
     expect(await screen.findByRole("heading", { name: "Own membership proof" })).toBeInTheDocument();
     expect(screen.getByTestId("finance-backend")).toHaveTextContent("personal false");
     expect(screen.queryByText("Sujesh P R")).not.toBeInTheDocument();
+  });
+
+  it("shows one empty document state for a Normal Member's own profile", async () => {
+    authState.role = "member";
+    authState.identity = "sajith-member";
+    authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+    authState.session.role = authState.role;
+    authState.session.identity = authState.identity;
+    authState.session.membership.role.slug = "member";
+    authState.session.membership.member = authState.member;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+    fireEvent.click(await screen.findByRole("button", { name: "My Profile" }));
+
+    expect(await screen.findAllByText("No profile document records added yet.")).toHaveLength(1);
+    expect(screen.queryByText("Sujesh P R")).not.toBeInTheDocument();
+    expect(screen.getByTestId("finance-backend")).toBeInTheDocument();
   });
 });
