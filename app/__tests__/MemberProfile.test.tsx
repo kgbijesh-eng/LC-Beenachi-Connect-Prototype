@@ -312,6 +312,31 @@ describe("MemberProfile document loading boundary", () => {
 
   it.each([
     ["president", "bijesh-president", "president-admin"],
+    ["member", "sajith-member", "member"]
+  ] as const)("does not present static club-document records as real for %s", async (role, identity, roleSlug) => {
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    if (role === "member") {
+      authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+      authState.session.membership.member = authState.member;
+    }
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    if (role === "president") fireEvent.click(screen.getByRole("button", { name: /My Member Area/ }));
+    fireEvent.click(screen.getByRole("button", { name: "My Documents" }));
+
+    expect(await screen.findByText("Club document records are not connected to a verified backend source. No document records are shown.")).toBeInTheDocument();
+    expect(screen.queryByText("General Body Minutes - May 2026")).not.toBeInTheDocument();
+    expect(screen.queryByText("Annual Plan 2026")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View Details" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["president", "bijesh-president", "president-admin"],
     ["secretary", "rajeesh-secretary", "secretary"]
   ] as const)("opens the connected profile-update review workflow for %s", async (role, identity, roleSlug) => {
     authState.role = role;

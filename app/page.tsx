@@ -9545,28 +9545,15 @@ function Announcements({ role, member, selectedSponsors }: { role: Role; member:
   );
 }
 
-function MyDocuments({ role, onOpen }: { role: Role; onOpen: (documentId: string) => void }) {
-  const visibleDocuments = documentsVisibleToRole(role);
+function MyDocuments({ role: _role, onOpen: _onOpen }: { role: Role; onOpen: (documentId: string) => void }) {
   return (
     <section className="stack" style={{ minWidth: 0 }}>
       <div className="memberPanel">
         <div className="toolbar" style={{ gap: "12px", flexWrap: "wrap" }}>
           <div><p className="eyebrow">MY DOCUMENTS</p><h2>Documents Available to Me</h2></div>
-          <span className="statusPill">Read-only member access</span>
+          <span className="statusPill">Not connected</span>
         </div>
-        <div className="notice memberHelperText">Only documents authorized for this test role are shown. Document content and file downloads are not connected in this prototype.</div>
-      </div>
-      <div className="documentGrid">
-        {visibleDocuments.map((item) => (
-          <article className="documentCard" key={item.id}>
-            <div>
-              <h2>{item.title}</h2>
-              <p>{item.category}</p>
-              <span>{item.date}</span>
-            </div>
-            <button className="filterButton" onClick={() => onOpen(item.id)}>View Details</button>
-          </article>
-        ))}
+        <div className="notice memberHelperText">Club document records are not connected to a verified backend source. No document records are shown.</div>
       </div>
     </section>
   );
