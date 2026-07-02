@@ -343,7 +343,14 @@ type ApiErrorPayload = {
   errors?: Record<string, string[]>;
 };
 
-type ProfileDocumentStatus = "initializing" | "ready" | "loading" | "saving" | "empty" | "error" | "not_linked";
+type ProfileDocumentStatus = "initializing" | "ready" | "loading" | "saving" | "empty" | "error" | "unavailable" | "not_linked";
+
+class ProfileDocumentRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ProfileDocumentRequestError";
+  }
+}
 
 type ProfileDocumentMetadataRecord = {
   id: number;
@@ -5761,7 +5768,10 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
     const payload = await response.json().catch(() => null) as { profile_documents?: ProfileDocumentMetadataRecord[] } & ApiErrorPayload | null;
 
     if (!response.ok) {
-      throw new Error(profileDocumentApiMessage(payload, "Profile document metadata is unavailable."));
+      throw new ProfileDocumentRequestError(
+        profileDocumentApiMessage(payload, "Profile document metadata is unavailable."),
+        response.status
+      );
     }
 
     return payload?.profile_documents ?? [];
@@ -5822,7 +5832,6 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
         const selectedBackendMember = profilePayload.member as BackendMemberRecord;
         if (selectedBackendMember.member_code !== member.id) throw new Error("The selected member identity did not match the requested Member ID.");
         const resolvedMemberId = isPersonal ? selectedBackendMember.id : member.backendId;
-        const documents = await fetchProfileDocuments(sharedToken, sharedClubId, resolvedMemberId);
 
         if (!cancelled) {
           setDocumentToken(sharedToken);
@@ -5830,9 +5839,26 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
           setDocumentMemberId(resolvedMemberId);
           setBackendMember(selectedBackendMember);
           setSelectedProfileStatus("ready");
-          setProfileDocuments(documents);
-          setDocumentStatus(documents.length ? "ready" : "empty");
-          setDocumentMessage(documents.length ? "Profile document metadata loaded." : "No profile document records added yet.");
+        }
+
+        try {
+          const documents = await fetchProfileDocuments(sharedToken, sharedClubId, resolvedMemberId);
+          if (!cancelled) {
+            setProfileDocuments(documents);
+            setDocumentStatus(documents.length ? "ready" : "empty");
+            setDocumentMessage(documents.length ? "Profile document metadata loaded." : "No profile document records added yet.");
+          }
+        } catch (error) {
+          if (!cancelled) {
+            setProfileDocuments([]);
+            if (error instanceof ProfileDocumentRequestError && error.status === 403) {
+              setDocumentStatus("unavailable");
+              setDocumentMessage("Profile document metadata is unavailable for this role.");
+            } else {
+              setDocumentStatus("error");
+              setDocumentMessage(error instanceof Error ? error.message : "Profile document metadata is unavailable.");
+            }
+          }
         }
       } catch (error) {
         if (!cancelled) {
