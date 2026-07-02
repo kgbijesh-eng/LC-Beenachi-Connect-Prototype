@@ -5055,7 +5055,7 @@ function Dashboard({
           <section className="compactPanel dashboardPanel">
             <DashboardSectionHeader title="Member dashboard sources" label="Own authorized records only" />
             <div className="compactDashboardGrid">
-              <TruthStatusCard label="Meetings" value="Meeting information is not connected to the Dashboard yet." />
+              <TruthStatusCard label="Meetings" value="Available in Events & Meetings." />
               <TruthStatusCard label="Announcements" value="Announcements are not connected to the Dashboard yet." />
               <TruthStatusCard label="Documents" value="Document activity is not connected to the Dashboard yet." />
             </div>
@@ -5067,8 +5067,8 @@ function Dashboard({
           <div className="compactDashboardGrid">
             <TruthStatusCard label="Finance & Dues" value="Finance summary not connected" />
             <TruthStatusCard label="Announcements" value="Announcements are not connected to the Dashboard yet." />
-            <TruthStatusCard label="Events" value="No live event source is connected." />
-            <TruthStatusCard label="Meetings" value="Meeting information is not connected." />
+            <TruthStatusCard label="Events" value="Available in Events & Meetings." />
+            <TruthStatusCard label="Meetings" value="Available in Events & Meetings." />
             <TruthStatusCard label="Recent Payments" value="Recent payment activity is unavailable here." />
             <TruthStatusCard label="Documents" value="Document activity is not connected." />
             <TruthStatusCard label="Pending Reports" value="Pending report totals are unavailable." />

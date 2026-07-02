@@ -268,4 +268,29 @@ describe("MemberProfile document loading boundary", () => {
     expect(screen.queryByText("Sujesh P R")).not.toBeInTheDocument();
     expect(screen.getByTestId("finance-backend")).toBeInTheDocument();
   });
+
+  it.each([
+    ["president", "bijesh-president", "president-admin", 2],
+    ["secretary", "rajeesh-secretary", "secretary", 2],
+    ["treasurer", "ranjith-treasurer", "treasurer", 2],
+    ["member", "sajith-member", "member", 1]
+  ] as const)("reports the connected Events & Meetings source truthfully for %s", async (role, identity, roleSlug, expectedCount) => {
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    if (role === "member") {
+      authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+      authState.session.membership.member = authState.member;
+    }
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    expect(await screen.findAllByText("Available in Events & Meetings.")).toHaveLength(expectedCount);
+    expect(screen.queryByText("No live event source is connected.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Meeting information is not connected.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Meeting information is not connected to the Dashboard yet.")).not.toBeInTheDocument();
+  });
+
 });
