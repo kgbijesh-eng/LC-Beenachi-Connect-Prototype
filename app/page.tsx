@@ -5065,7 +5065,7 @@ function Dashboard({
         <section className="compactPanel dashboardPanel">
           <DashboardSectionHeader title="Operational source status" label="Unknown is not reported as zero" />
           <div className="compactDashboardGrid">
-            <TruthStatusCard label="Finance & Dues" value="Finance summary not connected" />
+            <TruthStatusCard label="Finance & Dues" value="Available in Finance." />
             <TruthStatusCard label="Announcements" value="Announcements are not connected to the Dashboard yet." />
             <TruthStatusCard label="Events" value="Available in Events & Meetings." />
             <TruthStatusCard label="Meetings" value="Available in Events & Meetings." />

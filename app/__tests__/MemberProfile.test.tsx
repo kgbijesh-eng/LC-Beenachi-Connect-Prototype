@@ -293,4 +293,21 @@ describe("MemberProfile document loading boundary", () => {
     expect(screen.queryByText("Meeting information is not connected to the Dashboard yet.")).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["president", "bijesh-president", "president-admin"],
+    ["secretary", "rajeesh-secretary", "secretary"],
+    ["treasurer", "ranjith-treasurer", "treasurer"]
+  ] as const)("reports the connected Finance source truthfully for %s", async (role, identity, roleSlug) => {
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    expect(await screen.findByText("Available in Finance.")).toBeInTheDocument();
+    expect(screen.queryByText("Finance summary not connected")).not.toBeInTheDocument();
+  });
+
 });
