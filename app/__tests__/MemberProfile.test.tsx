@@ -310,4 +310,33 @@ describe("MemberProfile document loading boundary", () => {
     expect(screen.queryByText("Finance summary not connected")).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["president", "bijesh-president", "president-admin"],
+    ["secretary", "rajeesh-secretary", "secretary"]
+  ] as const)("opens the connected profile-update review workflow for %s", async (role, identity, roleSlug) => {
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /People/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Profile Update Pending" }));
+
+    expect(await screen.findByTestId("profile-updates-backend")).toBeInTheDocument();
+    expect(screen.queryByText("The profile update approval workflow is not connected yet.")).not.toBeInTheDocument();
+  });
+
+  it("keeps Treasurer outside the profile-update review navigation", () => {
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    expect(screen.queryByRole("button", { name: /People/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Profile Update Pending" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("profile-updates-backend")).not.toBeInTheDocument();
+  });
+
 });

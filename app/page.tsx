@@ -4133,13 +4133,7 @@ function NavDetailScreen({
     return <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>;
   }
   if (isProfileUpdatePending) {
-    return (
-      <section className="stack">
-        <Toolbar title="Profile Update Pending" actionLabel="Not connected" />
-        <div className="notice">The profile update approval workflow is not connected yet.</div>
-        <div className="notice memberHelperText">Real pending requests will appear here only after a verified backend approval source is connected.</div>
-      </section>
-    );
+    return <ProfileUpdatesBackend role={role} mode="review" />;
   }
   if (isGovernanceDetail && memberStatus === "loading") {
     return <section className="compactPanel"><Toolbar title={title} actionLabel="Loading" /><div className="notice">Loading verified leadership assignments...</div></section>;
