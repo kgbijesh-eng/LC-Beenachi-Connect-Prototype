@@ -364,4 +364,26 @@ describe("MemberProfile document loading boundary", () => {
     expect(screen.queryByTestId("profile-updates-backend")).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["president", "bijesh-president", "president-admin"],
+    ["secretary", "rajeesh-secretary", "secretary"]
+  ] as const)("does not present fabricated announcement records or actions for %s", async (role, identity, roleSlug) => {
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Operations/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Announcements/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Published" }));
+
+    expect(await screen.findByText("Announcement records are not connected to a verified backend source. No announcement records are shown.")).toBeInTheDocument();
+    expect(screen.queryByText("District Governor Visit Update")).not.toBeInTheDocument();
+    expect(screen.queryByText("Monthly Fellowship Notice")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View" })).not.toBeInTheDocument();
+  });
+
 });

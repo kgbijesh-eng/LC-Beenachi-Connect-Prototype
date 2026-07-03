@@ -4289,67 +4289,19 @@ function DraftPendingAnnouncements({ setScreen }: { setScreen: (screen: Screen) 
 
 function AnnouncementDetailScreen({
   detail,
-  setScreen,
-  onSelectAnnouncement
+  setScreen
 }: {
   detail: AnnouncementDetail;
   setScreen: (screen: Screen) => void;
   onSelectAnnouncement?: (announcement: { title: string; meta: string[]; sourceSection: AnnouncementDetail }) => void;
 }) {
-  const config: Record<AnnouncementDetail, {
-    title: string;
-    note: string;
-    action: string;
-    rows: { title: string; meta: string[] }[];
-  }> = {
-    Published: {
-      title: "Published Announcements",
-      note: "Dummy data only.",
-      action: "View",
-      rows: [
-        { title: "District Governor Visit Update", meta: ["Audience: All Members", "Status: Published"] },
-        { title: "Monthly Fellowship Notice", meta: ["Audience: Members & Family", "Status: Published"] }
-      ]
-    },
-    "Draft / Pending": {
-      title: "Draft / Pending Announcements",
-      note: "Dummy data only. Real approval workflow will be implemented in backend phase.",
-      action: "Review",
-      rows: [
-        { title: "Board Meeting Notice", meta: ["Type: Meeting Notice", "Owner: Secretary", "Status: Draft"] },
-        { title: "Medical Camp Announcement", meta: ["Type: Event / Activity", "Owner: President", "Status: Pending Approval"] },
-        { title: "Fellowship Reminder", meta: ["Type: Announcement", "Owner: Secretary", "Status: Draft"] }
-      ]
-    },
-    "High Priority": {
-      title: "High Priority Announcements",
-      note: "Dummy data only.",
-      action: "View",
-      rows: [
-        { title: "Emergency Blood Requirement", meta: ["Audience: Members with donor consent", "Priority: High"] },
-        { title: "District Visit Preparation", meta: ["Audience: Board & PST", "Priority: High"] }
-      ]
-    }
-  };
-  const current = config[detail];
-
   return (
     <section className="stack">
       <div className="compactPanel">
-        <Toolbar title={current.title} actionLabel="Operations / Announcements" />
+        <Toolbar title={`${detail} Announcements`} actionLabel="Not connected" />
         <button className="secondaryButton compactBackButton" onClick={() => setScreen("events-meetings")}>← Operations</button>
-        <div className="notice">{current.note}</div>
-      </div>
-      <div className="draftPendingGrid">
-        {current.rows.map((item) => (
-          <article className="draftPendingCard" key={item.title}>
-            <div>
-              <h3>{item.title}</h3>
-              {item.meta.map((line) => <span key={line}>{line}</span>)}
-            </div>
-            <button className="filterButton" onClick={() => onSelectAnnouncement?.({ ...item, sourceSection: detail })}>{current.action}</button>
-          </article>
-        ))}
+        <div className="notice">Announcement records are not connected to a verified backend source. No announcement records are shown.</div>
+        <div className="notice memberHelperText">Real announcement records and actions will appear here only after a verified backend workflow is connected.</div>
       </div>
     </section>
   );
