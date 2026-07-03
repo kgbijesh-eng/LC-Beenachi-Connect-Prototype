@@ -4129,11 +4129,20 @@ function NavDetailScreen({
   }
   const isProfileUpdatePending = parent === "People" && title === "Profile Update Pending";
   const isGovernanceDetail = parent === "People" && governanceDetailTitles.includes(title);
+  const boardCommitteeUnavailableStates: Partial<Record<string, string>> = {
+    "Board Members": "Board records are not connected to a verified backend source. No board records are shown.",
+    "Committee List": "Committee records are not connected to a verified backend source. No committee records are shown.",
+    "Committee Members": "Committee membership records are not connected to a verified backend source. Selectable committee membership is unavailable."
+  };
+  const boardCommitteeUnavailableState = parent === "People" ? boardCommitteeUnavailableStates[title] : undefined;
   if (isProfileUpdatePending && role !== "president" && role !== "secretary") {
     return <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>;
   }
   if (isProfileUpdatePending) {
     return <ProfileUpdatesBackend role={role} mode="review" />;
+  }
+  if (boardCommitteeUnavailableState) {
+    return <section className="stack"><div className="compactPanel"><Toolbar title={title} actionLabel="Not connected" /><button className="secondaryButton compactBackButton" onClick={() => setScreen("members")}>← People</button><div className="notice">{boardCommitteeUnavailableState}</div><div className="notice memberHelperText">Verified board and committee records will appear here only after a backend source and matching permissions are connected.</div></div></section>;
   }
   if (isGovernanceDetail && memberStatus === "loading") {
     return <section className="compactPanel"><Toolbar title={title} actionLabel="Loading" /><div className="notice">Loading verified leadership assignments...</div></section>;

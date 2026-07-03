@@ -386,4 +386,65 @@ describe("MemberProfile document loading boundary", () => {
     expect(screen.queryByRole("button", { name: "View" })).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["Board Members", "Board records are not connected to a verified backend source. No board records are shown."],
+    ["Committee List", "Committee records are not connected to a verified backend source. No committee records are shown."],
+    ["Committee Members", "Committee membership records are not connected to a verified backend source. Selectable committee membership is unavailable."]
+  ] as const)("keeps the President %s destination distinct and truthful", async (destination, expectedState) => {
+    authState.role = "president";
+    authState.identity = "bijesh-president";
+    authState.session.role = "president";
+    authState.session.identity = "bijesh-president";
+    authState.session.membership.role.slug = "president-admin";
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /People/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Board & Committees/ }));
+    fireEvent.click(screen.getByRole("button", { name: destination }));
+
+    expect(await screen.findByText(expectedState)).toBeInTheDocument();
+    expect(screen.queryByText("Committee List item 2")).not.toBeInTheDocument();
+    expect(screen.queryByText("Term / Lionistic Year: 2026–27")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View member profile" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["secretary", "rajeesh-secretary", "secretary"],
+    ["treasurer", "ranjith-treasurer", "treasurer"]
+  ] as const)("preserves truthful Board/Committee access for %s", async (role, identity, roleSlug) => {
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: role === "treasurer" ? /Club Visibility/ : /People/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Board & Committees/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Committee List" }));
+
+    expect(await screen.findByText("Committee records are not connected to a verified backend source. No committee records are shown.")).toBeInTheDocument();
+    expect(screen.queryByText("Committee List item 2")).not.toBeInTheDocument();
+  });
+
+  it("keeps Normal Members outside Board/Committee administration navigation", () => {
+    authState.role = "member";
+    authState.identity = "sajith-member";
+    authState.session.role = "member";
+    authState.session.identity = "sajith-member";
+    authState.session.membership.role.slug = "member";
+    authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+    authState.session.membership.member = authState.member;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    expect(screen.getByRole("button", { name: "Member Directory" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Board & Committees/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Board Members" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Committee List" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Committee Members" })).not.toBeInTheDocument();
+  });
+
 });
