@@ -447,4 +447,43 @@ describe("MemberProfile document loading boundary", () => {
     expect(screen.queryByRole("button", { name: "Committee Members" })).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["president", "bijesh-president", "president-admin"],
+    ["secretary", "rajeesh-secretary", "secretary"],
+    ["treasurer", "ranjith-treasurer", "treasurer"]
+  ] as const)("shows a truthful disconnected Club Account Statement for %s", async (role, identity, roleSlug) => {
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Finance/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Club Account Statement/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Account Overview" }));
+
+    expect(await screen.findByText("Club account statements are not connected to a verified backend source. No balances or transactions are shown.")).toBeInTheDocument();
+    expect(screen.queryByText("Opening Balance")).not.toBeInTheDocument();
+    expect(screen.queryByText("RCP-021")).not.toBeInTheDocument();
+    expect(screen.queryByText("₹25,000")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Club Finance Reports/ })).toBeInTheDocument();
+  });
+
+  it("keeps Normal Members outside Club Account Statement navigation", () => {
+    authState.role = "member";
+    authState.identity = "sajith-member";
+    authState.session.role = "member";
+    authState.session.identity = "sajith-member";
+    authState.session.membership.role.slug = "member";
+    authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+    authState.session.membership.member = authState.member;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    expect(screen.queryByRole("button", { name: /Finance/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Club Account Statement" })).not.toBeInTheDocument();
+  });
+
 });

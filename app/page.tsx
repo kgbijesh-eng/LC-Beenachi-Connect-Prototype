@@ -2540,7 +2540,11 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
             setSelectedMonthKey={setSelectedFellowshipMonthKey}
           />
         )}
-                {screen === "finance-module" && <FinanceBackend role={role} />}
+                {screen === "finance-module" && (
+                  financeSection === "Club Account Statement"
+                    ? <ClubAccountStatementUnavailable />
+                    : <FinanceBackend role={role} />
+                )}
         {screen === "reports-tools-module" && (
           <ReportsBackend role={role} onReminders={() => handleSetScreen("notifications-reminders")} />
         )}
@@ -4312,6 +4316,16 @@ function AnnouncementDetailScreen({
         <div className="notice">Announcement records are not connected to a verified backend source. No announcement records are shown.</div>
         <div className="notice memberHelperText">Real announcement records and actions will appear here only after a verified backend workflow is connected.</div>
       </div>
+    </section>
+  );
+}
+
+function ClubAccountStatementUnavailable() {
+  return (
+    <section className="stack">
+      <Toolbar title="Club Account Statement" actionLabel="Not connected" />
+      <div className="notice">Club account statements are not connected to a verified backend source. No balances or transactions are shown.</div>
+      <div className="notice memberHelperText">Member dues, payments, receipts, and verified club finance reports remain available through their existing backend-connected destinations.</div>
     </section>
   );
 }
