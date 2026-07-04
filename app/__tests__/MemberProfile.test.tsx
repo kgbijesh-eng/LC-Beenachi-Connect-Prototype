@@ -157,6 +157,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -484,6 +485,36 @@ describe("MemberProfile document loading boundary", () => {
 
     expect(screen.queryByRole("button", { name: /Finance/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Club Account Statement" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["president", "bijesh-president", "president-admin"],
+    ["secretary", "rajeesh-secretary", "secretary"],
+    ["treasurer", "ranjith-treasurer", "treasurer"],
+    ["member", "sajith-member", "member"]
+  ] as const)("opens Celebrations on the current period for %s", async (role, identity, roleSlug) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-04T12:00:00+05:30"));
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    if (role === "member") {
+      authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+      authState.session.membership.member = authState.member;
+    }
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: role === "member" ? "Celebrations" : "Open Celebrations" }));
+
+    expect(await screen.findByText("July 2026")).toBeInTheDocument();
+    expect(screen.getByLabelText("Celebration month")).toHaveValue("7");
+    expect(screen.queryByText("June 2026")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Celebration month"), { target: { value: "6" } });
+    expect(screen.getByText("June 2026")).toBeInTheDocument();
   });
 
 });

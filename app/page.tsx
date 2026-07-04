@@ -9882,13 +9882,21 @@ function celebrationDayMonth(value: string) {
 }
 
 function Celebrations({ role, setScreen }: { role: Role; setScreen: (screen: Screen) => void }) {
-  const [month, setMonth] = useState(6);
+  const [period, setPeriod] = useState<{ month: number; year: number } | null>(null);
+  useEffect(() => {
+    const currentDate = new Date();
+    setPeriod({ month: currentDate.getMonth() + 1, year: currentDate.getFullYear() });
+  }, []);
+  const month = period?.month ?? 0;
   return (
     <section className="stack">
-      <Toolbar title="Celebrations" actionLabel={`${celebrationMonths[month - 1]} 2026`} />
+      <Toolbar title="Celebrations" actionLabel={period ? `${celebrationMonths[month - 1]} ${period.year}` : "Loading current period"} />
       <div className="notice memberHelperText">Greeting reminders are unavailable until a verified reminder workflow is connected.</div>
       <label className="moduleSelect">Celebration month
-        <select value={month} onChange={(event) => setMonth(Number(event.target.value))}>{celebrationMonths.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}</select>
+        <select value={month || ""} disabled={!period} onChange={(event) => setPeriod((current) => current ? { ...current, month: Number(event.target.value) } : current)}>
+          {!period && <option value="">Loading current month</option>}
+          {celebrationMonths.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
+        </select>
       </label>
       <MemberCollectionState>{(currentMembers) => {
         const inMonth = (value?: string | null) => value ? Number(value.split("-")[1]) === month : false;
