@@ -128,7 +128,8 @@ export default function RemindersBackend({ role, onBack }: { role: Role; onBack:
 
   return (
     <section className="stack">
-      <div className="compactPanel"><h2>Notifications & Reminders</h2><p>{canManage ? "Verified backend management" : "Verified backend read-only"}</p></div>
+      <div className="compactPanel"><h2>Reminders</h2><p>{canManage ? "Verified backend management" : "Verified backend read-only"}</p></div>
+      <div className="notice memberHelperText">Notification delivery and notification read status are not connected.</div>
       <div className="notice">{message}</div>
       <div className="compactPanel"><div className="formGrid">
         <label>Status<select value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })}><option value="">All</option><option value="draft">Draft</option><option value="active">Active</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
