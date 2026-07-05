@@ -352,6 +352,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
             'title' => 'Past Meeting',
             'type' => 'meeting',
             'starts_at' => '2026-06-20 10:00:00',
+            'ends_at' => '2026-06-20 11:00:00',
         ]);
 
         $this->getJson("/api/v1/clubs/{$club->id}/events?type=meeting&q=Board")

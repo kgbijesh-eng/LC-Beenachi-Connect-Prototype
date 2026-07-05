@@ -4,7 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 class ClubEvent extends Model
 {
@@ -84,6 +86,17 @@ class ClubEvent extends Model
     public static function visibilities(): array
     {
         return [self::VISIBILITY_MEMBERS, self::VISIBILITY_MANAGEMENT];
+    }
+
+    public function scopePeriod(Builder $query, string $scope, ?Carbon $now = null): Builder
+    {
+        $now ??= Carbon::now('UTC');
+
+        return match ($scope) {
+            'upcoming' => $query->whereRaw('COALESCE(ends_at, starts_at) >= ?', [$now]),
+            'past' => $query->whereRaw('COALESCE(ends_at, starts_at) < ?', [$now]),
+            default => $query,
+        };
     }
 
     public function club(): BelongsTo

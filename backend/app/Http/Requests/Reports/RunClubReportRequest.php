@@ -4,6 +4,7 @@ namespace App\Http\Requests\Reports;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
+use Illuminate\Validation\Rule;
 
 class RunClubReportRequest extends FormRequest
 {
@@ -15,6 +16,7 @@ class RunClubReportRequest extends FormRequest
             'date_to' => ['sometimes','date_format:Y-m-d','after_or_equal:date_from'],
             'status' => ['sometimes','string','max:30'],
             'type' => ['sometimes','string','max:30'],
+            'scope' => ['sometimes', Rule::in(['upcoming', 'past'])],
             'record_type' => ['sometimes','string','max:30'],
             'service_category' => ['sometimes','string','max:100'],
             'priority' => ['sometimes','string','max:30'],

@@ -34,11 +34,11 @@ class ClubReportService
 
     private function events(Club $club,array $d,array $f): array
     {
-        $q=ClubEvent::where('club_id',$club->id); foreach(['status','type'] as $x) if(isset($f[$x])) $q->where($x,$f[$x]);
+        $q=ClubEvent::where('club_id',$club->id); foreach(['status','type'] as $x) if(isset($f[$x])) $q->where($x,$f[$x]); if(isset($f['scope'])) $q->period($f['scope'], Carbon::now('UTC'));
         if(isset($f['q'])) $q->where('title','like','%'.trim($f['q']).'%'); $this->dates($q,$club,$f,'starts_at');
         $p=$q->orderBy('starts_at')->orderBy('id')->paginate($f['per_page']??25,['*'],'page',$f['page']??1);
         $rows=collect($p->items())->map(fn(ClubEvent $e)=>['id'=>$e->id,'type'=>$e->type,'title'=>$e->title,'status'=>$e->status,'visibility'=>$e->visibility,'is_all_day'=>$e->is_all_day,'scheduled_at'=>$e->starts_at?->toISOString(),'scheduled_date'=>$e->start_date?->format('Y-m-d'),'venue'=>$e->venue])->all();
-        return $this->payload($club,$d,$f,['total_records'=>$p->total()],$rows,$p,'starts_at UTC; club-timezone inclusive filters');
+        return $this->payload($club,$d,$f,['total_records'=>$p->total()],$rows,$p,'effective end (ends_at or starts_at) UTC period; club-timezone inclusive start-date filters');
     }
 
     private function projects(Club $club,array $d,array $f): array

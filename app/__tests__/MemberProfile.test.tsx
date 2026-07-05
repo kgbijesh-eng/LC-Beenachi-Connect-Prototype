@@ -567,6 +567,28 @@ describe("MemberProfile document loading boundary", () => {
     expect(screen.queryByRole("button", { name: "Monthly Birthday Report" })).not.toBeInTheDocument();
   });
 
+  it("routes officer Events and Meetings reports to the verified backend register", async () => {
+    authState.role = "president";
+    authState.identity = "bijesh-president";
+    authState.session.role = "president";
+    authState.session.identity = "bijesh-president";
+    authState.session.membership.role.slug = "president-admin";
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Reports & Tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Events & Meetings Reports/ }));
+
+    expect(screen.getByRole("button", { name: "Events & Meetings Register" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Attendance Placeholder Report" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Past Events Summary" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Events & Meetings Register" }));
+    expect(await screen.findByRole("heading", { name: "Reports" })).toBeInTheDocument();
+    expect(screen.getByText(/verified provenance/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export|Download|Generate Report/ })).not.toBeInTheDocument();
+  });
+
   it.each([
     ["president", "bijesh-president", "president-admin"],
     ["secretary", "rajeesh-secretary", "secretary"],

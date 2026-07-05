@@ -20,7 +20,7 @@ class ReportCatalog
         'events-register' => [
             'title' => 'Events & Meetings Register',
             'description' => 'Verified club-scoped Events and Meetings records.',
-            'allowed_filters' => ['date_from','date_to','status','type','q','page','per_page'],
+            'allowed_filters' => ['date_from','date_to','status','type','scope','q','page','per_page'],
             'aggregate_only' => false,
             'sensitivity' => 'internal',
         ],

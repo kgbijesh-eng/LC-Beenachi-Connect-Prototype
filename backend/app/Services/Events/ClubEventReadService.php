@@ -67,13 +67,7 @@ class ClubEventReadService
     private function applyFilters(Builder $query, array $filters, bool $isManagement): void
     {
         $scope = $filters['scope'] ?? 'upcoming';
-        $now = Carbon::now('UTC');
-
-        if ($scope === 'upcoming') {
-            $query->where('starts_at', '>=', $now);
-        } elseif ($scope === 'past') {
-            $query->where('starts_at', '<', $now);
-        }
+        $query->period($scope, Carbon::now('UTC'));
 
         foreach (['type', 'status', 'visibility'] as $field) {
             if (array_key_exists($field, $filters) && ($isManagement || ! in_array($field, ['status', 'visibility'], true))) {

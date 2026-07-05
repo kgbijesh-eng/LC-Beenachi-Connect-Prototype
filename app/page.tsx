@@ -3,6 +3,7 @@
 import { createContext, type FormEvent, type ReactNode, useContext, useEffect, useMemo, useState, useRef } from "react";
 import RemindersBackend from "./RemindersBackend";
 import ReportsBackend from "./ReportsBackend";
+import { eventMeetingSection } from "./eventMeetingPeriod";
 import ProfileUpdatesBackend from "./ProfileUpdatesBackend";
 import FinanceBackend from "./FinanceBackend";
 import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";
@@ -998,9 +999,7 @@ const reportMenuItems: NavItem[] = [
   {
     label: "Events & Meetings Reports",
     children: [
-      { label: "Upcoming Meetings", screen: "report-detail", reportSection: "Events & Meetings Reports", reportDetail: "Upcoming Meetings" },
-      { label: "Past Events Summary", screen: "report-detail", reportSection: "Events & Meetings Reports", reportDetail: "Past Events Summary" },
-      { label: "Attendance Placeholder Report", screen: "report-detail", reportSection: "Events & Meetings Reports", reportDetail: "Attendance Placeholder Report" }
+      { label: "Events & Meetings Register", screen: "reports-tools-module" }
     ]
   },
   {
@@ -3903,7 +3902,7 @@ function ReportCategory({ section }: { section: ReportsSection }) {
     "Member Reports": ["Active member list", "Profile update pending report", "Role-wise member report"],
     "Finance / Ledger Reports": ["Member-wise outstanding report", "Payment collection report", "Monthly finance summary"],
     "Fellowship Reports": ["Current month sponsorship report", "Sponsor payment report", "Queue history report"],
-    "Events & Meetings Reports": ["Upcoming meetings report", "Attendance placeholder report", "Past event summary"],
+    "Events & Meetings Reports": ["Events & Meetings Register"],
     "Club Activity / Service Reports": ["Monthly Activity Report", "Yearly Consolidated Activity Report", "Category-wise Activity Report"],
     "Celebration Reports": ["Monthly birthday report", "Monthly anniversary report", "Celebration register"],
     "Blood Donor Consent Report": ["Consented donor list", "Blood group summary", "Contact visibility report"],
@@ -4646,19 +4645,6 @@ function reportDetailCards(section: ReportsSection, detail: string, amountPerSpo
   if (section === "Document Reports") {
     return documentReportCards(detail);
   }
-  if (section === "Events & Meetings Reports") {
-    return eventsMeetings.map((item) => ({
-      title: item.title,
-      meta: [
-        `Date: ${item.date}${item.time ? ` · ${item.time}` : ""}`,
-        `Venue: ${item.venue}`,
-        `Audience: ${item.visibility}`,
-        `Status: ${item.status}`,
-        `Report: ${detail}`
-      ]
-    }));
-  }
-
   const finalAmountPerSponsor = amountPerSponsor ?? 2500;
   return [
     { title: "Month: June 2026", meta: ["Sponsor: Lion Bijesh", `Amount: ${formatSponsorShare(finalAmountPerSponsor)}`, "Status: Paid", `Report: ${detail}`] },
@@ -9251,9 +9237,7 @@ function EventsMeetings({
   }, [role, selectedSection, canManageEvents, refreshKey, session]);
 
   function sectionForEvent(event: BackendEventMeeting): EventMeetingSection {
-    if (event.status === "draft") return "Meeting Notices";
-    if (event.starts_at && new Date(event.starts_at).getTime() < Date.now()) return "Past Events";
-    return event.type === "meeting" ? "Upcoming Meetings" : "Upcoming Events";
+    return eventMeetingSection(event);
   }
 
   const sections: EventMeetingSection[] = selectedSection ? [selectedSection] : ["Upcoming Events", "Upcoming Meetings", "Past Events", "Meeting Notices"];
