@@ -439,10 +439,10 @@ describe("MemberProfile document loading boundary", () => {
   it("keeps Normal Members outside Board/Committee administration navigation", () => {
     authState.role = "member";
     authState.identity = "sajith-member";
+    authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
     authState.session.role = "member";
     authState.session.identity = "sajith-member";
     authState.session.membership.role.slug = "member";
-    authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
     authState.session.membership.member = authState.member;
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
     render(<Prototype />);
@@ -587,6 +587,42 @@ describe("MemberProfile document loading boundary", () => {
     expect(await screen.findByRole("heading", { name: "Reports" })).toBeInTheDocument();
     expect(screen.getByText(/verified provenance/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Export|Download|Generate Report/ })).not.toBeInTheDocument();
+  });
+
+  it("routes officer Club Activity reports to the verified backend register", async () => {
+    authState.role = "president";
+    authState.identity = "bijesh-president";
+    authState.session.role = "president";
+    authState.session.identity = "bijesh-president";
+    authState.session.membership.role.slug = "president-admin";
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Reports & Tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Club Activity \/ Service Reports/ }));
+
+    expect(screen.getByRole("button", { name: "Projects & Activities Register" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Monthly Activity Report" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Yearly Consolidated Activity Report" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Category-wise Activity Report" })).not.toBeInTheDocument();
+  });
+
+  it("keeps Projects and Activities report navigation outside the Normal Member view", async () => {
+    authState.role = "member";
+    authState.identity = "sajith-member";
+    authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+    authState.session.role = "member";
+    authState.session.identity = "sajith-member";
+    authState.session.membership.role.slug = "member";
+    authState.session.membership.member = authState.member;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Projects / Activities" }));
+
+    expect(await screen.findByText("No Projects or Activities match the current filters.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Reports & Tools" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Draft" })).not.toBeInTheDocument();
   });
 
   it.each([

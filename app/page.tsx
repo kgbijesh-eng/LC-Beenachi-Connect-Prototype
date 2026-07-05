@@ -1005,9 +1005,7 @@ const reportMenuItems: NavItem[] = [
   {
     label: "Club Activity / Service Reports",
     children: [
-      { label: "Monthly Activity Report", screen: "report-detail", reportSection: "Club Activity / Service Reports", reportDetail: "Monthly Activity Report" },
-      { label: "Yearly Consolidated Activity Report", screen: "report-detail", reportSection: "Club Activity / Service Reports", reportDetail: "Yearly Consolidated Activity Report" },
-      { label: "Category-wise Activity Report", screen: "report-detail", reportSection: "Club Activity / Service Reports", reportDetail: "Category-wise Activity Report" }
+      { label: "Projects & Activities Register", screen: "reports-tools-module" }
     ]
   },
   {
@@ -3903,7 +3901,7 @@ function ReportCategory({ section }: { section: ReportsSection }) {
     "Finance / Ledger Reports": ["Member-wise outstanding report", "Payment collection report", "Monthly finance summary"],
     "Fellowship Reports": ["Current month sponsorship report", "Sponsor payment report", "Queue history report"],
     "Events & Meetings Reports": ["Events & Meetings Register"],
-    "Club Activity / Service Reports": ["Monthly Activity Report", "Yearly Consolidated Activity Report", "Category-wise Activity Report"],
+    "Club Activity / Service Reports": ["Projects & Activities Register"],
     "Celebration Reports": ["Monthly birthday report", "Monthly anniversary report", "Celebration register"],
     "Blood Donor Consent Report": ["Consented donor list", "Blood group summary", "Contact visibility report"],
     "Document Reports": ["Published document report", "Board-only document report", "Pending upload report"]
@@ -4612,18 +4610,6 @@ function recurringDateMonth(value: string | null | undefined) {
 function reportDetailCards(section: ReportsSection, detail: string, amountPerSponsor: number | undefined, currentMembers: Member[], reportMonth?: number) {
   if (section === "Member Reports") {
     return currentMembers.map((member) => ({ title: `Member: ${member.name}`, meta: [`Member ID: ${member.id}`, `Membership: ${member.membershipCategory || member.membershipType || "Not provided"}`, `Status: ${member.status}`, `Report: ${detail}`] }));
-  }
-  if (section === "Club Activity / Service Reports") {
-    return activities.map((activity) => ({
-      title: activity.name,
-      meta: [
-        `Date: ${activity.date}`,
-        `Lead: ${activity.lead}`,
-        `People Served: ${activity.peopleServed}`,
-        `Report Document: ${activity.reportDocument}`,
-        `Report: ${detail}`
-      ]
-    }));
   }
   if (section === "Celebration Reports") {
     return currentMembers.flatMap((member) => {
@@ -9859,7 +9845,7 @@ function ProjectsActivities({ role, setScreen }: { role: Role; setScreen: (scree
     <div className="filterBar" style={{ alignItems: "end" }}><label>Search<input value={query} onChange={e => setQuery(e.target.value)} placeholder="Title, objective, location" /></label><label>Type<select value={recordType} onChange={e => setRecordType(e.target.value as typeof recordType)}><option value="">All types</option><option value="project">Projects</option><option value="activity">Activities</option></select></label><label>Status<select value={scope} onChange={e => setScope(e.target.value as typeof scope)}><option value="all">All visible</option><option value="planned">Planned</option><option value="active">Active</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label><button className="filterButton" onClick={() => token && clubId && void loadList(token, clubId, 1)} disabled={!token || state === "loading"}>Apply Filters</button><button className="filterButton" onClick={() => { setQuery(""); setRecordType(""); setScope("all"); if (token && clubId) void loadList(token, clubId, 1, { q: "", type: "", scope: "all" }); }} disabled={!token}>Clear</button>{canManage && <button onClick={() => { setSelected(null); setForm(emptyClubProjectForm); setView("create"); setState("ready"); setMessage("New records are created as Draft only."); }}>Create Draft</button>}</div>
     {records.length > 0 && <div className="activityGrid">{records.map(project => <article className="activityCard" key={project.id} style={{ minWidth: 0, overflowWrap: "anywhere" }}><div className="toolbar"><h2>{project.title}</h2><span className="tag">{project.status}</span></div><div className="fieldGrid"><Field label="Type" value={project.record_type === "project" ? "Project" : "Activity"} /><Field label="Stable ID" value={String(project.id)} /><Field label="Start" value={project.actual_start_date ?? project.planned_start_date ?? "Not set"} /><Field label="Location" value={project.location ?? "Not recorded"} /></div><button className="filterButton" onClick={() => void openRecord(project.id)}>View Record #{project.id}</button></article>)}</div>}
     {meta && meta.last_page > 1 && <div className="buttonRow"><button className="secondaryButton" disabled={meta.current_page <= 1 || !token || !clubId} onClick={() => token && clubId && void loadList(token, clubId, meta.current_page - 1)}>Previous</button><span>Page {meta.current_page} of {meta.last_page} · {meta.total} records</span><button className="secondaryButton" disabled={meta.current_page >= meta.last_page || !token || !clubId} onClick={() => token && clubId && void loadList(token, clubId, meta.current_page + 1)}>Next</button></div>}
-    <button className="secondaryButton" onClick={() => setScreen("reports-tools-module")}>Open Reports & Tools</button>
+    {role !== "member" && <button className="secondaryButton" onClick={() => setScreen("reports-tools-module")}>Open Reports & Tools</button>}
   </section>;
 }
 

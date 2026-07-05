@@ -88,21 +88,7 @@ class ClubProjectReadService
             $query->where('service_category', $filters['service_category']);
         }
 
-        if (isset($filters['from'])) {
-            $query->where(function (Builder $query) use ($filters): void {
-                $query
-                    ->where('planned_start_date', '>=', $filters['from'])
-                    ->orWhere('actual_start_date', '>=', $filters['from']);
-            });
-        }
-
-        if (isset($filters['to'])) {
-            $query->where(function (Builder $query) use ($filters): void {
-                $query
-                    ->where('planned_start_date', '<=', $filters['to'])
-                    ->orWhere('actual_start_date', '<=', $filters['to']);
-            });
-        }
+        $query->effectiveStartBetween($filters['from'] ?? null, $filters['to'] ?? null);
 
         if (isset($filters['q']) && trim((string) $filters['q']) !== '') {
             $term = '%'.trim((string) $filters['q']).'%';

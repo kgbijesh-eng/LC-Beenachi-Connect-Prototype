@@ -15,7 +15,7 @@ export default function ReportsBackend({role,onReminders}:{role:Role;onReminders
   const [report,setReport]=useState<Report|null>(null); const [meta,setMeta]=useState<Meta|null>(null);
   const [state,setState]=useState<"loading"|"ready"|"empty"|"error"|"forbidden"|"validation">("loading");
   const [message,setMessage]=useState("Loading authorized report catalog...");
-  const [filters,setFilters]=useState({q:"",status:"",scope:"",date_from:"",date_to:"",category:"",charge_status:"",payment_status:"",payment_mode:"",member_search:"",charge_search:""});
+  const [filters,setFilters]=useState({q:"",status:"",scope:"",record_type:"",service_category:"",date_from:"",date_to:"",category:"",charge_status:"",payment_status:"",payment_mode:"",member_search:"",charge_search:""});
 
   function clearOutput(){setReport(null);setMeta(null);}
   function hasReportValue(value:unknown):boolean {
@@ -55,6 +55,8 @@ export default function ReportsBackend({role,onReminders}:{role:Role;onReminders
       {selected.allowed_filters.includes("q")&&<label>Search<input value={filters.q} onChange={e=>setFilters({...filters,q:e.target.value})}/></label>}
       {selected.allowed_filters.includes("status")&&<label>Status<input value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}/></label>}
       {selected.allowed_filters.includes("scope")&&<label>Period<select value={filters.scope} onChange={e=>setFilters({...filters,scope:e.target.value})}><option value="">All records</option><option value="upcoming">Upcoming or ongoing</option><option value="past">Past</option></select></label>}
+      {selected.allowed_filters.includes("record_type")&&<label>Record type<select value={filters.record_type} onChange={e=>setFilters({...filters,record_type:e.target.value})}><option value="">All types</option><option value="project">Projects</option><option value="activity">Activities</option></select></label>}
+      {selected.allowed_filters.includes("service_category")&&<label>Service category<input value={filters.service_category} onChange={e=>setFilters({...filters,service_category:e.target.value})}/></label>}
       {selected.allowed_filters.includes("category")&&<label>Category<input value={filters.category} onChange={e=>setFilters({...filters,category:e.target.value})}/></label>}
       {selected.allowed_filters.includes("charge_status")&&<label>Charge status<input value={filters.charge_status} onChange={e=>setFilters({...filters,charge_status:e.target.value})}/></label>}
       {selected.allowed_filters.includes("payment_status")&&<label>Payment status<input value={filters.payment_status} onChange={e=>setFilters({...filters,payment_status:e.target.value})}/></label>}
@@ -63,7 +65,7 @@ export default function ReportsBackend({role,onReminders}:{role:Role;onReminders
       {selected.allowed_filters.includes("charge_search")&&<label>Charge search<input value={filters.charge_search} onChange={e=>setFilters({...filters,charge_search:e.target.value})}/></label>}
       {selected.allowed_filters.includes("date_from")&&<label>From<input type="date" value={filters.date_from} onChange={e=>setFilters({...filters,date_from:e.target.value})}/></label>}
       {selected.allowed_filters.includes("date_to")&&<label>To<input type="date" value={filters.date_to} onChange={e=>setFilters({...filters,date_to:e.target.value})}/></label>}
-    </div><div className="buttonRow"><button onClick={()=>void run(selected)}>Apply</button><button className="secondaryButton" onClick={()=>{const f={q:"",status:"",scope:"",date_from:"",date_to:"",category:"",charge_status:"",payment_status:"",payment_mode:"",member_search:"",charge_search:""};setFilters(f);void run(selected,1,f)}}>Clear</button></div></div>}
+    </div><div className="buttonRow"><button onClick={()=>void run(selected)}>Apply</button><button className="secondaryButton" onClick={()=>{const f={q:"",status:"",scope:"",record_type:"",service_category:"",date_from:"",date_to:"",category:"",charge_status:"",payment_status:"",payment_mode:"",member_search:"",charge_search:""};setFilters(f);void run(selected,1,f)}}>Clear</button></div></div>}
     {report&&<section className="stack"><div className="compactPanel"><h2>{report.title}</h2><p>{report.date_basis}</p><p>Generated {report.generated_at} · {report.club_timezone}</p><div className="fieldGrid">{Object.entries(report.summary).map(([k,v])=><div key={k}><strong>{k.replaceAll("_"," ")}</strong><p>{typeof v==="object"?JSON.stringify(v):String(v)}</p></div>)}</div></div><div className="tableLike">{report.rows.map((row,i)=><article className="staticRow" key={String(row.id??i)}>{Object.entries(row).map(([k,v])=><span key={k}><strong>{k.replaceAll("_"," ")}:</strong> {String(v??"")}</span>)}</article>)}</div></section>}
     {meta&&<div className="buttonRow"><button disabled={meta.current_page<=1} onClick={()=>selected&&void run(selected,meta.current_page-1)}>Previous</button><span>Page {meta.current_page} of {meta.last_page} · {meta.total}</span><button disabled={meta.current_page>=meta.last_page} onClick={()=>selected&&void run(selected,meta.current_page+1)}>Next</button></div>}
   </section>;

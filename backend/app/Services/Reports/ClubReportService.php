@@ -44,10 +44,10 @@ class ClubReportService
     private function projects(Club $club,array $d,array $f): array
     {
         $q=ClubProject::where('club_id',$club->id); foreach(['status','record_type','service_category'] as $x) if(isset($f[$x])) $q->where($x,$f[$x]);
-        if(isset($f['q'])) $q->where('title','like','%'.trim($f['q']).'%'); if(isset($f['date_from'])) $q->whereDate('planned_start_date','>=',$f['date_from']); if(isset($f['date_to'])) $q->whereDate('planned_start_date','<=',$f['date_to']);
-        $p=$q->orderBy('planned_start_date')->orderBy('id')->paginate($f['per_page']??25,['*'],'page',$f['page']??1);
+        if(isset($f['q'])) $q->where('title','like','%'.trim($f['q']).'%'); $q->effectiveStartBetween($f['date_from']??null,$f['date_to']??null);
+        $p=$q->orderByRaw('coalesce(actual_start_date, planned_start_date)')->orderBy('id')->paginate($f['per_page']??25,['*'],'page',$f['page']??1);
         $rows=collect($p->items())->map(fn(ClubProject $r)=>['id'=>$r->id,'record_type'=>$r->record_type,'title'=>$r->title,'status'=>$r->status,'service_category'=>$r->service_category,'planned_start_date'=>$r->planned_start_date?->format('Y-m-d'),'planned_end_date'=>$r->planned_end_date?->format('Y-m-d'),'actual_start_date'=>$r->actual_start_date?->format('Y-m-d'),'actual_end_date'=>$r->actual_end_date?->format('Y-m-d'),'expected_beneficiary_count'=>$r->expected_beneficiary_count,'actual_beneficiary_count'=>$r->actual_beneficiary_count])->all();
-        return $this->payload($club,$d,$f,['total_records'=>$p->total()],$rows,$p,'planned_start_date inclusive date-only basis');
+        return $this->payload($club,$d,$f,['total_records'=>$p->total()],$rows,$p,'effective start date (actual_start_date or planned_start_date) inclusive date-only basis');
     }
 
     private function reminders(Club $club,array $d,array $f): array

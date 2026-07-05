@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ClubProject extends Model
@@ -98,6 +99,18 @@ class ClubProject extends Model
     public static function visibilities(): array
     {
         return [self::VISIBILITY_MEMBERS, self::VISIBILITY_MANAGEMENT];
+    }
+
+    public function scopeEffectiveStartBetween(Builder $query, ?string $from, ?string $to): Builder
+    {
+        if ($from !== null) {
+            $query->whereRaw('COALESCE(actual_start_date, planned_start_date) >= ?', [$from]);
+        }
+        if ($to !== null) {
+            $query->whereRaw('COALESCE(actual_start_date, planned_start_date) <= ?', [$to]);
+        }
+
+        return $query;
     }
 
     public function club(): BelongsTo
