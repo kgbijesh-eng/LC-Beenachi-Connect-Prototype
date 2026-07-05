@@ -80,10 +80,10 @@ function memberRecord(id: number, memberCode: string, fullName: string) {
     membership_type: "Lion-Regular [Active]",
     membership_category: null,
     membership_program: null,
-    joined_at: "2015-06-01",
+    joined_at: "2015-06-01" as string | null,
     occupation: null,
     spouse_name: null,
-    wedding_anniversary: null,
+    wedding_anniversary: null as string | null,
     gender: "male",
     phone: "9000000000",
     email: `${memberCode}@example.test`,
@@ -160,7 +160,11 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
-  members.forEach((member) => { member.birth_date = null; });
+  members.forEach((member) => {
+    member.birth_date = null;
+    member.joined_at = "2015-06-01";
+    member.wedding_anniversary = null;
+  });
 });
 
 describe("MemberProfile document loading boundary", () => {
@@ -561,6 +565,76 @@ describe("MemberProfile document loading boundary", () => {
 
     expect(screen.queryByRole("button", { name: /Reports & Tools/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Monthly Birthday Report" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["president", "bijesh-president", "president-admin"],
+    ["secretary", "rajeesh-secretary", "secretary"],
+    ["treasurer", "ranjith-treasurer", "treasurer"]
+  ] as const)("limits Monthly Anniversary Report to the current local month for %s", async (role, identity, roleSlug) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-05T12:00:00+05:30"));
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    sujesh.joined_at = "2005-07-19";
+    sajith.joined_at = "2015-08-04";
+    sajith.wedding_anniversary = "2017-07-22";
+    members[2].joined_at = "not-a-date";
+    members[2].wedding_anniversary = "2020-13-40";
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Reports & Tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Celebration Reports/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Monthly Anniversary Report" }));
+
+    expect(await screen.findAllByRole("heading", { name: "Monthly Anniversary Report" })).toHaveLength(2);
+    expect(screen.getByText("July 2026")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sujesh P R" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sajith K" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Member 02" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export|Generate Report/ })).not.toBeInTheDocument();
+  });
+
+  it("shows a truthful empty state for a current month without anniversaries", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-05T12:00:00+05:30"));
+    authState.role = "president";
+    authState.identity = "bijesh-president";
+    authState.session.role = "president";
+    authState.session.identity = "bijesh-president";
+    authState.session.membership.role.slug = "president-admin";
+    members.forEach((member) => { member.joined_at = null; member.wedding_anniversary = null; });
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Reports & Tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Celebration Reports/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Monthly Anniversary Report" }));
+
+    expect(await screen.findByText("No anniversaries recorded for this period.")).toBeInTheDocument();
+  });
+
+  it("keeps Celebration Register all-time while monthly reports share current-period semantics", async () => {
+    authState.role = "president";
+    authState.identity = "bijesh-president";
+    authState.session.role = "president";
+    authState.session.identity = "bijesh-president";
+    authState.session.membership.role.slug = "president-admin";
+    sujesh.birth_date = "1980-07-19";
+    sajith.birth_date = "1990-08-04";
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Reports & Tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Celebration Reports/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Celebration Register" }));
+
+    expect((await screen.findAllByRole("heading", { name: "Sujesh P R" })).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("heading", { name: "Sajith K" }).length).toBeGreaterThan(0);
   });
 
 });

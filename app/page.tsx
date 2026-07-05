@@ -3939,11 +3939,13 @@ function ReportDetailScreen({
   const { members: currentMembers } = useCurrentMemberData();
   const [reportPeriod, setReportPeriod] = useState<{ month: number; year: number } | null>(null);
   const isMonthlyBirthdayReport = section === "Celebration Reports" && detail === "Monthly Birthday Report";
+  const isMonthlyAnniversaryReport = section === "Celebration Reports" && detail === "Monthly Anniversary Report";
+  const isMonthlyCelebrationReport = isMonthlyBirthdayReport || isMonthlyAnniversaryReport;
   useEffect(() => {
-    if (!isMonthlyBirthdayReport) return;
+    if (!isMonthlyCelebrationReport) return;
     const currentDate = new Date();
     setReportPeriod({ month: currentDate.getMonth() + 1, year: currentDate.getFullYear() });
-  }, [isMonthlyBirthdayReport]);
+  }, [isMonthlyCelebrationReport]);
   if (section === "Finance / Ledger Reports") {
     return <OperationalReportsUnavailable setScreen={setScreen} />;
   }
@@ -3961,8 +3963,9 @@ function ReportDetailScreen({
   }
 
   const cards = reportDetailCards(section, detail, amountPerSponsor, currentMembers, reportPeriod?.month);
-  const periodLabel = isMonthlyBirthdayReport
+  const periodLabel = isMonthlyCelebrationReport
     ? reportPeriod ? `${celebrationMonths[reportPeriod.month - 1]} ${reportPeriod.year}` : "Loading current period"
+    : section === "Celebration Reports" && detail === "Celebration Register" ? "All-time register"
     : section;
   return (
     <section className="stack">
@@ -3972,7 +3975,7 @@ function ReportDetailScreen({
         <div className="notice">This report is derived from the verified imported-member source. No export or report-generation mutation is connected.</div>
       </div>
       <div className="financeCardList">
-        {isMonthlyBirthdayReport && reportPeriod && cards.length === 0 && <div className="notice">No birthdays recorded for this period.</div>}
+        {isMonthlyCelebrationReport && reportPeriod && cards.length === 0 && <div className="notice">{isMonthlyBirthdayReport ? "No birthdays recorded for this period." : "No anniversaries recorded for this period."}</div>}
         {cards.map((card, index) => (
           <article className="financeStackCard" key={`${section}-${detail}-${card.title}-${index}`}>
             <h3>{card.title}</h3>
@@ -4628,9 +4631,13 @@ function reportDetailCards(section: ReportsSection, detail: string, amountPerSpo
       const rows: { title: string; meta: string[] }[] = [];
       const birthdayMonth = recurringDateMonth(member.birthDate);
       const birthdayMatchesReport = detail !== "Monthly Birthday Report" || birthdayMonth === reportMonth;
+      const joinedMonth = recurringDateMonth(member.joinedAt);
+      const joinedMatchesReport = detail !== "Monthly Anniversary Report" || joinedMonth === reportMonth;
+      const weddingMonth = recurringDateMonth(member.weddingAnniversary);
+      const weddingMatchesReport = detail !== "Monthly Anniversary Report" || weddingMonth === reportMonth;
       if (member.birthDate && birthdayMatchesReport && detail !== "Monthly Anniversary Report") rows.push({ title: member.name, meta: ["Celebration Type: Birthday", `Date: ${celebrationDayMonth(member.birthDate)}`, `Member ID: ${member.id}`] });
-      if (member.joinedAt && detail !== "Monthly Birthday Report") rows.push({ title: member.name, meta: ["Celebration Type: Lions Membership Anniversary", `Date: ${celebrationDayMonth(member.joinedAt)}`, `Member ID: ${member.id}`] });
-      if (member.weddingAnniversary && detail !== "Monthly Birthday Report") rows.push({ title: member.name, meta: ["Celebration Type: Wedding Anniversary", `Date: ${celebrationDayMonth(member.weddingAnniversary)}`, `Member ID: ${member.id}`] });
+      if (member.joinedAt && joinedMatchesReport && detail !== "Monthly Birthday Report") rows.push({ title: member.name, meta: ["Celebration Type: Lions Membership Anniversary", `Date: ${celebrationDayMonth(member.joinedAt)}`, `Member ID: ${member.id}`] });
+      if (member.weddingAnniversary && weddingMatchesReport && detail !== "Monthly Birthday Report") rows.push({ title: member.name, meta: ["Celebration Type: Wedding Anniversary", `Date: ${celebrationDayMonth(member.weddingAnniversary)}`, `Member ID: ${member.id}`] });
       return rows;
     });
   }  if (section === "Blood Donor Consent Report") {
