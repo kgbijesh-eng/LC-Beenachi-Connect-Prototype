@@ -3937,6 +3937,13 @@ function ReportDetailScreen({
   sponsorPayments: Record<string, number>;
 }) {
   const { members: currentMembers } = useCurrentMemberData();
+  const [reportPeriod, setReportPeriod] = useState<{ month: number; year: number } | null>(null);
+  const isMonthlyBirthdayReport = section === "Celebration Reports" && detail === "Monthly Birthday Report";
+  useEffect(() => {
+    if (!isMonthlyBirthdayReport) return;
+    const currentDate = new Date();
+    setReportPeriod({ month: currentDate.getMonth() + 1, year: currentDate.getFullYear() });
+  }, [isMonthlyBirthdayReport]);
   if (section === "Finance / Ledger Reports") {
     return <OperationalReportsUnavailable setScreen={setScreen} />;
   }
@@ -3953,15 +3960,19 @@ function ReportDetailScreen({
     return <OperationalReportsUnavailable setScreen={setScreen} />;
   }
 
-  const cards = reportDetailCards(section, detail, amountPerSponsor, currentMembers);
+  const cards = reportDetailCards(section, detail, amountPerSponsor, currentMembers, reportPeriod?.month);
+  const periodLabel = isMonthlyBirthdayReport
+    ? reportPeriod ? `${celebrationMonths[reportPeriod.month - 1]} ${reportPeriod.year}` : "Loading current period"
+    : section;
   return (
     <section className="stack">
       <div className="compactPanel">
-        <Toolbar title={detail} actionLabel={section} />
+        <Toolbar title={detail} actionLabel={periodLabel} />
         <button className="secondaryButton compactBackButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button>
         <div className="notice">This report is derived from the verified imported-member source. No export or report-generation mutation is connected.</div>
       </div>
       <div className="financeCardList">
+        {isMonthlyBirthdayReport && reportPeriod && cards.length === 0 && <div className="notice">No birthdays recorded for this period.</div>}
         {cards.map((card, index) => (
           <article className="financeStackCard" key={`${section}-${detail}-${card.title}-${index}`}>
             <h3>{card.title}</h3>
@@ -4585,7 +4596,18 @@ function navDetailRows(parent: string, title: string, currentMembers: Member[]) 
   ];
 }
 
-function reportDetailCards(section: ReportsSection, detail: string, amountPerSponsor: number | undefined, currentMembers: Member[]) {
+function recurringDateMonth(value: string | null | undefined) {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() + 1 === month && date.getUTCDate() === day ? month : null;
+}
+
+function reportDetailCards(section: ReportsSection, detail: string, amountPerSponsor: number | undefined, currentMembers: Member[], reportMonth?: number) {
   if (section === "Member Reports") {
     return currentMembers.map((member) => ({ title: `Member: ${member.name}`, meta: [`Member ID: ${member.id}`, `Membership: ${member.membershipCategory || member.membershipType || "Not provided"}`, `Status: ${member.status}`, `Report: ${detail}`] }));
   }
@@ -4604,7 +4626,9 @@ function reportDetailCards(section: ReportsSection, detail: string, amountPerSpo
   if (section === "Celebration Reports") {
     return currentMembers.flatMap((member) => {
       const rows: { title: string; meta: string[] }[] = [];
-      if (member.birthDate && (detail !== "Monthly Anniversary Report")) rows.push({ title: member.name, meta: ["Celebration Type: Birthday", `Date: ${celebrationDayMonth(member.birthDate)}`, `Member ID: ${member.id}`] });
+      const birthdayMonth = recurringDateMonth(member.birthDate);
+      const birthdayMatchesReport = detail !== "Monthly Birthday Report" || birthdayMonth === reportMonth;
+      if (member.birthDate && birthdayMatchesReport && detail !== "Monthly Anniversary Report") rows.push({ title: member.name, meta: ["Celebration Type: Birthday", `Date: ${celebrationDayMonth(member.birthDate)}`, `Member ID: ${member.id}`] });
       if (member.joinedAt && detail !== "Monthly Birthday Report") rows.push({ title: member.name, meta: ["Celebration Type: Lions Membership Anniversary", `Date: ${celebrationDayMonth(member.joinedAt)}`, `Member ID: ${member.id}`] });
       if (member.weddingAnniversary && detail !== "Monthly Birthday Report") rows.push({ title: member.name, meta: ["Celebration Type: Wedding Anniversary", `Date: ${celebrationDayMonth(member.weddingAnniversary)}`, `Member ID: ${member.id}`] });
       return rows;

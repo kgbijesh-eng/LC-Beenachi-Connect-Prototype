@@ -76,6 +76,7 @@ function memberRecord(id: number, memberCode: string, fullName: string) {
     last_name: null,
     salutation: "Mr",
     status: "active",
+    birth_date: null as string | null,
     membership_type: "Lion-Regular [Active]",
     membership_category: null,
     membership_program: null,
@@ -159,6 +160,7 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  members.forEach((member) => { member.birth_date = null; });
 });
 
 describe("MemberProfile document loading boundary", () => {
@@ -515,6 +517,50 @@ describe("MemberProfile document loading boundary", () => {
 
     fireEvent.change(screen.getByLabelText("Celebration month"), { target: { value: "6" } });
     expect(screen.getByText("June 2026")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["president", "bijesh-president", "president-admin"],
+    ["secretary", "rajeesh-secretary", "secretary"],
+    ["treasurer", "ranjith-treasurer", "treasurer"]
+  ] as const)("limits Monthly Birthday Report to the current local month for %s", async (role, identity, roleSlug) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-05T12:00:00+05:30"));
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    sujesh.birth_date = "1980-07-19";
+    sajith.birth_date = "1990-08-04";
+    members[2].birth_date = "not-a-date";
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Reports & Tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Celebration Reports/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Monthly Birthday Report" }));
+
+    expect(await screen.findAllByRole("heading", { name: "Monthly Birthday Report" })).toHaveLength(2);
+    expect(screen.getByText("July 2026")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sujesh P R" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Sajith K" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Member 02" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export|Generate Report/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps Monthly Birthday Report outside Normal Member navigation", () => {
+    authState.role = "member";
+    authState.identity = "sajith-member";
+    authState.session.role = "member";
+    authState.session.identity = "sajith-member";
+    authState.session.membership.role.slug = "member";
+    authState.session.membership.member = authState.member;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    expect(screen.queryByRole("button", { name: /Reports & Tools/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Monthly Birthday Report" })).not.toBeInTheDocument();
   });
 
 });
