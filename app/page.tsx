@@ -1593,6 +1593,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
   const [reportDetail, setReportDetail] = useState("Active Member List");
   const [navDetail, setNavDetail] = useState({ parent: "Dashboard", title: "Detail" });
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [financePaymentContext, setFinancePaymentContext] = useState<{ memberId: number; obligationId: number } | null>(null);
   const [selectedUpdate, setSelectedUpdate] = useState<typeof pendingMemberUpdates[number] | null>(null);
   const [selectedCommittee, setSelectedCommittee] = useState<typeof committeesList[number] | null>(null);
   const [selectedEventMeeting, setSelectedEventMeeting] = useState<BackendEventMeeting | null>(null);
@@ -1874,6 +1875,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
     setDocumentEditDraft(null);
     setSelectedActivity(null);
     setProfileBackContext(null);
+    if (nextScreen !== "record-member-payment") setFinancePaymentContext(null);
     if (
       nextScreen !== "fellowship-administration" &&
       nextScreen !== "my-fellowship" &&
@@ -1908,6 +1910,11 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
       setJulyExpandedHistories({});
     }
     setScreen(nextScreen);
+  }
+
+  function openOutstandingPayment(memberId: number, obligationId: number) {
+    setFinancePaymentContext({ memberId, obligationId });
+    setScreen("record-member-payment");
   }
 
   function openActivityDetail(activity: {
@@ -2540,7 +2547,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
                 {screen === "finance-module" && (
                   financeSection === "Club Account Statement"
                     ? <ClubAccountStatementUnavailable />
-                    : <FinanceBackend role={role} />
+                    : <FinanceBackend role={role} view={financeSection === "Outstanding Dues" ? "outstanding" : "workspace"} onRecordPayment={openOutstandingPayment} />
                 )}
         {screen === "reports-tools-module" && (
           <ReportsBackend role={role} onReminders={() => handleSetScreen("notifications-reminders")} />
@@ -2727,12 +2734,13 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
         {screen === "ledger" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
         {screen === "member-dues-detail" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
         {screen === "special-collection" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
-        {screen === "record-member-payment" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {/* 3AR validation baseline: {screen === "record-member-payment" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />} */}
+        {screen === "record-member-payment" && <FinanceBackend role={role} view="record-payment" memberId={financePaymentContext?.memberId} obligationId={financePaymentContext?.obligationId} onBack={() => handleSetScreen("outstanding-dues")} />}
         {screen === "collection-box" && <CollectionBoxReceipt role={role} />}
         {screen === "receipt-list" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
         {screen === "payment-history" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
         {screen === "member-import-preview" && <MemberImportPreview role={role} />}
-        {screen === "outstanding-dues" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {screen === "outstanding-dues" && <FinanceBackend role={role} view="outstanding" onRecordPayment={openOutstandingPayment} />}
         {screen === "collection-summary" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
         {screen === "fellowship-payments" && <FellowshipPayments view={fellowshipPaymentView} setScreen={handleSetScreen} amountPerSponsor={amountPerSponsor} />}
         {screen === "events-meetings" && (

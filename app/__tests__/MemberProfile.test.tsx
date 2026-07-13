@@ -39,8 +39,11 @@ vi.mock("../DevAuthSession", () => ({
 }));
 
 vi.mock("../FinanceBackend", () => ({
-  default: ({ role, memberId, isPersonal }: { role: string; memberId?: number; isPersonal?: boolean }) => (
-    <section data-testid="finance-backend">FinanceBackend {role} member {memberId} personal {String(Boolean(isPersonal))}</section>
+  default: ({ role, memberId, isPersonal, view, obligationId, onRecordPayment }: { role: string; memberId?: number; isPersonal?: boolean; view?: string; obligationId?: number; onRecordPayment?: (memberId: number, obligationId: number) => void }) => (
+    <section data-testid="finance-backend">
+      FinanceBackend {role} member {memberId} obligation {obligationId} personal {String(Boolean(isPersonal))} view {view ?? "workspace"}
+      {view === "outstanding" && onRecordPayment && <button onClick={() => onRecordPayment(4, 44)}>Record Payment for obligation 44</button>}
+    </section>
   )
 }));
 
@@ -791,6 +794,21 @@ describe("MemberProfile document loading boundary", () => {
 
     expect(await screen.findByRole("heading", { name: "Sujesh P R" })).toBeInTheDocument();
     expect(screen.getByText("Club member record")).toBeInTheDocument();
+  });
+
+  it("carries canonical outstanding-dues context into the payment screen", async () => {
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Finance/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Outstanding Dues/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Member-wise Outstanding" }));
+
+    expect(await screen.findByTestId("finance-backend")).toHaveTextContent("view outstanding");
+    fireEvent.click(screen.getByRole("button", { name: "Record Payment for obligation 44" }));
+
+    expect(await screen.findByTestId("finance-backend")).toHaveTextContent("member 4 obligation 44");
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("view record-payment");
   });
 
 });
