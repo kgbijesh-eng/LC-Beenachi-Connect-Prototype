@@ -5068,7 +5068,7 @@ function Dashboard({
             <TruthStatusCard label="Recent Payments" value="Recent payment activity is unavailable here." />
             <TruthStatusCard label="Documents" value="Document activity is not connected." />
             <TruthStatusCard label="Pending Reports" value="Pending report totals are unavailable." />
-            <TruthStatusCard label="Approvals" value="Approval totals are unavailable." />
+            <TruthStatusCard label="Approvals" value="Profile update review is available." />
           </div>
         </section>
       )}
@@ -5185,7 +5185,7 @@ function CompactDashboardCard({ label, value, action, onClick }: { label: string
 function PstOverview({ role, totalOutstanding, openDashboardDetail }: { role: Role; totalOutstanding: number; openDashboardDetail: (detail: DashboardDetail) => void }) {
   const items: { label: string; value: string; detail: DashboardDetail; action: string }[] = [
     ...(role === "president" || role === "secretary"
-      ? [{ label: "Pending member updates", value: "Not connected", detail: "pending-member-updates" as DashboardDetail, action: "View status" }]
+      ? [{ label: "Pending member updates", value: "Available in Profile Update Review", detail: "pending-member-updates" as DashboardDetail, action: "View status" }]
       : []),
     { label: "Upcoming meetings/events", value: "3", detail: "upcoming-events", action: "View details" },
     { label: "Fellowship month status", value: "Draft", detail: "fellowship-status", action: "Continue" },

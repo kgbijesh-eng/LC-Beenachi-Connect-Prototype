@@ -50,6 +50,8 @@ export default function ProfileUpdatesBackend({
   role: Role;
   mode: "own" | "review";
 }) {
+  const canReviewRequests = role === "president" || role === "secretary";
+  const canManageRequests = canReviewRequests;
   const { session } = useDevAuth();
   const [token, setToken] = useState("");
   const [club, setClub] = useState(0);
@@ -168,6 +170,13 @@ export default function ProfileUpdatesBackend({
 
     (async () => {
       try {
+        if (mode === "review" && !canReviewRequests) {
+          if (!off) {
+            setState("forbidden");
+            setMsg("This role is not authorized to access club-wide profile update review.");
+          }
+          return;
+        }
         if (!session) throw new Error("No verified development session is available.");
         const access = session.token;
         const c = session.membership.club.id;
@@ -198,7 +207,7 @@ export default function ProfileUpdatesBackend({
     return () => {
       off = true;
     };
-  }, [role, mode, session]);
+  }, [role, mode, session, canReviewRequests]);
 
   async function detail(row: Row) {
     setSelected(null);
@@ -614,7 +623,7 @@ export default function ProfileUpdatesBackend({
                 <button type="button" onClick={() => void action("withdraw")} className="secondaryButton">
                   Withdraw Request
                 </button>
-              ) : (
+              ) : canManageRequests ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", width: "100%" }}>
                   <button type="button" onClick={() => void action("approve")} className="primaryButton" style={{ background: "#4caf50" }}>
                     Approve Request
@@ -632,6 +641,8 @@ export default function ProfileUpdatesBackend({
                     </button>
                   </div>
                 </div>
+              ) : (
+                <div className="notice">This role can view only authorized profile update information and cannot approve or reject requests.</div>
               )}
             </div>
           )}

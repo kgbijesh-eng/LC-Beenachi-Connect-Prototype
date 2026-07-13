@@ -363,6 +363,21 @@ describe("MemberProfile document loading boundary", () => {
     expect(screen.queryByText("The profile update approval workflow is not connected yet.")).not.toBeInTheDocument();
   });
 
+  it("labels the officer dashboard profile-update review source as connected", async () => {
+    authState.role = "president";
+    authState.identity = "bijesh-president";
+    authState.session.role = "president";
+    authState.session.identity = "bijesh-president";
+    authState.session.membership.role.slug = "president-admin";
+    authState.member = { id: 34, member_code: "4794370", full_name: "Bijesh K G" };
+    authState.session.membership.member = authState.member;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    expect(await screen.findByText("Profile update review is available.")).toBeInTheDocument();
+    expect(screen.queryByText("Approval totals are unavailable.")).not.toBeInTheDocument();
+  });
+
   it("keeps Treasurer outside the profile-update review navigation", () => {
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
     render(<Prototype />);
