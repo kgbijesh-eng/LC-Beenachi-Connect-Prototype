@@ -1,6 +1,6 @@
 # Club Account Statement Domain and Accounting Contract
 
-**Status:** Proposed and unimplemented. Business-owner approval is required before implementation.
+**Status:** Accounting direction approved by Bijesh K. G., Business Owner, on 13 July 2026. The contract remains unimplemented. This approval authorizes documentation updates only, not schema or runtime work.
 
 ## 1. Purpose and scope
 
@@ -36,7 +36,7 @@ The repository currently contains two finance generations and several read model
 | Multi-club suitability | Strong with tenant-scoped accounts and journals | Moderate | Unsafe |
 | Rollback risk | Additive until posting integrations activate | Additive until integrations activate | High because output may appear complete when it is not |
 
-**Recommendation, pending approval:** Option A, an append-only double-entry club journal. It is safest because the requested statement spans assets, liabilities, income, expense, equity, member receivables, and internal transfers. Option B is viable only if the business owner intentionally limits the product to a controlled cashbook and accepts weaker balance-sheet and transfer guarantees. Option C must not be used for an authoritative statement.
+**Approved model:** Option A, an append-only, club-scoped double-entry journal. It is safest because the requested statement spans assets, liabilities, income, expense, equity, member receivables, and internal transfers. Option B is not selected. Option C must not be used for an authoritative statement.
 
 ## 4. Terminology and source truth
 
@@ -54,7 +54,7 @@ Only posted journal transactions may be the authoritative source of future club 
 
 ## 5. Proposed account structure
 
-Each account belongs to exactly one club and has a stable opaque ID, unique club-scoped code, name, category, normal balance, active state, and optional parent account.
+Each account belongs to exactly one club and has a stable opaque ID, unique club-scoped code, name, category, normal balance, active state, and optional parent account. Cash and each real bank account are separate asset accounts.
 
 | Category | Normal balance | Required examples |
 |---|---|---|
@@ -68,7 +68,7 @@ Internal transfers post debit to the destination asset account and credit to the
 
 ## 6. Transaction anatomy and lifecycle
 
-A proposed journal transaction contains: stable ID; club ID; human reference; posting date; effective date; description; status; currency; source type and source ID; source event key; idempotency key; reversal-of ID; corrected-by ID; created actor and timestamp; posted actor and timestamp; and two or more account lines. Each line contains stable ID, account ID, debit paise or credit paise (exactly one positive), optional member ID for receivable subledger reconciliation, description, and deterministic line sequence.
+A proposed journal transaction contains: stable ID; club ID; Lions Year human reference; posting date; effective date; description; status; currency; source type and source ID; source event key; idempotency key; reversal-of ID; corrected-by ID; created actor and timestamp; posted actor and timestamp; and two or more account lines. Each line contains stable ID, account ID, debit paise or credit paise (exactly one positive), optional member ID for receivable subledger reconciliation, description, and deterministic line sequence.
 
 Proposed states are `draft`, `posted`, `reversed`, and `voided`:
 
@@ -76,7 +76,7 @@ Proposed states are `draft`, `posted`, `reversed`, and `voided`:
 - Posted transactions are immutable and affect balances.
 - Reversal creates a new posted transaction with opposite lines and links both records. The original remains posted historically and is marked reversed for presentation.
 - Voided is reserved for drafts that never posted. A posted transaction must never be deleted or changed to erase its effect.
-- Correction means a full linked reversal followed by a separately posted corrected transaction. Partial adjustment entries are permitted only through an approved policy and explicit reason.
+- Correction means a full linked reversal followed by a separately posted corrected transaction. Original and reversal entries remain visible and linked. If the original Lions Year period is closed, the reversal and correction are posted in the next open period with explicit links to the original transaction.
 
 Every posting must execute atomically. A source-domain event may post once only. A scoped idempotency key and a unique `(club_id, source_type, source_id, source_event)` constraint are proposed. Cross-club account, member, source, reversal, and replacement links must fail closed.
 
@@ -97,11 +97,13 @@ For an account statement, a signed movement is calculated from the account's nor
 
 For multi-account summaries, debit/credit and signed balance must be presented per account. A single cross-account scalar "club balance" is prohibited unless a separately approved metric defines it.
 
-## 8. Period, financial year, and ordering
+## 8. Lions Year, statement period, and ordering
 
-Statement dates are club-local calendar dates. The financial-year boundary is unresolved in Decision DR-002. Until approved, no default period or cutover may be implemented.
+Statement dates are club-local calendar dates. The application's accounting and reporting year is the **Lions Year**, from 1 July through 30 June. Its label uses the starting and ending years, for example `2026-27`. The Indian April-March financial year must not determine accounting periods, statement periods, annual grouping, closing, or journal reference numbering.
 
-Proposed deterministic order is `(posting_date ASC, effective_date ASC, journal_transaction_id ASC, line_sequence ASC, journal_line_id ASC)`. Created timestamps must not determine accounting order. A closed-period and late-posting policy requires approval.
+The default statement period is the current Lions Year, bounded by authoritative coverage. A request may cover at most one Lions Year. Cutover may occur only on 1 July of an approved Lions Year after opening balances for every activated account are fully reconciled and approved. Human references use the Lions Year, for example `LCB/2026-27/JRN/000001`.
+
+Proposed deterministic order is `(posting_date ASC, effective_date ASC, journal_transaction_id ASC, line_sequence ASC, journal_line_id ASC)`. Created timestamps must not determine accounting order. Lions Year periods may be closed through a controlled process. Corrections after closing are posted in the next open period and retain explicit links to the original transaction.
 
 ## 9. Currency and precision
 
@@ -109,20 +111,21 @@ Currency is INR for the initial contract. Every persisted and API monetary value
 
 ## 10. Integration boundaries
 
-- **Member charges:** an issued `ClubCharge` and its `MemberCharge` obligations may become source events. Whether issuance recognizes receivable and income is DR-005.
-- **Member payments:** `MemberPayment` is the preferred current operational payment source. Posting timing, cash/bank destination, and treatment of unallocated money are DR-006 and DR-007.
-- **Allocations:** allocations settle member subledger obligations; they must not create duplicate cash. Their accounting effect depends on whether receipt or allocation recognizes the payment.
+- **Member charges:** issuing an approved `ClubCharge` and its `MemberCharge` obligations posts a debit to member receivables and a credit to the account mapped from the approved due category.
+- **Member payments:** `MemberPayment` is the preferred current operational payment source. A payment posts when actually received to the real cash or bank account. Initial implementation rejects unallocated payments.
+- **Allocations:** allocations settle member receivables and must not create a second cash or bank entry.
 - **Receipts:** `PaymentReceipt` is evidence and numbering, not financial identity. A receipt links to a journal transaction only where authorized.
 - **Voids:** current payment voids and receipt status changes require a linked journal reversal once integration is active. Historical pre-journal voids must not be fabricated as postings.
-- **Collection Box, fellowship, donations, income, expenses:** each requires an authoritative domain lifecycle, account mapping, posting trigger, actor, approval, and reversal rule before integration. Until then it is unavailable to the statement, not zero.
+- **Expenses:** initial recognition occurs only through a separately authorized and approved payment workflow. Invoice accrual is unsupported.
+- **Collection Box, fellowship, donations, invoice accruals, unallocated receipts, and other unsupported workflows:** none may post until separately contracted, implemented, tested, and approved. Until then each is unavailable to the statement, not zero.
 - **Transfers:** require source and destination asset accounts and one balanced journal transaction; payment-mode strings are insufficient.
 - **Legacy `MemberLedgerEntry`, `Payment`, and `Receipt`:** may inform a separately approved backfill but must not be dual-posted or dynamically mixed with the journal.
 
 ## 11. Authorization, isolation, privacy, and audit
 
-The proposed read permission is `finance.club.statement.view`, separate from `finance.club.view`, pending DR-017. It is intended for President/Admin, Secretary, and Treasurer only after explicit role approval. Normal Members must not read club-wide statements. Authentication is required.
+The read permission is `finance.club.statement.view`, separate from `finance.club.view`. Future role assignment requires its own implementation and authorization milestone. Normal Members must not read club-wide statements. Authentication is required.
 
-Every account, transaction, line, source link, query, uniqueness constraint, and cache key must be scoped by route-bound `club_id`. Active membership and permission must be checked for that same club. Cross-club identifiers return fail-closed responses without revealing existence.
+Shared multi-club tables require `club_id`. Every account, transaction, line, source link, query, uniqueness constraint, cache key, and background operation must be scoped by route-bound `club_id`. Active membership and permission must be checked for that same club. Cross-club financial references are prohibited and identifiers return fail-closed responses without revealing existence.
 
 Posting and reversal operations require separate future permissions. Audit records must capture actor, club, action, journal identity, source identity, reason, request correlation, before/after status (not mutable monetary snapshots), IP/user agent where available, and timestamps. Audit records supplement journal immutability and never determine balances.
 
@@ -130,7 +133,7 @@ Posting and reversal operations require separate future permissions. Audit recor
 
 - **Empty:** authoritative journal is available for the full requested period and contains no matching lines. Opening and closing may truthfully be zero or non-zero.
 - **Unavailable:** journal/account service cannot establish authoritative data. No numeric balance is returned as if verified.
-- **Partial history:** requested range begins before verified journal coverage. The response declares coverage start and omits authoritative opening/closing unless an approved opening journal establishes them.
+- **Partial history:** requested range begins before verified journal coverage. Authoritative opening, running, and closing balances are not displayed. The response declares the coverage boundary.
 - **Historical:** before cutover, statements are available only if an approved backfill was posted and reconciled. Source-domain records alone do not imply completeness.
 
 Unavailable is never represented as zero. Partial coverage must be conspicuous and machine-readable.
@@ -148,13 +151,14 @@ Unavailable is never represented as zero. Partial coverage must be conspicuous a
 - Statement reads require explicit permission; Normal Members are denied.
 - Partial history is declared; unavailable data is not rendered as zero.
 - Receipt and source links do not become journal identity.
-- **Provisional:** charges, payments, allocations, unallocated payments, and close-period behavior follow the recognition decisions in the decision register.
+- Unallocated payments are rejected in the initial implementation.
+- Closed-period corrections post in the next open period with explicit original links.
 
 ## 14. Historical data and non-goals
 
-Available cutover options are: no backfill plus approved opening journal; reconciled aggregate opening by account; or transaction-level backfill after source validation. Dynamic read-through of old tables is not a cutover strategy. The chosen method must record coverage date, reconciliation evidence, approver, import identity, exceptions, and rollback boundary.
+Initial historical activation uses approved opening balances by account on the selected 1 July cutover date. Historical transaction backfill must not occur unless completeness and non-duplication are independently proven and separately approved. Dynamic read-through of old tables is not a cutover strategy. Cutover records must include coverage date, reconciliation evidence, approver, import identity, exceptions, and rollback boundary.
 
-This milestone does not implement accounting, tax, statutory reporting, bank reconciliation, budgets, exports, multi-currency, Kuri/Chit Fund accounting, period close, domain posting, backfill, UI, or API behavior.
+This milestone does not implement accounting, tax, statutory reporting, bank reconciliation, budgets, CSV/PDF exports, multi-currency, Kuri/Chit Fund accounting, period close, domain posting, backfill, UI, or API behavior. Posted journals must never be deleted. Additional retention and read-audit rules may be contracted separately.
 
 ## 15. Repository citations
 

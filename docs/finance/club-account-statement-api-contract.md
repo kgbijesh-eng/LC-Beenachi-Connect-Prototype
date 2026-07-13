@@ -1,6 +1,6 @@
 # Club Account Statement Read-Only API Contract
 
-**Status:** Proposed and unimplemented. This document registers no route and authorizes no runtime work.
+**Status:** Proposed and unimplemented, aligned to the business-owner decisions approved on 13 July 2026. This document registers no route and authorizes no runtime work.
 
 ## 1. Endpoint and access
 
@@ -10,7 +10,7 @@ Proposed route:
 GET /api/v1/clubs/{club}/finance/account-statements/{account}
 ```
 
-Proposed permission: `finance.club.statement.view` (pending DR-017). Authentication, active same-club membership, route-bound club authorization, and account ownership by the same club are mandatory. Normal Members are denied. A foreign-club account identifier must fail closed as `404` after route permission succeeds; responses must not disclose another club's account or transaction existence.
+Approved future permission: `finance.club.statement.view`. Authentication, active same-club membership, route-bound club authorization, and account ownership by the same club are mandatory. Normal Members are denied. A foreign-club account identifier must fail closed as `404` after route permission succeeds; responses must not disclose another club's account or transaction existence.
 
 The endpoint is read-only and must not post, correct, reverse, allocate, issue a receipt, mutate an audit record, or lazily backfill data.
 
@@ -18,7 +18,7 @@ The endpoint is read-only and must not post, correct, reverse, allocate, issue a
 
 | Parameter | Type | Proposed rule |
 |---|---|---|
-| `date_from` | `YYYY-MM-DD` | Inclusive; defaults only after financial-year decision approval |
+| `date_from` | `YYYY-MM-DD` | Inclusive; defaults to 1 July of the current Lions Year, bounded by authoritative coverage |
 | `date_to` | `YYYY-MM-DD` | Inclusive; must be on/after `date_from` |
 | `page` | integer | Default 1, minimum 1 |
 | `per_page` | integer | Default 50, range 1-100 |
@@ -27,7 +27,7 @@ The endpoint is read-only and must not post, correct, reverse, allocate, issue a
 | `reference` | string | Optional exact normalized human/source reference |
 | `member_id` | integer | Optional only when caller is authorized for member finance detail and member belongs to route club |
 
-The maximum requested span is proposed as one financial year and requires approval with DR-002. No request may silently truncate a period. Filters apply before opening/movement/closing calculation except that opening always includes all posted account lines before `date_from`; transaction-only filters such as direction, reference, source, or member affect returned rows and filtered movement metadata but must not redefine the account's authoritative opening or closing. The API must clearly return both account totals and filtered-row totals when transaction-only filters are used.
+The maximum requested span is one Lions Year, 1 July through 30 June. The Indian April-March financial year is not used. No request may silently truncate a period. Filters apply before opening/movement/closing calculation except that opening always includes all posted account lines before `date_from`; transaction-only filters such as direction, reference, source, or member affect returned rows and filtered movement metadata but must not redefine the account's authoritative opening or closing. The API must clearly return both account totals and filtered-row totals when transaction-only filters are used.
 
 Ordering is fixed and not client-selectable: posting date, effective date, journal transaction ID, line sequence, journal line ID, all ascending. Cursor pagination may replace page pagination before implementation if it preserves stable ordering and absolute running balances; that is a compatible contract refinement only before activation.
 
@@ -49,13 +49,13 @@ Every monetary field is integer paise. Display strings are optional presentation
     },
     "currency": "INR",
     "period": {
-      "date_from": "2027-04-01",
-      "date_to": "2027-04-30",
-      "financial_year": "2027-28"
+      "date_from": "2026-07-01",
+      "date_to": "2026-07-31",
+      "lions_year": "2026-27"
     },
     "coverage": {
       "status": "complete",
-      "authoritative_from": "2027-04-01",
+      "authoritative_from": "2026-07-01",
       "message": null
     },
     "opening_balance_paise": 125000,
@@ -63,9 +63,9 @@ Every monetary field is integer paise. Display strings are optional presentation
       {
         "journal_transaction_id": "jtxn_opaque",
         "journal_line_id": "jline_opaque",
-        "reference": "CAS/2027-28/000001",
-        "posting_date": "2027-04-03",
-        "effective_date": "2027-04-03",
+        "reference": "LCB/2026-27/JRN/000001",
+        "posting_date": "2026-07-03",
+        "effective_date": "2026-07-03",
         "description": "Sanitized illustrative member receipt",
         "debit_paise": 50000,
         "credit_paise": 0,
@@ -75,7 +75,7 @@ Every monetary field is integer paise. Display strings are optional presentation
           "type": "member_payment",
           "id": "source_opaque",
           "receipt_id": "receipt_opaque",
-          "receipt_number": "EXAMPLE/2027-28/RCP/0001",
+          "receipt_number": "EXAMPLE/2026-27/RCP/0001",
           "links_available": true
         },
         "reversal": {
@@ -96,7 +96,8 @@ Every monetary field is integer paise. Display strings are optional presentation
     "per_page": 50,
     "total": 1,
     "order": "posting_date,effective_date,journal_transaction_id,line_sequence,journal_line_id",
-    "generated_at": "2027-05-01T00:00:00Z",
+    "snapshot_version": "snapshot_opaque",
+    "generated_at": "2026-08-01T00:00:00Z",
     "contract_version": "proposed-v1"
   }
 }
@@ -119,8 +120,8 @@ Return `409 Conflict` with code `statement_history_incomplete` unless an approve
   "message": "Authoritative statement history is incomplete for the requested period.",
   "error": {
     "code": "statement_history_incomplete",
-    "authoritative_from": "2027-04-01",
-    "requested_from": "2026-04-01"
+    "authoritative_from": "2026-07-01",
+    "requested_from": "2025-07-01"
   }
 }
 ```
@@ -147,12 +148,12 @@ Validation errors follow Laravel's established `message` and `errors` shape. Err
 ## 5. Request examples
 
 ```http
-GET /api/v1/clubs/10/finance/account-statements/acct_opaque?date_from=2027-04-01&date_to=2027-04-30&page=1&per_page=50
+GET /api/v1/clubs/10/finance/account-statements/acct_opaque?date_from=2026-07-01&date_to=2026-07-31&page=1&per_page=50
 Accept: application/json
 ```
 
 ```http
-GET /api/v1/clubs/10/finance/account-statements/acct_opaque?date_from=2027-04-01&date_to=2027-04-30&direction=credit
+GET /api/v1/clubs/10/finance/account-statements/acct_opaque?date_from=2026-07-01&date_to=2026-07-31&direction=credit
 Accept: application/json
 ```
 
@@ -160,16 +161,16 @@ Accept: application/json
 
 - Opening and closing use all posted account lines required by the authoritative period, independent of page.
 - Each returned running balance is absolute after that row in complete statement order; page two does not restart.
-- Reversed originals and reversal entries remain visible according to a single approved presentation rule. Net effects always reconcile.
+- Original and reversal entries remain visible and linked. Net effects always reconcile.
 - Draft and voided-before-posting records never affect values.
 - The endpoint executes no write and emits no financial mutation audit event. Read-access auditing, if required by DR-019, must not alter journal data.
-- Concurrent postings may change later requests. A response must use a transactionally consistent snapshot or return a snapshot/version token so rows and totals cannot disagree.
+- Concurrent postings may change later requests. A response must use a transactionally consistent snapshot and return statement fingerprint/version metadata so rows and totals cannot disagree.
 
 ## 7. Privacy, compatibility, and versioning
 
 Descriptions must exclude internal notes by default. Member identity is absent unless specifically authorized and requested. Source links use opaque IDs and permission-aware URLs. Export is deferred and not implied by this API.
 
-The first implemented response must be versioned under `/api/v1` and carry `contract_version`. Fields may be added compatibly; meaning, sign conventions, ordering, coverage semantics, and integer-paise fields cannot change silently. Breaking changes require a new API version and migration plan. Before activation, reviewers may refine this proposal without compatibility guarantees.
+The first implemented response must be versioned under `/api/v1` and carry `contract_version`. CSV and PDF exports are deferred. Fields may be added compatibly; meaning, Lions Year semantics, sign conventions, ordering, coverage semantics, and integer-paise fields cannot change silently. Breaking changes require a new API version and migration plan. Before activation, reviewers may refine this proposal without compatibility guarantees.
 
 ## 8. Current-state citations
 

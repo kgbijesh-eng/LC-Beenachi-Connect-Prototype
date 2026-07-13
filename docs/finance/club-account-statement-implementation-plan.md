@@ -1,24 +1,24 @@
 # Club Account Statement Future Implementation Plan
 
-**Status:** Proposed sequencing only. Milestone 3IIA implements none of these items.
+**Status:** Proposed sequencing aligned to the business-owner decisions approved on 13 July 2026. Documentation approval does not authorize implementation of any item below.
 
 ## Guardrails for every future milestone
 
 Every milestone starts from a clean reviewed baseline, preserves the disconnected statement placeholder until its backend gate passes, scopes all data by club, uses INR integer paise, avoids operational-data inspection unless separately authorized, and has an explicit rollback point. No milestone may dynamically construct authoritative statements from incomplete existing domain tables.
 
-## F1. Contract approval
+## F1. Contract approval (business-owner policy gate complete)
 
-- **Prerequisites:** Business owner, accounting reviewer, security owner, product owner identified; 3IIA documents reviewed.
-- **In scope:** Resolve decision register; approve terminology, recognition, permissions, period, history, retention, and API semantics.
+- **Prerequisites:** 3IIA documents reviewed by the business owner.
+- **In scope:** Record approved double-entry, Lions Year, recognition, permission, cutover, history, retention, and API policies. Additional accounting, security, and technical review remains required before F2 authorization.
 - **Out of scope:** Code, schema, data access, UI.
 - **Database impact / operational risk:** None / none.
 - **Rollback:** Revert documentation approval before implementation authorization.
-- **Tests/evidence:** Consistency review; signed decision record; no pending implementation-critical decisions.
-- **Approvals:** All owners named by each decision.
+- **Tests/evidence:** Consistency review; decision record naming Bijesh K. G. and 13 July 2026; no contradictory period or recognition rules.
+- **Approvals:** Business-owner policy approval recorded. F2 still requires separate accounting, architecture, database, and security authorization.
 
 ## F2. Schema and model foundation
 
-- **Prerequisites:** F1; approved ERD, naming, constraints, migration and tenant-isolation review.
+- **Prerequisites:** F1; separate implementation authorization; approved ERD, Lions Year rules, naming, constraints, migration and tenant-isolation review.
 - **In scope:** Additive chart-of-accounts, journal transaction, journal line, source-link, and period/coverage schema and models; no domain posting.
 - **Out of scope:** Backfill, routes, UI, automatic posting.
 - **Database impact / operational risk:** New empty tables and permissions only; migration locking and rollback tested on a representative non-operational database.
@@ -39,7 +39,7 @@ Every milestone starts from a clean reviewed baseline, preserves the disconnecte
 ## F4. Existing-domain integration
 
 - **Prerequisites:** F3; explicit mappings for each source event and account; reconciliation design.
-- **In scope:** Integrate one domain at a time, beginning with the approved current integer-paise charge/payment workflow. Add authoritative workflows for expenses, donations, Collection Box, fellowship, or transfers only in separately scoped lanes.
+- **In scope:** Integrate issued member charges, fully allocated received payments, and approved expense-payment workflows one domain at a time. Integrate internal transfers only after both asset accounts and atomic posting pass. Collection Box, fellowship, donations, invoice accruals, unallocated receipts, and other unsupported workflows require separate contracts and approvals.
 - **Out of scope:** Implicit conversion of legacy decimal records; enabling domains without source truth; frontend statement.
 - **Database impact / operational risk:** New journal postings from live domain writes; highest duplication risk.
 - **Rollback:** Per-domain feature flag stops new postings; posted entries remain and corrections use reversals. Never delete journals.
@@ -58,9 +58,9 @@ Every milestone starts from a clean reviewed baseline, preserves the disconnecte
 
 ## F6. Historical cutover
 
-- **Prerequisites:** DR-003, DR-014, DR-015 approved; source inventory and reconciliation workbook/process reviewed; verified backup and restoration drill.
-- **In scope:** Either explicit no-backfill plus opening journal, reconciled aggregate account opening, or controlled transaction import. Record coverage start and evidence.
-- **Out of scope:** Unreconciled dynamic history; silent decimal-to-paise conversion; source deletion.
+- **Prerequisites:** Approved 1 July cutover Lions Year selected; account openings fully reconciled and approved; source inventory and reconciliation process reviewed; verified backup and restoration drill.
+- **In scope:** Approved opening balances by account on the selected 1 July. Historical transaction backfill is a separate exceptional lane only after independent proof of completeness and non-duplication. Record coverage start and evidence.
+- **Out of scope:** Routine historical transaction backfill; unreconciled dynamic history; silent decimal-to-paise conversion; source deletion.
 - **Database impact / operational risk:** Controlled journal imports/openings; very high balance and duplication risk.
 - **Rollback:** Dry-run first; immutable import batch identity; disable cutover and reverse approved imported batch if necessary. Restore only under separately authorized disaster-recovery procedure.
 - **Tests/evidence:** Count/sum/hash reconciliation, balanced batch, duplicate prevention, rounding exception report, account-level sign-off, partial-history behavior before coverage.
@@ -69,7 +69,7 @@ Every milestone starts from a clean reviewed baseline, preserves the disconnecte
 ## F7. Automated accounting invariants and operations
 
 - **Prerequisites:** F3-F6.
-- **In scope:** Continuous reconciliation checks, monitoring, alerting, close-period guards if approved, backup/restore verification, operational runbooks.
+- **In scope:** Continuous reconciliation checks, monitoring, alerting, controlled Lions Year close guards, next-open-period correction links, backup/restore verification, and operational runbooks.
 - **Out of scope:** Automatic destructive repair.
 - **Database impact / operational risk:** Read-heavy checks and audit records; alert fatigue or lock contention.
 - **Rollback:** Disable scheduled checks independently; retain manual reconciliation path.
@@ -108,4 +108,4 @@ Every milestone starts from a clean reviewed baseline, preserves the disconnecte
 
 ## Completion boundary
 
-3IIA is complete when these documents are reviewed for repository consistency and committed alone. It does not authorize F1 approval by implication, and it must not begin F2 or unblock frontend 3II. The immediate next action after 3IIA is business-owner review of the decision register.
+The business-owner policy review is recorded, but F2 is not authorized. No schema, migration, permission, route, posting service, historical opening entry, operational-data action, or frontend 3II work may begin without a new implementation milestone and its required technical approvals.
