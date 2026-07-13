@@ -39,12 +39,19 @@ vi.mock("../DevAuthSession", () => ({
 }));
 
 vi.mock("../FinanceBackend", () => ({
-  default: ({ role, memberId, isPersonal, view, obligationId, onRecordPayment }: { role: string; memberId?: number; isPersonal?: boolean; view?: string; obligationId?: number; onRecordPayment?: (memberId: number, obligationId: number) => void }) => (
-    <section data-testid="finance-backend">
-      FinanceBackend {role} member {memberId} obligation {obligationId} personal {String(Boolean(isPersonal))} view {view ?? "workspace"}
-      {view === "outstanding" && onRecordPayment && <button onClick={() => onRecordPayment(4, 44)}>Record Payment for obligation 44</button>}
-    </section>
-  )
+  default: ({ role, memberId, isPersonal, view, obligationId, onRecordPayment, onReturnToSummary }: { role: string; memberId?: number; isPersonal?: boolean; view?: string; obligationId?: number; onRecordPayment?: (memberId: number, obligationId: number) => void; onReturnToSummary?: () => void }) => {
+    const [pane, setPane] = React.useState(view ?? "workspace");
+    const returnToSummary = () => onReturnToSummary ? onReturnToSummary() : setPane("summary");
+    return (
+      <section data-testid="finance-backend">
+        FinanceBackend {role} member {memberId} obligation {obligationId} personal {String(Boolean(isPersonal))} view {view ?? "workspace"}
+        {pane === "summary" && <h2>{isPersonal ? "My Finance Summary" : "Member Finance Summary"}</h2>}
+        {pane === "dues" && <><h2>{isPersonal ? "My Dues" : "Member Dues"}</h2><button onClick={returnToSummary}>Back to Finance Summary</button></>}
+        {pane === "payment-history" && <><h2>{isPersonal ? "My Payment History" : "Member Payment History"}</h2><button onClick={returnToSummary}>Back to Finance Summary</button></>}
+        {view === "outstanding" && onRecordPayment && <button onClick={() => onRecordPayment(4, 44)}>Record Payment for obligation 44</button>}
+      </section>
+    );
+  }
 }));
 
 vi.mock("../ProfileUpdatesBackend", () => ({
@@ -259,7 +266,8 @@ describe("MemberProfile document loading boundary", () => {
     fireEvent.click(await screen.findByRole("button", { name: "My Profile" }));
 
     expect(await screen.findByRole("heading", { name: "Own membership proof" })).toBeInTheDocument();
-    expect(screen.getByTestId("finance-backend")).toHaveTextContent("personal false");
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("personal true");
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("view summary");
     expect(screen.queryByText("Sujesh P R")).not.toBeInTheDocument();
   });
 
@@ -508,7 +516,7 @@ describe("MemberProfile document loading boundary", () => {
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
     render(<Prototype />);
 
-    expect(screen.queryByRole("button", { name: /Finance/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Finance$/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Club Account Statement" })).not.toBeInTheDocument();
   });
 
@@ -824,6 +832,116 @@ describe("MemberProfile document loading boundary", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Receipt List" }));
     expect(await screen.findByTestId("finance-backend")).toHaveTextContent("view payment-history");
+  });
+
+  it("routes Member Ledger to summary without silently selecting an officer member", async () => {
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Finance/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Member Ledger \/ Dues/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Member Ledger" }));
+
+    expect(await screen.findByTestId("finance-backend")).toHaveTextContent("view summary");
+    expect(screen.getByTestId("finance-backend")).not.toHaveTextContent(/member \d/);
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("personal false");
+  });
+
+  it.each([
+    ["president", "bijesh-president", "president-admin"],
+    ["secretary", "rajeesh-secretary", "secretary"],
+    ["treasurer", "ranjith-treasurer", "treasurer"]
+  ] as const)("returns %s from Member Ledger to the Finance parent without selection or mutation", async (role, identity, roleSlug) => {
+    authState.role = role;
+    authState.identity = identity;
+    authState.session.role = role;
+    authState.session.identity = identity;
+    authState.session.membership.role.slug = roleSlug;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Finance/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Member Ledger \/ Dues/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Member Ledger" }));
+    expect(await screen.findByRole("heading", { name: "Member Ledger / Dues", level: 1 })).toBeInTheDocument();
+
+    const back = screen.getByRole("button", { name: "← Finance" });
+    expect(back).toBeEnabled();
+    fireEvent.click(back);
+
+    expect(await screen.findByRole("heading", { name: "Finance", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "← Finance" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Finance/ })).toHaveClass("activeGroup");
+    expect(screen.getByRole("heading", { name: "Club Account Statement", level: 2 })).toBeInTheDocument();
+    expect(screen.queryByTestId("finance-backend")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Member" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Create Draft|Record Payment/ })).not.toBeInTheDocument();
+    expect(vi.mocked(globalThis.fetch).mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+  });
+
+  it("does not expose the officer Finance return control to a Normal Member", async () => {
+    authState.role = "member";
+    authState.identity = "sajith-member";
+    authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+    authState.session.role = "member";
+    authState.session.identity = "sajith-member";
+    authState.session.membership.role.slug = "member";
+    authState.session.membership.member = authState.member;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: "My Finance Summary" }));
+    expect(await screen.findByRole("heading", { name: "My Finance Summary", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "← Finance" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Finance$/ })).not.toBeInTheDocument();
+  });
+
+  it("returns direct Normal Member dues to a consistent self-finance parent view", async () => {
+    authState.role = "member";
+    authState.identity = "sajith-member";
+    authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+    authState.session.role = "member";
+    authState.session.identity = "sajith-member";
+    authState.session.membership.role.slug = "member";
+    authState.session.membership.member = authState.member;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: "My Dues" }));
+    expect(await screen.findByRole("heading", { name: "My Dues", level: 1 })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Finance Summary" }));
+
+    expect(await screen.findByRole("heading", { name: "My Finance Summary", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "My Finance Summary", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "My Finance Summary" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "My Dues" })).not.toHaveClass("active");
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("member 5");
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("personal true");
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("view summary");
+  });
+
+  it("returns direct Normal Member payment history to the same consistent self-finance parent view", async () => {
+    authState.role = "member";
+    authState.identity = "sajith-member";
+    authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+    authState.session.role = "member";
+    authState.session.identity = "sajith-member";
+    authState.session.membership.role.slug = "member";
+    authState.session.membership.member = authState.member;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: "My Payment History" }));
+    expect(await screen.findByRole("heading", { name: "Transaction History", level: 1 })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Finance Summary" }));
+
+    expect(await screen.findByRole("heading", { name: "My Finance Summary", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "My Finance Summary", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "My Finance Summary" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "My Payment History" })).not.toHaveClass("active");
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("member 5");
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("personal true");
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("view summary");
   });
 
 });

@@ -408,6 +408,7 @@ type Screen =
   | "confirm-sponsors"
   | "fellowship-sponsor-detail"
   | "ledger"
+  | "my-finance-summary"
   | "my-dues"
   | "profile-update-detail"
   | "committee-detail"
@@ -1257,6 +1258,7 @@ const navByRole: Record<Role, NavGroup[]> = {
       { label: "My Digital Card", screen: "digital-card" },
       { label: "Member Directory", screen: "members" },
       { label: "PST Profiles", screen: "nav-detail", detailParent: "People", detailTitle: "PST Profiles" },
+      { label: "My Finance Summary", screen: "my-finance-summary" },
       { label: "My Dues", screen: "my-dues" },
       { label: "My Payment History", screen: "payment-history" },
       { label: "My Fellowship", screen: "my-fellowship" },
@@ -1847,6 +1849,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
   const canAccessFellowshipAdministration = role === "president" || role === "secretary";
   const canManageClubDocuments = role === "president" || role === "secretary";
   const isPersonalFinanceScreen =
+    screen === "my-finance-summary" ||
     screen === "my-dues" ||
     screen === "payment-history";
 
@@ -2153,7 +2156,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
                 screen === "fellowship-sponsor-detail" ||
                 (screen === "operations-module" && operationsSection === "Fellowship")
               ? "Fellowship member records"
-              : ["ledger", "my-dues", "member-dues-detail", "record-member-payment", "receipt-list", "payment-history"].includes(screen) ||
+              : ["ledger", "my-finance-summary", "my-dues", "member-dues-detail", "record-member-payment", "receipt-list", "payment-history"].includes(screen) ||
                   (screen === "finance-module" && ["Member Ledger / Dues", "Payments / Receipts"].includes(financeSection))
                 ? "Member finance records"
                 : screen === "donor-search"
@@ -2435,7 +2438,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
                 }}
               />
             ) : (
-              activeParent && screen !== "my-fellowship" && screen !== "my-documents" && screen !== "documents-administration" && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
+              activeParent && screen !== "finance-module" && screen !== "my-fellowship" && screen !== "my-documents" && screen !== "documents-administration" && screen !== "dashboard" && screen !== "login" && screen !== "nav-detail" && screen !== "report-detail" && screen !== "announcement-detail" && (
                 <ContextBack
                   parent={screen === "fellowship-administration" ? "Operations" : activeParent}
                   onBack={() => {
@@ -2547,7 +2550,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
                 {screen === "finance-module" && (
                   financeSection === "Club Account Statement"
                     ? <ClubAccountStatementUnavailable />
-                    : <FinanceBackend role={role} view={financeSection === "Outstanding Dues" ? "outstanding" : "workspace"} onRecordPayment={openOutstandingPayment} />
+                    : <FinanceBackend role={role} view={financeSection === "Outstanding Dues" ? "outstanding" : financeSection === "Member Ledger / Dues" ? "summary" : "workspace"} onRecordPayment={openOutstandingPayment} />
                 )}
         {screen === "reports-tools-module" && (
           <ReportsBackend role={role} onReminders={() => handleSetScreen("notifications-reminders")} />
@@ -2730,8 +2733,9 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
             />
           ) : null
         )}
-        {screen === "my-dues" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
-        {screen === "ledger" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {screen === "my-finance-summary" && <FinanceBackend role={role} view="summary" memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {screen === "my-dues" && <FinanceBackend role={role} view="dues" memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} onReturnToSummary={() => handleSetScreen("my-finance-summary")} />}
+        {screen === "ledger" && <FinanceBackend role={role} view="summary" />}
         {screen === "member-dues-detail" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
         {screen === "special-collection" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
         {/* 3AR validation baseline: {screen === "record-member-payment" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />} */}
@@ -2740,7 +2744,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
         {/* 3AX baseline: {screen === "receipt-list" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />} */}
         {/* 3IF baseline: {screen === "payment-history" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />} */}
         {screen === "receipt-list" && <FinanceBackend role={role} view="payment-history" isPersonal={role === "member"} />}
-        {screen === "payment-history" && <FinanceBackend role={role} view="payment-history" isPersonal={role === "member"} />}
+        {screen === "payment-history" && <FinanceBackend role={role} view="payment-history" memberId={role === "member" ? activeMember!.backendId : undefined} isPersonal={role === "member"} onReturnToSummary={role === "member" ? () => handleSetScreen("my-finance-summary") : undefined} />}
         {screen === "member-import-preview" && <MemberImportPreview role={role} />}
         {screen === "outstanding-dues" && <FinanceBackend role={role} view="outstanding" onRecordPayment={openOutstandingPayment} />}
         {screen === "collection-summary" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
@@ -2848,6 +2852,7 @@ function screenTitle(screen: Screen) {
     "confirm-sponsors": "Review & Confirm June 2026 Sponsors",
     "fellowship-sponsor-detail": "Fellowship Sponsor Details",
     ledger: "Member Ledger / Dues",
+    "my-finance-summary": "My Finance Summary",
     "my-dues": "My Dues",
     "profile-update-detail": "Profile Update Request",
     "committee-detail": "Committee Details",
@@ -4367,7 +4372,7 @@ function ClubAccountStatementUnavailable() {
 function parentScreen(parent: string): Screen {
   if (parent === "People") return "members";
   if (parent === "Operations") return "events-meetings";
-  if (parent === "Finance") return "ledger";
+  if (parent === "Finance") return "finance-module";
   return "dashboard";
 }
 
@@ -5056,8 +5061,7 @@ function Dashboard({
 
       {role === "member" ? (
         <>
-          <MemberFinanceSummaryPanel role={role} compact />
-      {member.backendId && <FinanceBackend role={role} memberId={member.backendId} />}
+          <FinanceBackend role={role} view="summary" isPersonal />
           <section className="compactPanel dashboardPanel">
             <DashboardSectionHeader title="Member dashboard sources" label="Own authorized records only" />
             <div className="compactDashboardGrid">
@@ -6242,8 +6246,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
       </div>
       <div className="notice memberHelperText">Member Details: review the member profile here, then use the finance summary and Profile Documents metadata section below. Backend authorization remains the source of truth.</div>
       {isOwnProfile && <ProfileUpdatesBackend role={role} mode="own" />}
-      <MemberFinanceSummaryPanel role={role} compact />
-      {member.backendId && <FinanceBackend role={role} memberId={member.backendId} />}
+      {member.backendId && <FinanceBackend role={role} view="summary" memberId={member.backendId} isPersonal={role === "member"} />}
       {renderProfileDocumentsSection()}
     </section>
   );
