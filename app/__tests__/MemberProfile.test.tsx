@@ -161,6 +161,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   members.forEach((member) => {
+    member.status = "active";
     member.birth_date = null;
     member.joined_at = "2015-06-01";
     member.wedding_anniversary = null;
@@ -693,6 +694,88 @@ describe("MemberProfile document loading boundary", () => {
 
     expect((await screen.findAllByRole("heading", { name: "Sujesh P R" })).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("heading", { name: "Sajith K" }).length).toBeGreaterThan(0);
+  });
+
+  it("loads the privacy-reduced club directory for a Normal Member without exposing officer profile actions", async () => {
+    authState.role = "member";
+    authState.identity = "sajith-member";
+    authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
+    authState.session.role = "member";
+    authState.session.identity = "sajith-member";
+    authState.session.membership.role.slug = "member";
+    authState.session.membership.member = authState.member;
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Member Directory" }));
+
+    expect(await screen.findByText("Sujesh P R")).toBeInTheDocument();
+    expect(screen.getByText("Sajith K")).toBeInTheDocument();
+    expect(screen.getByText("47 verified club members. Detailed member profiles are available only to authorized club officers.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Sujesh P R/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("9000000000")).not.toBeInTheDocument();
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/clubs\/1\/members$/),
+      expect.objectContaining({ headers: expect.any(Object) })
+    );
+  });
+
+  it.each([
+    ["Active Member List", "Sujesh P R", "Sajith K"],
+    ["Inactive Member List", "Sajith K", "Sujesh P R"]
+  ] as const)("keeps %s aligned to the stored membership status", async (report, visibleMember, hiddenMember) => {
+    authState.role = "president";
+    authState.identity = "bijesh-president";
+    authState.session.role = "president";
+    authState.session.identity = "bijesh-president";
+    authState.session.membership.role.slug = "president-admin";
+    sajith.status = "inactive";
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Reports & Tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Member Reports/ }));
+    fireEvent.click(screen.getByRole("button", { name: report }));
+
+    expect(await screen.findByRole("heading", { name: `Member: ${visibleMember}` })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: `Member: ${hiddenMember}` })).not.toBeInTheDocument();
+    expect(screen.getByText(report === "Active Member List" ? "46 verified active members" : "1 verified inactive member")).toBeInTheDocument();
+  });
+
+  it("shows a truthful empty state when no imported members have the selected status", async () => {
+    authState.role = "treasurer";
+    authState.identity = "ranjith-treasurer";
+    authState.session.role = "treasurer";
+    authState.session.identity = "ranjith-treasurer";
+    authState.session.membership.role.slug = "treasurer";
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Reports & Tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Member Reports/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Inactive Member List" }));
+
+    expect(await screen.findByText("0 verified inactive members")).toBeInTheDocument();
+    expect(screen.getByText("No verified inactive members are recorded.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /View .* profile/ })).not.toBeInTheDocument();
+  });
+
+  it("opens an authorized member profile from an officer member report", async () => {
+    authState.role = "president";
+    authState.identity = "bijesh-president";
+    authState.session.role = "president";
+    authState.session.identity = "bijesh-president";
+    authState.session.membership.role.slug = "president-admin";
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Reports & Tools/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Member Reports/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Active Member List" }));
+    fireEvent.click(await screen.findByRole("button", { name: "View Sujesh P R profile" }));
+
+    expect(await screen.findByRole("heading", { name: "Sujesh P R" })).toBeInTheDocument();
+    expect(screen.getByText("Club member record")).toBeInTheDocument();
   });
 
 });

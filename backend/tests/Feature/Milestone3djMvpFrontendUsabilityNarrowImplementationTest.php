@@ -96,7 +96,8 @@ class Milestone3djMvpFrontendUsabilityNarrowImplementationTest extends TestCase
         $frontend = $this->frontendSource();
 
         foreach ([
-            '47 genuine current members. Select a member to view the profile fields authorized for this role.',
+            '`${availableMembers.length} verified club members. Select a member to view the profile fields authorized for this role.`',
+            '`${availableMembers.length} verified club members. Detailed member profiles are available only to authorized club officers.`',
             'Member Details: review the member profile here',
             'Current Dues, Last Payment, and Receipt Status come from the existing member finance summary API.',
             'Current Dues, Member Finance Summary, Last Payment, Receipt Status, and Payment History are shown only through existing frontend data and backend APIs.',

@@ -1702,7 +1702,13 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
 
         const linkedMemberInfo = activeMembership?.member ?? null;
 
-        let records: BackendMemberRecord[] = [];
+        const listResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members", { headers: authHeaders, signal: controller.signal });
+        if (!listResponse.ok) throw new Error("Current member data could not be loaded.");
+        const listPayload = await listResponse.json();
+        const importedRecords = ((listPayload.members as BackendMemberRecord[] | undefined) || []).filter(isImportedCurrentMember);
+        if (importedRecords.length !== 47) throw new Error("The expected 47 imported current members are not safely distinguishable.");
+
+        let records: BackendMemberRecord[];
         if (role === "member") {
           if (!activeMembership || !linkedMemberInfo || !linkedMemberInfo.id) {
             throw new Error("No genuine club member profile is linked.");
@@ -1716,14 +1722,8 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
           if (!selfRecord || Number(selfRecord.id) !== Number(linkedMemberInfo.id)) {
             throw new Error("No genuine club member profile is linked.");
           }
-          records = [selfRecord];
+          records = importedRecords.map((record) => Number(record.id) === Number(selfRecord.id) ? selfRecord : record);
         } else {
-          const listResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members", { headers: authHeaders, signal: controller.signal });
-          if (!listResponse.ok) throw new Error("Current member data could not be loaded.");
-          const listPayload = await listResponse.json();
-          const importedRecords = ((listPayload.members as BackendMemberRecord[] | undefined) || []).filter(isImportedCurrentMember);
-          if (importedRecords.length !== 47) throw new Error("The expected 47 imported current members are not safely distinguishable.");
-
           records = await Promise.all(importedRecords.map(async (record) => {
             const profileResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members/" + record.id, { headers: authHeaders, signal: controller.signal });
             if (!profileResponse.ok) throw new Error("An imported member profile could not be loaded.");
@@ -2553,7 +2553,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
             ? <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>
             : reportDetail === "Profile Update Pending Report"
               ? <ProfileUpdatesBackend role={role} mode="review" />
-              : <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} amountPerSponsor={activeAmountPerSponsor} selectedSponsors={activeConfirmedSponsors.length ? activeConfirmedSponsors : activeSelectedSponsors} sponsorPayments={activeSponsorPayments} />
+              : <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} onSelectMember={selectAndOpenMemberProfile} amountPerSponsor={activeAmountPerSponsor} selectedSponsors={activeConfirmedSponsors.length ? activeConfirmedSponsors : activeSelectedSponsors} sponsorPayments={activeSponsorPayments} />
         )}
         {screen === "nav-detail" && (
           <NavDetailScreen
@@ -3922,6 +3922,7 @@ function ReportDetailScreen({
   section,
   detail,
   setScreen,
+  onSelectMember,
   amountPerSponsor,
   selectedSponsors,
   sponsorPayments
@@ -3929,6 +3930,7 @@ function ReportDetailScreen({
   section: ReportsSection;
   detail: string;
   setScreen: (screen: Screen) => void;
+  onSelectMember: (member: Member) => void;
   amountPerSponsor?: number;
   selectedSponsors: string[];
   sponsorPayments: Record<string, number>;
@@ -3960,6 +3962,10 @@ function ReportDetailScreen({
   }
 
   const cards = reportDetailCards(section, detail, amountPerSponsor, currentMembers, reportPeriod?.month);
+  const memberStatusLabel = detail === "Active Member List" ? "active" : detail === "Inactive Member List" ? "inactive" : null;
+  const memberReportCount = memberStatusLabel
+    ? `${cards.length} verified ${memberStatusLabel} member${cards.length === 1 ? "" : "s"}`
+    : null;
   const periodLabel = isMonthlyCelebrationReport
     ? reportPeriod ? `${celebrationMonths[reportPeriod.month - 1]} ${reportPeriod.year}` : "Loading current period"
     : section === "Celebration Reports" && detail === "Celebration Register" ? "All-time register"
@@ -3970,10 +3976,17 @@ function ReportDetailScreen({
         <Toolbar title={detail} actionLabel={periodLabel} />
         <button className="secondaryButton compactBackButton" onClick={() => setScreen("reports-tools-module")}>← Reports & Tools</button>
         <div className="notice">This report is derived from the verified imported-member source. No export or report-generation mutation is connected.</div>
+        {memberReportCount && <div className="notice memberHelperText">{memberReportCount}</div>}
       </div>
       <div className="financeCardList">
         {isMonthlyCelebrationReport && reportPeriod && cards.length === 0 && <div className="notice">{isMonthlyBirthdayReport ? "No birthdays recorded for this period." : "No anniversaries recorded for this period."}</div>}
-        {cards.map((card, index) => (
+        {memberStatusLabel && cards.length === 0 && <div className="notice">No verified {memberStatusLabel} members are recorded.</div>}
+        {cards.map((card, index) => card.member ? (
+          <button className="financeStackCard rowButton" aria-label={`View ${card.member.name} profile`} key={`${section}-${detail}-${card.title}-${index}`} onClick={() => onSelectMember(card.member!)}>
+            <h3>{card.title}</h3>
+            {card.meta.map((line) => <span key={line}>{line}</span>)}
+          </button>
+        ) : (
           <article className="financeStackCard" key={`${section}-${detail}-${card.title}-${index}`}>
             <h3>{card.title}</h3>
             {card.meta.map((line) => <span key={line}>{line}</span>)}
@@ -4607,9 +4620,20 @@ function recurringDateMonth(value: string | null | undefined) {
   return date.getUTCFullYear() === year && date.getUTCMonth() + 1 === month && date.getUTCDate() === day ? month : null;
 }
 
-function reportDetailCards(section: ReportsSection, detail: string, amountPerSponsor: number | undefined, currentMembers: Member[], reportMonth?: number) {
+type ReportDetailCard = { title: string; meta: string[]; member?: Member };
+
+function reportDetailCards(section: ReportsSection, detail: string, amountPerSponsor: number | undefined, currentMembers: Member[], reportMonth?: number): ReportDetailCard[] {
   if (section === "Member Reports") {
-    return currentMembers.map((member) => ({ title: `Member: ${member.name}`, meta: [`Member ID: ${member.id}`, `Membership: ${member.membershipCategory || member.membershipType || "Not provided"}`, `Status: ${member.status}`, `Report: ${detail}`] }));
+    const reportMembers = detail === "Active Member List"
+      ? currentMembers.filter((member) => member.status === "Active")
+      : detail === "Inactive Member List"
+        ? currentMembers.filter((member) => member.status === "Inactive")
+        : currentMembers;
+    return reportMembers.map((member) => ({
+      title: `Member: ${member.name}`,
+      meta: [`Member ID: ${member.id}`, `Membership: ${member.membershipCategory || member.membershipType || "Not provided"}`, `Status: ${member.status}`, `Report: ${detail}`],
+      member
+    }));
   }
   if (section === "Celebration Reports") {
     return currentMembers.flatMap((member) => {
@@ -5608,13 +5632,18 @@ function MembersList({
   role: Role;
   onSelectMember?: (member: Member) => void;
 }) {
+  const { members: availableMembers, status: memberStatus } = useCurrentMemberData();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Inactive">("Active");
 
   return (
     <section className="stack">
       <Toolbar title="Member Directory" actionLabel={role === "member" ? "Consent-approved fields only" : "Role-based management"} />
-      <div className="notice memberHelperText">{role === "member" ? "47 genuine current members. Detailed member profiles are available only to authorized club officers." : "47 genuine current members. Select a member to view the profile fields authorized for this role."}</div>
+      <div className="notice memberHelperText">{memberStatus === "ready"
+        ? role === "member"
+          ? `${availableMembers.length} verified club members. Detailed member profiles are available only to authorized club officers.`
+          : `${availableMembers.length} verified club members. Select a member to view the profile fields authorized for this role.`
+        : "Verified club member count is loading."}</div>
       <div className="filterBar">
         <input aria-label="Search current members" placeholder="Search name, Member ID, occupation or membership" value={query} onChange={(event) => setQuery(event.target.value)} />
         {(["All", "Active", "Inactive"] as const).map((filter) => <button className="filterButton" key={filter} onClick={() => setStatusFilter(filter)}>{filter}</button>)}

@@ -87,7 +87,14 @@ class Milestone3eoMemberDirectorySelectedMemberReadHumanOperatorRetestScopeGateT
             'if (!selfRecord || Number(selfRecord.id) !== Number(linkedMemberInfo.id))',
             $code
         );
-        $this->assertStringContainsString('records = [selfRecord];', $code);
+        $this->assertStringContainsString('if (importedRecords.length !== 47)', $code);
+        $this->assertStringContainsString(
+            'records = importedRecords.map((record) => Number(record.id) === Number(selfRecord.id) ? selfRecord : record);',
+            $code
+        );
+        $this->assertStringContainsString('filtered.map((member) => role === "member" ? (', $code);
+        $this->assertStringContainsString('<div key={member.id} className="staticRow">', $code);
+        $this->assertStringNotContainsString('records = [selfRecord];', $code);
         $this->assertStringNotContainsString('API_BASE_URL + "/clubs/" + loadedClubId + "/members/me"', $code);
 
         // 4. general/direct navigation clears selectedMember
