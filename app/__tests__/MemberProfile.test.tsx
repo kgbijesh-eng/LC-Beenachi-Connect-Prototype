@@ -811,4 +811,19 @@ describe("MemberProfile document loading boundary", () => {
     expect(screen.getByTestId("finance-backend")).toHaveTextContent("view record-payment");
   });
 
+  it("routes payment history and receipt list to the canonical read-only history view", async () => {
+    installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
+    render(<Prototype />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Finance/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Payments \/ Receipts/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Payment History" }));
+
+    expect(await screen.findByTestId("finance-backend")).toHaveTextContent("view payment-history");
+    expect(screen.getByTestId("finance-backend")).toHaveTextContent("personal false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Receipt List" }));
+    expect(await screen.findByTestId("finance-backend")).toHaveTextContent("view payment-history");
+  });
+
 });

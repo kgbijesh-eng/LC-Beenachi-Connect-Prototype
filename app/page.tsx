@@ -2737,8 +2737,10 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
         {/* 3AR validation baseline: {screen === "record-member-payment" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />} */}
         {screen === "record-member-payment" && <FinanceBackend role={role} view="record-payment" memberId={financePaymentContext?.memberId} obligationId={financePaymentContext?.obligationId} onBack={() => handleSetScreen("outstanding-dues")} />}
         {screen === "collection-box" && <CollectionBoxReceipt role={role} />}
-        {screen === "receipt-list" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
-        {screen === "payment-history" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
+        {/* 3AX baseline: {screen === "receipt-list" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />} */}
+        {/* 3IF baseline: {screen === "payment-history" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />} */}
+        {screen === "receipt-list" && <FinanceBackend role={role} view="payment-history" isPersonal={role === "member"} />}
+        {screen === "payment-history" && <FinanceBackend role={role} view="payment-history" isPersonal={role === "member"} />}
         {screen === "member-import-preview" && <MemberImportPreview role={role} />}
         {screen === "outstanding-dues" && <FinanceBackend role={role} view="outstanding" onRecordPayment={openOutstandingPayment} />}
         {screen === "collection-summary" && <FinanceBackend role={role} memberId={activeMember!.backendId} isPersonal={isPersonalFinanceScreen} />}
