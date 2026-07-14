@@ -54,6 +54,9 @@ class AuthMeRoleAwareResponseTest extends TestCase
             ])
             ->assertJsonFragment([
                 'slug' => 'payments.record',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'finance.club.statement.view',
             ]);
 
         $actualPermissions = collect($response->json('club_memberships.0.permissions'))
@@ -68,6 +71,7 @@ class AuthMeRoleAwareResponseTest extends TestCase
             'club.view',
             'events.manage',
             'events.view',
+            'finance.club.statement.view',
             'finance.club.view',
             'finance.manage',
             'finance.self.view',

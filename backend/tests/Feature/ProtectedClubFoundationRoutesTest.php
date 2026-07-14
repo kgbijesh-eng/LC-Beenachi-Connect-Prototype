@@ -66,6 +66,9 @@ class ProtectedClubFoundationRoutesTest extends TestCase
             ])
             ->assertJsonFragment([
                 'payments.record',
+            ])
+            ->assertJsonFragment([
+                'finance.club.statement.view',
             ]);
 
         $actualPermissions = collect($response->json('permissions'))->sort()->values()->all();
@@ -76,6 +79,7 @@ class ProtectedClubFoundationRoutesTest extends TestCase
             'club.view',
             'events.manage',
             'events.view',
+            'finance.club.statement.view',
             'finance.club.view',
             'finance.manage',
             'finance.self.view',
