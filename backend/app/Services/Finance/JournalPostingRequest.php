@@ -21,5 +21,7 @@ final readonly class JournalPostingRequest
         public string $idempotencyKey,
         public int $postingActorUserId,
         public array $lines,
+        public ?int $reversalOfEntryId = null,
+        public ?array $metadata = null,
     ) {}
 }

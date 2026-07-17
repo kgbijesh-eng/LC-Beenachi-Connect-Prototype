@@ -68,6 +68,13 @@ final class ClubJournalPostingService
                 throw new InvalidJournalRequestException('The journal posting request is invalid.');
             }
 
+            if ($request->reversalOfEntryId !== null) {
+                $reversalOf = ClubJournalEntry::query()->whereKey($request->reversalOfEntryId)->lockForUpdate()->first();
+                if (! $reversalOf || $reversalOf->club_id !== $club->id) {
+                    throw new JournalClubScopeViolationException('The journal request violates club scope.');
+                }
+            }
+
             $accounts = $this->lockAndValidateAccounts($request, $club);
             $existing = $this->resolveReplay($club, $normalized);
             if ($existing) {
@@ -102,7 +109,9 @@ final class ClubJournalPostingService
                 'source_id' => $normalized['source_id'],
                 'source_event' => $normalized['source_event'],
                 'idempotency_key' => $normalized['idempotency_key'],
+                'reversal_of_entry_id' => $normalized['reversal_of_entry_id'],
                 'created_by_user_id' => $request->postingActorUserId,
+                'metadata' => $normalized['metadata'],
             ]);
 
             foreach ($normalized['lines'] as $index => $line) {
@@ -129,7 +138,8 @@ final class ClubJournalPostingService
 
     private function validateAndNormalize(JournalPostingRequest $request): array
     {
-        if ($request->clubId < 1 || $request->accountingPeriodId < 1 || $request->postingActorUserId < 1) {
+        if ($request->clubId < 1 || $request->accountingPeriodId < 1 || $request->postingActorUserId < 1
+            || ($request->reversalOfEntryId !== null && $request->reversalOfEntryId < 1)) {
             throw new InvalidJournalRequestException('The journal posting request is invalid.');
         }
         if ($request->currency !== LedgerAccount::CURRENCY_INR) {
@@ -199,6 +209,8 @@ final class ClubJournalPostingService
             'posting_actor_user_id' => $request->postingActorUserId,
             'club_id' => $request->clubId,
             'accounting_period_id' => $request->accountingPeriodId,
+            'reversal_of_entry_id' => $request->reversalOfEntryId,
+            'metadata' => $request->metadata,
             'lines' => $lines,
         ];
     }
@@ -284,6 +296,8 @@ final class ClubJournalPostingService
             'posting_actor_user_id' => $entry->posted_by_user_id,
             'club_id' => $entry->club_id,
             'accounting_period_id' => $entry->accounting_period_id,
+            'reversal_of_entry_id' => $entry->reversal_of_entry_id,
+            'metadata' => $entry->metadata,
             'lines' => $entry->lines->map(fn (ClubJournalLine $line): array => [
                 'account_id' => $line->ledger_account_id,
                 'direction' => $line->direction,

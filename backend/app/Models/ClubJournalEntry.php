@@ -33,6 +33,9 @@ class ClubJournalEntry extends Model
     {
         static::creating(fn (self $entry) => $entry->public_id ??= (string) Str::orderedUuid());
         static::updating(function (self $entry): void {
+            if ($entry->getOriginal('status') === self::STATUS_POSTED && $entry->isApprovedReversalTransition()) {
+                return;
+            }
             if (in_array($entry->getOriginal('status'), [self::STATUS_POSTED, self::STATUS_REVERSED], true)) {
                 throw new LogicException('Posted journal entries are immutable.');
             }
@@ -111,5 +114,19 @@ class ClubJournalEntry extends Model
     public function voidedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'voided_by_user_id');
+    }
+
+    private function isApprovedReversalTransition(): bool
+    {
+        if ($this->status !== self::STATUS_REVERSED || ! $this->reversed_by_user_id) {
+            return false;
+        }
+        if (array_diff(array_keys($this->getDirty()), ['status', 'reversed_by_user_id', 'updated_at']) !== []) {
+            return false;
+        }
+
+        return $this->reversals()
+            ->where('status', self::STATUS_POSTED)
+            ->count() === 1;
     }
 }
