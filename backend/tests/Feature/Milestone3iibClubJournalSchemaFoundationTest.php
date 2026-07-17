@@ -253,7 +253,7 @@ class Milestone3iibClubJournalSchemaFoundationTest extends TestCase
             ->map(fn ($route) => $route->uri())
             ->filter(fn (string $uri) => str_contains($uri, 'account-statement') || str_contains($uri, 'journal'));
         $this->assertSame([], $financeUris->values()->all());
-        $this->assertFalse(class_exists(ClubJournalPostingService::class));
+        $this->assertTrue(class_exists(ClubJournalPostingService::class));
         $this->assertFalse(class_exists(ClubAccountStatementController::class));
     }
 
