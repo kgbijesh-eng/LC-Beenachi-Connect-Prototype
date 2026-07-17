@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
+use LogicException;
 
 class ClubAccountingPeriod extends Model
 {
@@ -22,6 +23,13 @@ class ClubAccountingPeriod extends Model
     protected static function booted(): void
     {
         static::creating(fn (self $period) => $period->public_id ??= (string) Str::orderedUuid());
+        static::updating(function (self $period): void {
+            if ($period->getOriginal('status') !== self::STATUS_OPEN || $period->status !== self::STATUS_CLOSED
+                || ! $period->closed_at || ! $period->closed_by_user_id
+                || array_diff(array_keys($period->getDirty()), ['status', 'closed_at', 'closed_by_user_id', 'updated_at']) !== []) {
+                throw new LogicException('Accounting periods may only be closed through the controlled lifecycle.');
+            }
+        });
     }
 
     protected function casts(): array
