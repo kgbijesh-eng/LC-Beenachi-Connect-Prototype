@@ -32,6 +32,7 @@
 | DR-022 | Initially provide one real cash or bank account per statement. | No synthetic fund statement or ambiguous all-account scalar balance. | Approved with modification |
 | DR-023 | Keep original and reversal entries visible and linked. | API totals include both effects; UI may group but not hide or alter them. | Approved |
 | DR-024 | Statement reads are transactionally consistent and include version or fingerprint metadata. | Rows, pagination, running balances, and totals share one consistent snapshot identity. | Approved |
+| DR-025 | Ledger-account codes are trimmed, ASCII-uppercased, and stored in canonical form. A normalized code must be 2-40 characters and match `^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$`; it is immutable and unique within a club. | Equivalent caller input replays only when every material account field matches. Codes do not determine opaque identity or infer account properties. The same normalized code may exist in another club. The 2-40 limit aligns with the verified `varchar(40)` schema; account descriptions belong in names, avoiding an unnecessary widening migration and operational risk. Approved by Bijesh K. G. on 17 July 2026. | Approved |
 
 ## Approval boundary
 

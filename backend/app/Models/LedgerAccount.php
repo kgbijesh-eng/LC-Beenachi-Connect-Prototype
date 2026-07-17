@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
+use LogicException;
 
 class LedgerAccount extends Model
 {
@@ -34,6 +35,11 @@ class LedgerAccount extends Model
     protected static function booted(): void
     {
         static::creating(fn (self $account) => $account->public_id ??= (string) Str::orderedUuid());
+        static::updating(function (self $account): void {
+            if ($account->isDirty('code')) {
+                throw new LogicException('Ledger account codes are immutable.');
+            }
+        });
     }
 
     protected function casts(): array
