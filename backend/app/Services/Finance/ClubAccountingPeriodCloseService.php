@@ -9,6 +9,7 @@ use App\Models\Club;
 use App\Models\ClubAccountingPeriod;
 use App\Models\ClubJournalEntry;
 use App\Models\ClubJournalLine;
+use App\Models\ClubMembership;
 use App\Models\User;
 use App\Services\Finance\Exceptions\AccountingPeriodCloseConflictException;
 use App\Services\Finance\Exceptions\AccountingPeriodCloseIntegrityException;
@@ -32,7 +33,8 @@ final class ClubAccountingPeriodCloseService
             if (! $club || ! $period || $period->club_id !== $request->clubId || $period->lions_year !== $request->expectedLionsYear) {
                 throw new InvalidAccountingPeriodCloseRequestException('The accounting-period close request is invalid.');
             }
-            if (! User::query()->whereKey($request->closingActorUserId)->exists()) {
+            if (! User::query()->whereKey($request->closingActorUserId)->exists()
+                || ! ClubMembership::query()->where('club_id', $club->id)->where('user_id', $request->closingActorUserId)->where('status', 'active')->exists()) {
                 throw new InvalidAccountingPeriodCloseRequestException('The accounting-period close actor is invalid.');
             }
             $startYear = (int) substr($period->lions_year, 0, 4);
