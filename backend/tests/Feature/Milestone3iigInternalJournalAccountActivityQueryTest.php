@@ -83,6 +83,45 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         $this->assertSame(0, $result->signedPeriodMovementPaise);
     }
 
+    public function test_every_reachable_ordering_key_is_deterministic_across_identical_queries(): void
+    {
+        $fixture = $this->fixture();
+        $effectiveLater = $this->entry($fixture, 5, '2026-07-12', '2026-07-10 09:00:00', [
+            [$fixture['account'], 'debit', 500, null],
+            [$fixture['other'], 'credit', 500, null],
+        ]);
+        $postedLater = $this->entry($fixture, 4, '2026-07-10', '2026-07-12 09:00:00', [
+            [$fixture['account'], 'debit', 400, null],
+            [$fixture['other'], 'credit', 400, null],
+        ]);
+        $sequenceLater = $this->entry($fixture, 3, '2026-07-10', '2026-07-11 09:00:00', [
+            [$fixture['account'], 'debit', 300, 'Sequence three line one'],
+            [$fixture['account'], 'debit', 30, 'Sequence three line two'],
+            [$fixture['other'], 'credit', 330, null],
+        ]);
+        $sequenceEarlier = $this->entry($fixture, 2, '2026-07-10', '2026-07-11 09:00:00', [
+            [$fixture['account'], 'debit', 200, null],
+            [$fixture['other'], 'credit', 200, null],
+        ]);
+
+        $first = $this->query($fixture);
+        $repeated = $this->query($fixture);
+        $expectedEntries = [
+            $sequenceEarlier->public_id,
+            $sequenceLater->public_id,
+            $sequenceLater->public_id,
+            $postedLater->public_id,
+            $effectiveLater->public_id,
+        ];
+
+        $this->assertSame($expectedEntries, array_column($first->rows, 'journalEntryPublicId'));
+        $this->assertSame([1, 1, 2, 1, 1], array_column($first->rows, 'lineNumber'));
+        $this->assertSame(
+            array_column($first->rows, 'journalLinePublicId'),
+            array_column($repeated->rows, 'journalLinePublicId'),
+        );
+    }
+
     public function test_lifecycle_effective_date_and_inactive_account_history_rules_are_truthful(): void
     {
         $fixture = $this->fixture();
@@ -99,6 +138,35 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         $this->assertSame(100, $result->periodDebitPaise);
         $this->assertSame(40, $result->periodCreditPaise);
         $this->assertSame(60, $result->signedPeriodMovementPaise);
+    }
+
+    public function test_effective_date_alone_controls_filtering_while_posting_date_remains_audit_context(): void
+    {
+        $fixture = $this->fixture();
+        $included = $this->entry(
+            $fixture,
+            1,
+            '2026-07-15',
+            '2026-08-10 10:00:00',
+            [[$fixture['account'], 'debit', 100, null], [$fixture['other'], 'credit', 100, null]],
+            postingDate: '2026-08-10',
+        );
+        $this->entry(
+            $fixture,
+            2,
+            '2026-08-10',
+            '2026-07-15 10:00:00',
+            [[$fixture['account'], 'debit', 200, null], [$fixture['other'], 'credit', 200, null]],
+            postingDate: '2026-07-15',
+        );
+
+        $result = $this->query($fixture);
+
+        $this->assertCount(1, $result->rows);
+        $this->assertSame($included->public_id, $result->rows[0]->journalEntryPublicId);
+        $this->assertSame('2026-07-15', $result->rows[0]->effectiveDate);
+        $this->assertSame('2026-08-10', $result->rows[0]->postingDate);
+        $this->assertSame(100, $result->periodDebitPaise);
     }
 
     public function test_original_and_posted_reversal_are_visible_linked_and_counted_once_each(): void
@@ -118,11 +186,46 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         $this->assertSame(500, $result->periodCreditPaise);
     }
 
+    public function test_duplicate_same_club_posted_reversals_fail_closed_without_repair_or_mutation(): void
+    {
+        $fixture = $this->fixture();
+        $original = $this->entry($fixture, 1, '2026-07-10', '2026-07-10 10:00:00', [
+            [$fixture['account'], 'debit', 500, null],
+            [$fixture['other'], 'credit', 500, null],
+        ], ClubJournalEntry::STATUS_REVERSED);
+        $this->entry($fixture, 2, '2026-07-11', '2026-07-11 10:00:00', [
+            [$fixture['account'], 'credit', 500, null],
+            [$fixture['other'], 'debit', 500, null],
+        ], reversalOf: $original->id);
+        $this->entry($fixture, 3, '2026-07-12', '2026-07-12 10:00:00', [
+            [$fixture['account'], 'credit', 500, null],
+            [$fixture['other'], 'debit', 500, null],
+        ], reversalOf: $original->id);
+        $before = $this->rawJournalState();
+
+        try {
+            $this->query($fixture);
+            $this->fail('Duplicate posted reversals must fail before returning activity or movement totals.');
+        } catch (JournalActivityIntegrityException $exception) {
+            $this->assertSame('The journal activity is malformed.', $exception->getMessage());
+            $this->assertInstanceOf(JournalActivityIntegrityException::class, $exception->getPrevious());
+        }
+
+        $this->assertSame($before, $this->rawJournalState());
+        $this->assertSame(ClubJournalEntry::STATUS_REVERSED, $original->fresh()->status);
+        $this->assertSame(2, $original->reversals()->count());
+    }
+
     public function test_cursor_pagination_is_context_bound_and_has_no_duplicates_or_omissions(): void
     {
         $fixture = $this->fixture();
         foreach (range(1, 5) as $sequence) {
-            $this->entry($fixture, $sequence, sprintf('2026-07-%02d', $sequence), sprintf('2026-07-%02d 10:00:00', $sequence), [[$fixture['account'], 'debit', $sequence, null], [$fixture['other'], 'credit', $sequence, null]]);
+            $selectedDirection = $sequence % 2 === 0 ? ClubJournalLine::DIRECTION_CREDIT : ClubJournalLine::DIRECTION_DEBIT;
+            $otherDirection = $selectedDirection === ClubJournalLine::DIRECTION_DEBIT ? ClubJournalLine::DIRECTION_CREDIT : ClubJournalLine::DIRECTION_DEBIT;
+            $this->entry($fixture, $sequence, sprintf('2026-07-%02d', $sequence), sprintf('2026-07-%02d 10:00:00', $sequence), [
+                [$fixture['account'], $selectedDirection, $sequence, null],
+                [$fixture['other'], $otherDirection, $sequence, null],
+            ]);
         }
 
         $first = $this->query($fixture, pageSize: 2);
@@ -135,8 +238,15 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         $this->assertTrue($first->hasMore);
         $this->assertTrue($second->hasMore);
         $this->assertFalse($third->hasMore);
-        $this->assertSame(15, $first->periodDebitPaise);
-        $this->assertSame(15, $second->periodDebitPaise);
+        $this->assertSame([], array_values(array_intersect(
+            array_column($first->rows, 'journalLinePublicId'),
+            array_column($second->rows, 'journalLinePublicId'),
+        )));
+        foreach ([$first, $second] as $page) {
+            $this->assertSame(9, $page->periodDebitPaise);
+            $this->assertSame(6, $page->periodCreditPaise);
+            $this->assertSame(3, $page->signedPeriodMovementPaise);
+        }
 
         $foreign = $this->fixture('FOREIGN');
         foreach ([
@@ -253,12 +363,20 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         return LedgerAccount::create(['club_id' => $club->id, 'code' => $code, 'name' => $code, 'account_type' => $type, 'normal_balance' => $normalBalance, 'currency' => 'INR', 'is_active' => true, 'created_by_user_id' => $actor->id]);
     }
 
-    private function entry(array $fixture, int $sequence, string $effectiveDate, ?string $postedAt, array $lines, string $status = ClubJournalEntry::STATUS_POSTED, ?int $reversalOf = null): ClubJournalEntry
+    private function rawJournalState(): array
+    {
+        return collect(['ledger_accounts', 'club_accounting_periods', 'club_journal_entries', 'club_journal_lines'])
+            ->mapWithKeys(fn (string $table) => [
+                $table => DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all(),
+            ])->all();
+    }
+
+    private function entry(array $fixture, int $sequence, string $effectiveDate, ?string $postedAt, array $lines, string $status = ClubJournalEntry::STATUS_POSTED, ?int $reversalOf = null, ?string $postingDate = null): ClubJournalEntry
     {
         $entry = ClubJournalEntry::create([
             'club_id' => $fixture['club']->id, 'accounting_period_id' => $fixture['period']->id,
             'sequence_number' => $sequence, 'reference' => sprintf('%s/2026-27/JRN/%06d', $fixture['club']->code, $sequence),
-            'effective_date' => $effectiveDate, 'posting_date' => $effectiveDate, 'posted_at' => null,
+            'effective_date' => $effectiveDate, 'posting_date' => $postingDate ?? $effectiveDate, 'posted_at' => null,
             'status' => ClubJournalEntry::STATUS_DRAFT, 'description' => "Entry {$sequence}", 'currency' => 'INR',
             'source_type' => 'fixture', 'source_id' => (string) Str::uuid(), 'source_event' => 'posted',
             'idempotency_key' => (string) Str::uuid(), 'reversal_of_entry_id' => $reversalOf,
