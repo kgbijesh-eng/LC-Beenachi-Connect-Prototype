@@ -4,6 +4,8 @@
 
 **Pure validation foundation:** package structure `CUTOVER-EVIDENCE-PACKAGE-2026-01` and validation policy `OPENING-BALANCE-VALIDATION-2026-01` produce only deterministic `PROPOSED-UNVERIFIED`, activation-`BLOCKED` structural reports. They fetch no evidence, create no records, and never satisfy independent accounting review. Every report retains DR-033, operational-collision, and activation-authorization blockers. The dry-run fingerprint is a comparison tool, not the approved-package checksum required by DR-044.
 
+**Authorization contract boundary:** `CUTOVER-AUTHORIZATION-CONTRACT-2026-01` distinguishes the 3IIM structural comparison fingerprint, a future final persisted package fingerprint, and the separately controlled DR-044 evidence-package checksum. Any material change invalidates their binding and dependent decisions. A future activation authorization is single-use, exact-package-bound, separately approved, concurrency-protected, revocable before posting, and consumed only with successful creation or exact authorized replay. This is a design contract only; DR-033 remains Pending and no persistence or authorization exists.
+
 ## 1. Approved boundary and cutover alternatives
 
 DR-002 and DR-003 require a Lions Year from 1 July through 30 June and permit cutover only on 1 July of an explicitly approved Lions Year. The current Lions Year is 2026–27 and began on 1 July 2026, but that fact does not approve it as the cutover.

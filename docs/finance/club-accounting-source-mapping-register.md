@@ -11,6 +11,8 @@
 
 Every future integration must run atomically with or reliably outbox-bind the authoritative source transition, use same-club opaque identities, post exactly once, and preserve source and journal histories.
 
+Cutover contract `CUTOVER-AUTHORIZATION-CONTRACT-2026-01` adds a mandatory sequencing gate: no source integration may activate until an approved opening package is posted, authoritative coverage is recorded, and that integration has its own club-scoped mapping, reversal, reconciliation, idempotency, and authorization gate. Opening activation never enables source hooks automatically. Dormant hooks on live charge/payment paths are prohibited before those gates exist.
+
 ## 2. Proposed mapping register
 
 | Workflow | Authoritative source / trigger | Proposed debit | Proposed credit | Effective date | Source / idempotency identity | Reversal or void | Approval and isolation | Readiness / blockers | Initial release |

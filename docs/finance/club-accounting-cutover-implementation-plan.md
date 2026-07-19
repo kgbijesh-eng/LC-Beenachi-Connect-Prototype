@@ -43,6 +43,8 @@ For milestone 23, the stop condition is any deployment, migration, canary, prove
 
 **Opening validation foundation note:** package structure `CUTOVER-EVIDENCE-PACKAGE-2026-01` and policy `OPENING-BALANCE-VALIDATION-2026-01` validate only non-sensitive proposed structures and deterministic blockers. Every report remains `PROPOSED-UNVERIFIED` and activation-`BLOCKED`; no evidence is fetched, no operational collision is checked, and no record is written. Asset openings are debit-only, liability openings credit-only, income/expense openings are prohibited, and DR-033 blocks every equity selection and completion claim.
 
+**Sequencing correction after 3IIM:** deterministic opening-line preparation, blocker reporting, source candidates, and a structural comparison fingerprint are already provided by the pure 3IIM foundation, so a duplicate preview service is not the next useful implementation. Contract `CUTOVER-AUTHORIZATION-CONTRACT-2026-01` must govern a future normalized package, final persisted fingerprint, separate DR-044 evidence checksum, append-only decisions, single-use activation authority, concurrency, separation of duties, and rollback before any persistence implementation. DR-033 blocks completed accounting review and activation. Cutover posting does not activate source integrations; each integration remains separately gated after authoritative coverage exists.
+
 ## 3. Sequential and parallel work
 
 Decisions → chart/mappings → evidence → validation/dry run → enforceable approval → opening posting are strictly sequential. Charge and payment integrations follow a correct opening and can be developed in parallel only after their shared mapping/idempotency contracts are frozen; activation remains sequential. Expense, donation, Collection Box, Special/Voluntary Collection, and Fellowship are independent prerequisite lanes and remain outside the initial release until approved. API security, frontend design, and operational runbooks may be prepared in parallel after authoritative balance semantics stabilize, but cannot activate early.
@@ -68,4 +70,4 @@ Decisions → chart/mappings → evidence → validation/dry run → enforceable
 
 ## 5. Stop point
 
-After this documentation milestone, the next action is business-owner and accounting review of all Pending decisions. Chart provisioning, opening preparation, operational inspection, journal posting, source integration, reconciliation, API, frontend, merge, and deployment remain prohibited.
+After the package/activation contract is reviewed, the next accounting-critical action is reconciled evidence and independent accounting review leading to a separately recorded DR-033 decision. Package persistence requires its own reviewed schema milestone and remains prohibited here. Operational inspection, journal posting, source integration, reconciliation, API, frontend, merge, and deployment remain prohibited.
