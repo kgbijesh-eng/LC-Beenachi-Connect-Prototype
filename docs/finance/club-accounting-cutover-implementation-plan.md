@@ -37,6 +37,8 @@ Every future milestone is club-scoped, INR integer-paise, additive until activat
 
 For milestone 23, the stop condition is any deployment, migration, canary, provenance, reconciliation, privacy, or performance failure. Force deployment and force migration are prohibited.
 
+**Internal template foundation note:** immutable catalogue version `CLUB-COA-2026-01` implements the approved 24-row template semantics only. It creates no club-account record and does not invoke or extend provisioning. Milestone 5 remains unexecuted: exact instances, private bank aliases, mappings, opening positions, DR-033 equity selection, provisioning, activation, and posting remain separately gated.
+
 ## 3. Sequential and parallel work
 
 Decisions → chart/mappings → evidence → validation/dry run → enforceable approval → opening posting are strictly sequential. Charge and payment integrations follow a correct opening and can be developed in parallel only after their shared mapping/idempotency contracts are frozen; activation remains sequential. Expense, donation, Collection Box, Special/Voluntary Collection, and Fellowship are independent prerequisite lanes and remain outside the initial release until approved. API security, frontend design, and operational runbooks may be prepared in parallel after authoritative balance semantics stabilize, but cannot activate early.

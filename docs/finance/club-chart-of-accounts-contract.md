@@ -7,7 +7,7 @@
 This contract refines the approved append-only, club-scoped, INR double-entry direction in DR-001 through DR-025. It separates:
 
 - **Approved policy:** account types, normal-balance semantics, Lions Year, separate real cash/bank accounts, immutable codes, and club isolation.
-- **Implemented internal capability:** `ledger_accounts` and the inert `LedgerAccountProvisioningService` support club-scoped accounts, INR, canonical codes, active state, replay safety, and type-compatible normal balances. They expose no route and contain no approved LC Beenachi chart.
+- **Implemented internal capability:** `ledger_accounts` and the inert `LedgerAccountProvisioningService` support club-scoped accounts, INR, canonical codes, active state, replay safety, and type-compatible normal balances. The pure, immutable internal catalogue version `CLUB-COA-2026-01` represents the approved 24 template semantics without invoking provisioning or creating records. No route, command, trigger, operational account instance, mapping, opening value, or activation is exposed or approved.
 - **Existing operational source:** charges, member obligations, fully allocated payments, allocations, and receipts exist independently of the journal.
 - **Proposed future design:** the catalog below.
 - **Unsupported workflow:** any source not listed as operationally ready in the source-mapping register.
@@ -88,4 +88,4 @@ An account is eligible for activation only after its code, name, type, normal ba
 
 ## 7. Approval boundary
 
-The corrected 24-row catalog is approved only as inactive template semantics. Initial activation is limited to the smallest verified subset: real asset accounts, one member-receivable control, explicitly approved and mapped income/liability accounts, exactly one reviewed opening-equity choice, and expense accounts only when an approved payment workflow exists. Exact bank instances and aliases, mappings, opening values, the DR-033 equity selection, provisioning, and activation remain unapproved.
+The corrected 24-row catalog is approved only as inactive template semantics and is represented internally by immutable catalogue version `CLUB-COA-2026-01`. This version is not a Lions Year, operational chart version, activation approval, or club-account instance. Initial activation is limited to the smallest verified subset: real asset accounts, one member-receivable control, explicitly approved and mapped income/liability accounts, exactly one reviewed opening-equity choice, and expense accounts only when an approved payment workflow exists. Exact bank instances and aliases, mappings, opening values, the DR-033 equity selection, provisioning, and activation remain unapproved.
