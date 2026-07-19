@@ -416,7 +416,7 @@ describe("MemberProfile document loading boundary", () => {
   it.each([
     ["president", "bijesh-president", "president-admin"],
     ["member", "sajith-member", "member"]
-  ] as const)("does not present static club-document records as real for %s", async (role, identity, roleSlug) => {
+  ] as const)("uses personal profile-document metadata without static club-document records for %s", async (role, identity, roleSlug) => {
     authState.role = role;
     authState.identity = identity;
     authState.session.role = role;
@@ -426,13 +426,19 @@ describe("MemberProfile document loading boundary", () => {
       authState.member = { id: 5, member_code: "4794369", full_name: "Sajith K" };
       authState.session.membership.member = authState.member;
     }
+    authState.auth.authenticatedFetch = vi.fn(async (path: string) => {
+      if (path === `/clubs/1/members/me`) return json({ member: { id: authState.session.membership.member?.id, club_id: 1 } });
+      if (path.endsWith("/profile-documents")) return json({ profile_documents: [] });
+      return json({ message: "Unexpected endpoint" }, 500);
+    });
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
     render(<Prototype />);
 
     if (role === "president") fireEvent.click(screen.getByRole("button", { name: /My Member Area/ }));
-    fireEvent.click(screen.getByRole("button", { name: "My Documents" }));
+    fireEvent.click(screen.getByRole("button", { name: "My Profile Documents" }));
 
-    expect(await screen.findByText("Club document records are not connected to a verified backend source. No document records are shown.")).toBeInTheDocument();
+    expect(await screen.findByText("No personal profile-document metadata records are available.")).toBeInTheDocument();
+    expect(screen.getByText(/File content, upload, download and preview are not available through this screen/)).toBeInTheDocument();
     expect(screen.queryByText("General Body Minutes - May 2026")).not.toBeInTheDocument();
     expect(screen.queryByText("Annual Plan 2026")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "View Details" })).not.toBeInTheDocument();

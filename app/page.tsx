@@ -6,6 +6,7 @@ import ReportsBackend from "./ReportsBackend";
 import { eventMeetingSection } from "./eventMeetingPeriod";
 import ProfileUpdatesBackend from "./ProfileUpdatesBackend";
 import FinanceBackend from "./FinanceBackend";
+import PersonalProfileDocuments from "./PersonalProfileDocuments";
 import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";
 
 type Role = DevRole;
@@ -1059,7 +1060,7 @@ const myMemberAreaItems: NavItem[] = [
   { label: "My Digital Card", screen: "digital-card" },
   { label: "My Dues", screen: "my-dues" },
   { label: "My Fellowship", screen: "my-fellowship" },
-  { label: "My Documents", screen: "my-documents" },
+  { label: "My Profile Documents", screen: "my-documents" },
   { label: "My Celebrations", screen: "celebrations" },
   { label: "Blood Donor Consent", screen: "donor-consent" }
 ];
@@ -1266,7 +1267,7 @@ const navByRole: Record<Role, NavGroup[]> = {
       { label: "Projects / Activities", screen: "projects" },
       { label: "Reminders", screen: "notifications-reminders" },
       { label: "Announcements", screen: "announcements" },
-      { label: "My Documents", screen: "my-documents" },
+      { label: "My Profile Documents", screen: "my-documents" },
       { label: "Celebrations", screen: "celebrations" },
       { label: "Blood Donor Consent", screen: "donor-consent" }
     ] }
@@ -1311,7 +1312,7 @@ const pstMemberAreaCards = [
   { label: "My Digital Card", value: "In-app card", action: "View", screen: "digital-card" as Screen },
   { label: "My Dues", value: "Own account", action: "Review", screen: "my-dues" as Screen },
   { label: "My Fellowship", value: "Own status", action: "Open", screen: "my-fellowship" as Screen },
-  { label: "My Documents", value: "My access", action: "View", screen: "my-documents" as Screen },
+  { label: "My Profile Documents", value: "My metadata", action: "View", screen: "my-documents" as Screen },
   { label: "My Celebrations", value: "My wishes", action: "Open", screen: "celebrations" as Screen },
   { label: "Blood Donor Consent", value: "My consent", action: "Update", screen: "donor-consent" as Screen }
 ];
@@ -2763,7 +2764,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
           <EventMeetingDetail item={selectedEventMeeting} setScreen={handleSetScreen} />
         )}
         {screen === "announcements" && <Announcements role={role} member={activeMember!} selectedSponsors={selectedSponsors} />}
-        {screen === "my-documents" && <MyDocuments role={role} onOpen={openPersonalDocument} />}
+        {screen === "my-documents" && <PersonalProfileDocuments />}
         {screen === "documents-administration" && (canManageClubDocuments ? (
           <DocumentAdministration onEdit={startAdministrativeDocumentEdit} />
         ) : (
@@ -2873,7 +2874,7 @@ function screenTitle(screen: Screen) {
     "announcement-single-detail": "Announcement Details",
     "club-document-detail": "Document Details",
     "activity-detail": "Activity Details",
-    "my-documents": "My Documents",
+    "my-documents": "My Profile Documents",
     "documents-administration": "Document Administration",
     "document-administration-edit": "Edit Club Document",
     "personal-document-detail": "Document Details",
@@ -9558,20 +9559,6 @@ function Announcements({ role, member, selectedSponsors }: { role: Role; member:
             </div>
           </article>
         ))}
-      </div>
-    </section>
-  );
-}
-
-function MyDocuments({ role: _role, onOpen: _onOpen }: { role: Role; onOpen: (documentId: string) => void }) {
-  return (
-    <section className="stack" style={{ minWidth: 0 }}>
-      <div className="memberPanel">
-        <div className="toolbar" style={{ gap: "12px", flexWrap: "wrap" }}>
-          <div><p className="eyebrow">MY DOCUMENTS</p><h2>Documents Available to Me</h2></div>
-          <span className="statusPill">Not connected</span>
-        </div>
-        <div className="notice memberHelperText">Club document records are not connected to a verified backend source. No document records are shown.</div>
       </div>
     </section>
   );
