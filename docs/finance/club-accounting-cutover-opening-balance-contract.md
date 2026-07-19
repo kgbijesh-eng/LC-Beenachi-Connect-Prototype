@@ -1,6 +1,8 @@
 # Club Accounting Cutover and Opening Balance Contract
 
-**Status:** Proposed design only. The cutover Lions Year, opening values, evidence, actors, approval, and activation all remain **Pending**. No operational data was inspected.
+**Status:** Proposed validation design only. The current decision register is authoritative: DR-026–DR-032 and DR-034–DR-052 are approved with their recorded qualifications, while DR-033 alone remains **Pending**. Opening values, package-specific evidence, accounting review, approval, posting, and activation remain unapproved. No operational data was inspected.
+
+**Pure validation foundation:** package structure `CUTOVER-EVIDENCE-PACKAGE-2026-01` and validation policy `OPENING-BALANCE-VALIDATION-2026-01` produce only deterministic `PROPOSED-UNVERIFIED`, activation-`BLOCKED` structural reports. They fetch no evidence, create no records, and never satisfy independent accounting review. Every report retains DR-033, operational-collision, and activation-authorization blockers. The dry-run fingerprint is a comparison tool, not the approved-package checksum required by DR-044.
 
 ## 1. Approved boundary and cutover alternatives
 
@@ -12,7 +14,7 @@ DR-002 and DR-003 require a Lions Year from 1 July through 30 June and permit cu
 | B — future cutover on 1 July 2027 | Existing workflows remain outside the journal until activation; opening evidence is prepared prospectively | Lowest evidence risk, but authoritative journal statements are delayed |
 | C — another future 1 July | Permitted only by explicit approval with a corresponding Lions Year | Further delay but may be safer if readiness is insufficient |
 
-**Recommendation (Pending): Option B, 1 July 2027.** Current evidence proves internal journal mechanics but does not prove complete 1 July 2026 opening schedules or source integration. Final cutover Lions Year remains Pending. A mid-year cutover is prohibited.
+**Approved target with qualification:** Option B, 1 July 2027, subject to readiness. If readiness fails, postpone only to a later approved 1 July. Current evidence proves internal journal mechanics but does not prove complete opening schedules or source integration. A mid-year cutover is prohibited.
 
 ## 2. Cutover lifecycle
 
@@ -145,6 +147,6 @@ A fictional package proposes bank 100,000 paise and receivables 25,000 paise but
 - Showing authoritative opening/running/closing balances before completeness approval.
 - Treating the journal control line as the member subledger.
 
-## 11. Pending approval
+## 11. Remaining approval boundary
 
-Final cutover Lions Year, chart, evidence format, opening offset, actor assignments, separation of duties, external accounting review, dry-run criteria, activation authority, rollback threshold, historical-backfill policy, and privacy retention remain Pending.
+The decision register records qualified approvals for the target cutover, chart semantics, evidence format, roles, external review requirement, dry-run outcomes, activation authority, rollback policy, historical-backfill prohibition, and provisional privacy retention. Those policy approvals do not approve package-specific evidence, account instances, opening values, mappings, accounting review, posting, or activation. DR-033 remains Pending and prevents selection of any opening-equity account or completion of an activation-ready package.

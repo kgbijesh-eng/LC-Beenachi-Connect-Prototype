@@ -41,6 +41,8 @@ For milestone 23, the stop condition is any deployment, migration, canary, prove
 
 **Inactive provisioning-plan note:** policy `INACTIVE-PROVISIONING-PLAN-2026-01` validates only pure, deterministic `PROPOSED-UNVERIFIED` descriptions. It neither verifies opaque references nor creates, provisions, audits, authorizes, or activates an account. No template is approved for persistence, both equity candidates remain blocked while DR-033 is Pending, and Milestone 5 write semantics remain unexecuted.
 
+**Opening validation foundation note:** package structure `CUTOVER-EVIDENCE-PACKAGE-2026-01` and policy `OPENING-BALANCE-VALIDATION-2026-01` validate only non-sensitive proposed structures and deterministic blockers. Every report remains `PROPOSED-UNVERIFIED` and activation-`BLOCKED`; no evidence is fetched, no operational collision is checked, and no record is written. Asset openings are debit-only, liability openings credit-only, income/expense openings are prohibited, and DR-033 blocks every equity selection and completion claim.
+
 ## 3. Sequential and parallel work
 
 Decisions → chart/mappings → evidence → validation/dry run → enforceable approval → opening posting are strictly sequential. Charge and payment integrations follow a correct opening and can be developed in parallel only after their shared mapping/idempotency contracts are frozen; activation remains sequential. Expense, donation, Collection Box, Special/Voluntary Collection, and Fellowship are independent prerequisite lanes and remain outside the initial release until approved. API security, frontend design, and operational runbooks may be prepared in parallel after authoritative balance semantics stabilize, but cannot activate early.
