@@ -8,6 +8,7 @@ This contract refines the approved append-only, club-scoped, INR double-entry di
 
 - **Approved policy:** account types, normal-balance semantics, Lions Year, separate real cash/bank accounts, immutable codes, and club isolation.
 - **Implemented internal capability:** `ledger_accounts` and the inert `LedgerAccountProvisioningService` support club-scoped accounts, INR, canonical codes, active state, replay safety, and type-compatible normal balances. The pure, immutable internal catalogue version `CLUB-COA-2026-01` represents the approved 24 template semantics without invoking provisioning or creating records. No route, command, trigger, operational account instance, mapping, opening value, or activation is exposed or approved.
+- **Proposed-plan validation boundary:** immutable policy `INACTIVE-PROVISIONING-PLAN-2026-01` produces only deterministic `PROPOSED-UNVERIFIED` descriptions derived from catalogue `CLUB-COA-2026-01`. Plans remain inactive, unprovisioned, unauthorized for creation, and unauthorized for activation. Opaque references are neither fetched nor verified and confer no approval. Validation performs no database access, and the existing provisioning service remains unchanged and unauthorized for this path.
 - **Existing operational source:** charges, member obligations, fully allocated payments, allocations, and receipts exist independently of the journal.
 - **Proposed future design:** the catalog below.
 - **Unsupported workflow:** any source not listed as operationally ready in the source-mapping register.

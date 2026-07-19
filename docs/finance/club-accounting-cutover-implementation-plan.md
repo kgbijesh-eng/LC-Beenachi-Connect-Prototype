@@ -39,6 +39,8 @@ For milestone 23, the stop condition is any deployment, migration, canary, prove
 
 **Internal template foundation note:** immutable catalogue version `CLUB-COA-2026-01` implements the approved 24-row template semantics only. It creates no club-account record and does not invoke or extend provisioning. Milestone 5 remains unexecuted: exact instances, private bank aliases, mappings, opening positions, DR-033 equity selection, provisioning, activation, and posting remain separately gated.
 
+**Inactive provisioning-plan note:** policy `INACTIVE-PROVISIONING-PLAN-2026-01` validates only pure, deterministic `PROPOSED-UNVERIFIED` descriptions. It neither verifies opaque references nor creates, provisions, audits, authorizes, or activates an account. No template is approved for persistence, both equity candidates remain blocked while DR-033 is Pending, and Milestone 5 write semantics remain unexecuted.
+
 ## 3. Sequential and parallel work
 
 Decisions → chart/mappings → evidence → validation/dry run → enforceable approval → opening posting are strictly sequential. Charge and payment integrations follow a correct opening and can be developed in parallel only after their shared mapping/idempotency contracts are frozen; activation remains sequential. Expense, donation, Collection Box, Special/Voluntary Collection, and Fellowship are independent prerequisite lanes and remain outside the initial release until approved. API security, frontend design, and operational runbooks may be prepared in parallel after authoritative balance semantics stabilize, but cannot activate early.
