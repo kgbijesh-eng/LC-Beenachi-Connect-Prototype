@@ -22,7 +22,7 @@ class ClubPermissionServiceTest extends TestCase
         $user = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
         $club = Club::where('code', 'LCB')->firstOrFail();
 
-        $service = new ClubPermissionService();
+        $service = new ClubPermissionService;
 
         $this->assertTrue($service->userCanAccessClub($user, $club->id));
         $this->assertTrue($service->userHasPermission($user, 'club.view', $club->id));
@@ -33,10 +33,14 @@ class ClubPermissionServiceTest extends TestCase
         $this->assertTrue($service->userHasPermission($user, 'audit_logs.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'events.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'events.manage', $club->id));
+        $this->assertTrue($service->userHasPermission($user, 'announcements.view', $club->id));
+        $this->assertTrue($service->userHasPermission($user, 'announcements.management.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'payments.record', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'finance.club.statement.view', $club->id));
 
         $this->assertSame([
+            'announcements.management.view',
+            'announcements.view',
             'audit_logs.view',
             'club.manage',
             'club.view',
@@ -89,7 +93,7 @@ class ClubPermissionServiceTest extends TestCase
             'joined_at' => now(),
         ]);
 
-        $service = new ClubPermissionService();
+        $service = new ClubPermissionService;
 
         $this->assertTrue($service->userCanAccessClub($user, $club->id));
         $this->assertTrue($service->userHasPermission($user, 'club.view', $club->id));
@@ -97,6 +101,8 @@ class ClubPermissionServiceTest extends TestCase
         $this->assertTrue($service->userHasPermission($user, 'events.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'projects.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'reminders.view', $club->id));
+        $this->assertTrue($service->userHasPermission($user, 'announcements.view', $club->id));
+        $this->assertFalse($service->userHasPermission($user, 'announcements.management.view', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'club.manage', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'members.manage', $club->id));
         $this->assertFalse($service->userHasPermission($user, 'events.manage', $club->id));
@@ -106,6 +112,7 @@ class ClubPermissionServiceTest extends TestCase
         $this->assertFalse($service->userHasPermission($user, 'audit_logs.view', $club->id));
 
         $this->assertSame([
+            'announcements.view',
             'club.view',
             'events.view',
             'finance.self.view',
@@ -137,7 +144,7 @@ class ClubPermissionServiceTest extends TestCase
             'joined_at' => now(),
         ]);
 
-        $service = new ClubPermissionService();
+        $service = new ClubPermissionService;
 
         $this->assertFalse($service->userCanAccessClub($user, $club->id));
         $this->assertFalse($service->userHasPermission($user, 'club.view', $club->id));
@@ -150,7 +157,7 @@ class ClubPermissionServiceTest extends TestCase
 
         $user = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
 
-        $service = new ClubPermissionService();
+        $service = new ClubPermissionService;
 
         $this->assertTrue($service->userHasPermission($user, 'club.manage'));
         $this->assertTrue($service->userHasPermission($user, 'events.manage'));

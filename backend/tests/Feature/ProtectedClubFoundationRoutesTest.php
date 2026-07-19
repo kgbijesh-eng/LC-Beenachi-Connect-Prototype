@@ -69,11 +69,19 @@ class ProtectedClubFoundationRoutesTest extends TestCase
             ])
             ->assertJsonFragment([
                 'finance.club.statement.view',
+            ])
+            ->assertJsonFragment([
+                'announcements.view',
+            ])
+            ->assertJsonFragment([
+                'announcements.management.view',
             ]);
 
         $actualPermissions = collect($response->json('permissions'))->sort()->values()->all();
 
         $this->assertSame([
+            'announcements.management.view',
+            'announcements.view',
             'audit_logs.view',
             'club.manage',
             'club.view',
@@ -144,6 +152,7 @@ class ProtectedClubFoundationRoutesTest extends TestCase
         $actualPermissions = collect($meResponse->json('permissions'))->sort()->values()->all();
 
         $this->assertSame([
+            'announcements.view',
             'club.view',
             'events.view',
             'finance.self.view',
