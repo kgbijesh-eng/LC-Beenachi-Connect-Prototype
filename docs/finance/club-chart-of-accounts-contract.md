@@ -1,6 +1,6 @@
 # Club Chart of Accounts Contract
 
-**Status:** Proposed design only. Every account and new business choice in this document is **Pending** until explicit business-owner and accounting-review approval. Nothing here provisions a record or authorizes a posting.
+**Status:** Approved template semantics only under DR-028, with qualifications. The 24-row catalog is inactive and unprovisioned. Exact account instances, mappings, opening values, and activation remain unapproved. Nothing here provisions a record or authorizes a posting.
 
 ## 1. Contract boundary
 
@@ -11,7 +11,8 @@ This contract refines the approved append-only, club-scoped, INR double-entry di
 - **Existing operational source:** charges, member obligations, fully allocated payments, allocations, and receipts exist independently of the journal.
 - **Proposed future design:** the catalog below.
 - **Unsupported workflow:** any source not listed as operationally ready in the source-mapping register.
-- **Pending business decision:** every catalog row, fund treatment, ownership rule, and activation choice below.
+- **Approved template policy:** the corrected catalog semantics, catalog ownership, cash structure, presentation grouping, and expense reporting categories are approved with the qualifications recorded in DR-028, DR-029, DR-031, DR-032, and DR-040.
+- **Pending or future-gated detail:** exact account instances, bank aliases, source mappings, opening values, opening-equity selection, provisioning, and activation.
 
 An account code is trimmed, converted to ASCII uppercase, 2–40 characters, and must match `^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$` under DR-025. Codes are immutable and club-scoped. Names may change only through a future controlled process that preserves history. No real bank account number, branch detail, credential, or supporting schedule belongs in source control.
 
@@ -25,36 +26,36 @@ All values are proposals. “Required” means required if the associated workfl
 
 | Proposed code | Proposed name | Type / normal | Currency | Purpose and supported source workflows | Initial activation | Club-configurable | Approval | Privacy | Reconciliation | Manual posting |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `CASH-ON-HAND` | Cash on Hand | Asset / Debit | INR | One physically controlled cash holding; receipts, approved expenses, transfers, opening | Required if cash exists | Structure Pending | Pending | High | Signed count to evidence | Prohibited |
-| `BANK-OPERATING` | Operating Bank Account | Asset / Debit | INR | One fictional alias for one real bank holding; payments, expenses, transfers, opening | Required if approved bank exists | Alias Pending | Pending | High | Independent statement reconciliation | Prohibited |
-| `BANK-<APPROVED-SHORT-CODE>` | Additional Bank Account | Asset / Debit | INR | Separate account for each additional real bank holding | Conditional | Yes, controlled | Pending | High | Per-account evidence | Prohibited |
-| `MEMBER-RECEIVABLES` | Member Receivables Control | Asset / Debit | INR | Issued member charges, allocated payment settlement, opening control total | Required for charge integration | No | Pending | High | Exact member subledger control | Prohibited |
-| `OTHER-RECEIVABLES` | Other Receivables | Asset / Debit | INR | Only a future approved non-member receivable workflow | No | Controlled | Pending | High | Independent schedule | Prohibited |
-| `ADVANCES-PAID` | Advances Paid | Asset / Debit | INR | Only a future authorized advance-payment and settlement workflow | No | Controlled | Pending | High | Advance register | Prohibited |
-| `LIABILITY-RESTRICTED-COLLECTION` | Restricted Collection Liability | Liability / Credit | INR | Restricted collections whose use is constrained | Conditional | Controlled | Pending | High | Restriction-by-source schedule | Prohibited |
-| `LIABILITY-RESTRICTED-DONATION` | Restricted Donation Liability | Liability / Credit | INR | Restricted donation receipts after workflow approval | No | Controlled | Pending | High | Donor restriction schedule | Prohibited |
-| `ACCOUNTS-PAYABLE` | Accounts Payable | Liability / Credit | INR | Only a future approved accrual/payable workflow | No | Controlled | Pending | High | Supplier obligation schedule | Prohibited |
-| `OPENING-BALANCE-EQUITY` | Opening Balance Equity | Equity / Credit | INR | Candidate one-time opening offset; not a balancing shortcut | Conditional | No | Pending | High | Full opening package | Prohibited |
-| `ACCUMULATED-SURPLUS` | Accumulated Surplus or Deficit | Equity / Credit | INR | Candidate retained historical result if accounting review approves meaning | Conditional | No | Pending | High | Approved historical reconciliation | Prohibited |
-| `INCOME-MEMBER-DUES` | Membership Dues Income | Income / Credit | INR | Issued ordinary membership dues mapped by approved category | Conditional | No | Pending | Medium | Charge-category reconciliation | Prohibited |
-| `INCOME-SPECIAL-COLLECTION` | Special Collection Income | Income / Credit | INR | Only if Special Collection is approved as unrestricted earned income | No | Controlled | Pending | Medium | Charge/receipt schedule | Prohibited |
-| `INCOME-VOLUNTARY-COLLECTION` | Voluntary Collection Income | Income / Credit | INR | Voluntary amounts only when actually received; never member dues | No | Controlled | Pending | Medium | Receipt/source reconciliation | Prohibited |
-| `INCOME-DONATION` | Unrestricted Donation Income | Income / Credit | INR | Unrestricted donations after authoritative donation workflow approval | No | Controlled | Pending | High | Donation register | Prohibited |
-| `INCOME-FELLOWSHIP` | Fellowship and Member Activity Income | Income / Credit | INR | Only after Fellowship lifecycle and classification approval | No | Controlled | Pending | High | Fellowship source schedule | Prohibited |
-| `INCOME-OTHER-APPROVED` | Other Approved Club Income | Income / Credit | INR | Explicitly approved income types with a controlled source mapping | No | Controlled | Pending | Medium | Source-specific schedule | Prohibited |
-| `EXPENSE-ADMINISTRATION` | Administration Expense | Expense / Debit | INR | Candidate category for future approved expense-payment workflow | No | Controlled | Pending | Medium | Payment and authorization evidence | Prohibited |
-| `EXPENSE-SERVICE-ACTIVITY` | Service Activity Expense | Expense / Debit | INR | Candidate service-project expenditure category | No | Controlled | Pending | Medium | Project/payment evidence | Prohibited |
-| `EXPENSE-FELLOWSHIP` | Fellowship and Member Activity Expense | Expense / Debit | INR | Candidate only after Fellowship expense policy approval | No | Controlled | Pending | Medium | Fellowship/payment evidence | Prohibited |
-| `EXPENSE-DISTRICT-OBLIGATION` | District and International Obligations | Expense / Debit | INR | Candidate assessed obligations paid through approved workflow | No | Controlled | Pending | Medium | Assessment/payment evidence | Prohibited |
-| `EXPENSE-MEETINGS-EVENTS` | Meetings and Events Expense | Expense / Debit | INR | Candidate event expenditure category | No | Controlled | Pending | Medium | Event/payment evidence | Prohibited |
-| `EXPENSE-BANK-CHARGES` | Bank Charges Expense | Expense / Debit | INR | Bank charges supported by independent bank evidence and approved workflow | No | Controlled | Pending | High | Bank reconciliation | Prohibited |
-| `EXPENSE-OTHER-APPROVED` | Other Approved Expense | Expense / Debit | INR | Controlled exception after classification approval; not a default bucket | No | Controlled | Pending | Medium | Specific approval and evidence | Prohibited |
+| `CASH-ON-HAND` | Cash on Hand | Asset / Debit | INR | One physically controlled cash holding; receipts, approved expenses, transfers, opening | Required if verified cash exists | One initial holding approved | Approved template; inactive/unprovisioned | High | Signed count to evidence | Prohibited |
+| `BANK-OPERATING` | Operating Bank Account | Asset / Debit | INR | One non-sensitive alias for one real bank holding; payments, expenses, transfers, opening | Required if verified bank exists | Exact alias Pending | Approved template; inactive/unprovisioned | High | Independent statement reconciliation | Prohibited |
+| `BANK-<APPROVED-SHORT-CODE>` | Additional Bank Account | Asset / Debit | INR | Separate account for each additional real bank holding | Conditional on private inventory | Yes, controlled | Approved template; inactive/unprovisioned | High | Per-account evidence | Prohibited |
+| `MEMBER-RECEIVABLES` | Member Receivables Control | Asset / Debit | INR | Issued member charges, allocated payment settlement, opening control total | Required for approved charge integration | No | Approved template; inactive/unprovisioned | High | Exact member subledger control | Prohibited |
+| `OTHER-RECEIVABLES` | Other Receivables | Asset / Debit | INR | Only a future approved non-member receivable workflow | No | Controlled | Approved template; inactive/unprovisioned | High | Independent schedule | Prohibited |
+| `ADVANCES-PAID` | Advances Paid | Asset / Debit | INR | Only a future authorized advance-payment and settlement workflow | No | Controlled | Approved template; inactive/unprovisioned | High | Advance register | Prohibited |
+| `LIABILITY-RESTRICTED-COLLECTION` | Restricted Collection Liability | Liability / Credit | INR | Restricted collections whose use is constrained | Conditional | Controlled | Approved template; inactive/unprovisioned | High | Restriction-by-source schedule | Prohibited |
+| `LIABILITY-RESTRICTED-DONATION` | Restricted Donation Liability | Liability / Credit | INR | Restricted donation receipts after workflow approval | No | Controlled | Approved template; inactive/unprovisioned | High | Donor restriction schedule | Prohibited |
+| `ACCOUNTS-PAYABLE` | Accounts Payable | Liability / Credit | INR | Only a future approved accrual/payable workflow | No | Controlled | Approved template; inactive/unprovisioned | High | Supplier obligation schedule | Prohibited |
+| `OPENING-BALANCE-EQUITY` | Opening Balance Equity | Equity / Credit | INR | Candidate one-time opening offset; not a balancing shortcut | Conditional | No | Approved template; inactive/unprovisioned | High | Full opening package | Prohibited |
+| `ACCUMULATED-SURPLUS` | Accumulated Surplus or Deficit | Equity / Credit | INR | Candidate retained historical result if accounting review approves meaning | Conditional | No | Approved template; inactive/unprovisioned | High | Approved historical reconciliation | Prohibited |
+| `INCOME-MEMBER-DUES` | Membership Dues Income | Income / Credit | INR | Issued ordinary membership dues mapped by approved category | Conditional | No | Approved template; inactive/unprovisioned | Medium | Charge-category reconciliation | Prohibited |
+| `INCOME-SPECIAL-COLLECTION` | Special Collection Income | Income / Credit | INR | Only if Special Collection is approved as unrestricted earned income | No | Controlled | Approved template; inactive/unprovisioned | Medium | Charge/receipt schedule | Prohibited |
+| `INCOME-VOLUNTARY-COLLECTION` | Voluntary Collection Income | Income / Credit | INR | Voluntary amounts only when actually received; never member dues | No | Controlled | Approved template; inactive/unprovisioned | Medium | Receipt/source reconciliation | Prohibited |
+| `INCOME-DONATION` | Unrestricted Donation Income | Income / Credit | INR | Unrestricted donations after authoritative donation workflow approval | No | Controlled | Approved template; inactive/unprovisioned | High | Donation register | Prohibited |
+| `INCOME-FELLOWSHIP` | Fellowship and Member Activity Income | Income / Credit | INR | Only after Fellowship lifecycle and classification approval | No | Controlled | Approved template; inactive/unprovisioned | High | Fellowship source schedule | Prohibited |
+| `EXPENSE-ADMINISTRATION` | Administration Expense | Expense / Debit | INR | Candidate category for future approved expense-payment workflow | No | Controlled | Approved template; inactive/unprovisioned | Medium | Payment and authorization evidence | Prohibited |
+| `EXPENSE-SERVICE-ACTIVITY` | Service Activity Expense | Expense / Debit | INR | Candidate service-project expenditure category | No | Controlled | Approved template; inactive/unprovisioned | Medium | Project/payment evidence | Prohibited |
+| `EXPENSE-FELLOWSHIP` | Fellowship and Member Activity Expense | Expense / Debit | INR | Candidate only after Fellowship expense policy approval | No | Controlled | Approved template; inactive/unprovisioned | Medium | Fellowship/payment evidence | Prohibited |
+| `EXPENSE-DISTRICT-OBLIGATION` | District and International Obligations | Expense / Debit | INR | Candidate assessed obligations paid through approved workflow | No | Controlled | Approved template; inactive/unprovisioned | Medium | Assessment/payment evidence | Prohibited |
+| `EXPENSE-MEETINGS-EVENTS` | Meetings and Events Expense | Expense / Debit | INR | Candidate event expenditure category | No | Controlled | Approved template; inactive/unprovisioned | Medium | Event/payment evidence | Prohibited |
+| `EXPENSE-BANK-CHARGES` | Bank Charges Expense | Expense / Debit | INR | Bank charges supported by independent bank evidence and approved workflow | No | Controlled | Approved template; inactive/unprovisioned | High | Bank reconciliation | Prohibited |
+| `EXPENSE-FUNDRAISING` | Fundraising Expense | Expense / Debit | INR | Approved costs of fundraising activities; future approved fundraising expense-payment workflow | No | Controlled | Approved template; inactive/unprovisioned | Medium | Fundraising payment and authorization evidence | Prohibited |
+| `EXPENSE-CLUB-PROPERTY-FACILITIES` | Club Property, Hall and Facilities Expense | Expense / Debit | INR | Utilities, routine maintenance, and ordinary repairs; future approved property/facilities expense-payment workflow. Property acquisition, equipment, construction, and major improvements require separate asset/capital assessment and must not automatically post here | No | Controlled | Approved template; inactive/unprovisioned | Medium | Property/facilities payment and authorization evidence | Prohibited |
 
 **Proposed account count: 24.** Conditional templates do not authorize instantiation. No active unallocated-receipt account is proposed because DR-007 rejects unallocated payments initially. No suspense account is proposed; unresolved differences block activation.
 
 ## 4. Account lifecycle and ownership
 
-The business owner and accounting reviewer must approve the initial catalog. A named accounting catalog custodian, still Pending, owns subsequent code proposals. Provisioning must be separated from approval and activation. Inactivation prevents future posting but preserves historical reads. Accounts with approved zero opening positions may be provisioned and omitted from the opening journal; positive-only journal lines make explicit zero entries invalid.
+DR-028 approves the corrected catalog as template semantics only. Treasurer Ranjith M. R. is the catalog custodian under DR-029; material accounting changes require President approval and accounting validation. Provisioning remains separated from approval and activation. Inactivation prevents future posting but preserves historical reads. Accounts with approved zero opening positions may be provisioned and omitted from the opening journal; positive-only journal lines make explicit zero entries invalid.
 
 Bank provisioning requires a non-sensitive alias, account purpose, independent evidence reference stored outside source control, preparer, verifier, approver, and activation date. Cash structure must identify each physically distinct controlled holding; the default recommendation is one `CASH-ON-HAND` account unless custody or location requires separately reconcilable accounts.
 
@@ -68,7 +69,7 @@ The labels General Club, Service Activity, and Fellowship & Member Activity are 
 | B — future fund/dimension model | Preserves natural accounts while enabling fund reporting, restrictions, and consolidated views | Requires schema, posting, validation, mapping, migration, privacy, reconciliation, and reporting changes before use |
 | C — presentation groupings only | No schema change; can group approved accounts in UI | Derived groupings can misstate restrictions or balances and cannot enforce fund integrity |
 
-**Recommendation (Pending):** choose Option B only if accounting review confirms that the three labels represent genuine separately controlled funds; otherwise use Option C with explicit “presentation grouping” language. Do not choose Option A merely to avoid a schema change. No frontend fixture balance may establish this decision.
+**Approved with qualification under DR-032:** use Option C initially. General Club is reporting only; Service Activity and Fellowship & Member Activity are internally designated reporting groupings, except that separately evidenced donor or external restrictions retain their genuine restricted character. The groupings create no separate ledgers, asset balances, automatic liabilities, legal restrictions, or opening balances. A future dimension requires separately demonstrated operational need and approval. No frontend fixture balance may establish a fund balance.
 
 ## 6. Activation controls
 
@@ -87,4 +88,4 @@ An account is eligible for activation only after its code, name, type, normal ba
 
 ## 7. Approval boundary
 
-The safest proposed catalog is deliberately small: real asset accounts, one member-receivable control, explicitly mapped income/liability accounts, a reviewed opening-equity choice, and expense accounts only when an approved payment workflow exists. Final chart approval, account owners, bank aliases, fund treatment, expense hierarchy, and all activation decisions remain Pending.
+The corrected 24-row catalog is approved only as inactive template semantics. Initial activation is limited to the smallest verified subset: real asset accounts, one member-receivable control, explicitly approved and mapped income/liability accounts, exactly one reviewed opening-equity choice, and expense accounts only when an approved payment workflow exists. Exact bank instances and aliases, mappings, opening values, the DR-033 equity selection, provisioning, and activation remain unapproved.
