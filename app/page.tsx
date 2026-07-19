@@ -2771,7 +2771,7 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
         ))}
         {screen === "projects" && <ProjectsActivities role={role} setScreen={handleSetScreen} />}
         {screen === "celebrations" && <Celebrations role={role} setScreen={handleSetScreen} />}
-        {screen === "donor-consent" && <DonorConsent />}
+        {screen === "donor-consent" && <DonorConsent onOpenRequests={() => handleSetScreen("member-profile")} />}
         {screen === "donor-search" && <DonorSearch bloodGroup={bloodGroup} setBloodGroup={setBloodGroup} allowedDonors={allowedDonors} />}
         {screen === "reports" && <Reports />}
         {screen === "settings" && <Settings setScreen={handleSetScreen} />}
@@ -10000,47 +10000,111 @@ function PersonalDigitalCard() {
   );
 }
 
-function DonorConsent() {
-  const { members: currentMembers, status, error, authenticatedUserId } = useCurrentMemberData();
+type OwnDonorProfile = { blood_group: string | null; blood_donor_consent: boolean };
 
-  if (status === "loading") {
-    return <section className="formPanel"><div className="notice">Loading authenticated member identity...</div></section>;
+function DonorConsent({ onOpenRequests }: { onOpenRequests: () => void }) {
+  const { session, authenticatedFetch } = useDevAuth();
+  const [profile, setProfile] = useState<OwnDonorProfile | null>(null);
+  const [bloodGroup, setBloodGroup] = useState("");
+  const [donorConsent, setDonorConsent] = useState(false);
+  const [state, setState] = useState<"loading" | "ready" | "submitting" | "success" | "validation" | "conflict" | "forbidden" | "error">("loading");
+  const [message, setMessage] = useState("Loading your authoritative donor-consent settings...");
+
+  useEffect(() => {
+    let cancelled = false;
+    setProfile(null);
+    setState("loading");
+    setMessage("Loading your authoritative donor-consent settings...");
+    if (!session?.membership.member || !session.membership.club.id) {
+      setState("forbidden");
+      setMessage("A unique authenticated user-to-member link is required. Blood donor consent settings are unavailable.");
+      return () => { cancelled = true; };
+    }
+    void authenticatedFetch(`/clubs/${session.membership.club.id}/members/me`).then(async response => {
+      if (!response.ok) throw Object.assign(new Error(await donorConsentApiMessage(response, "Blood donor consent settings are unavailable.")), { status: response.status });
+      const body = await response.json() as { member?: { id?: unknown; blood_group?: unknown; blood_donor_consent?: unknown } };
+      if (!body.member || body.member.id !== session.membership.member?.id || (body.member.blood_group !== null && typeof body.member.blood_group !== "string") || typeof body.member.blood_donor_consent !== "boolean") {
+        throw new Error("The authoritative own-member response is malformed or does not match the authenticated member link.");
+      }
+      if (!cancelled) {
+        const loaded = { blood_group: body.member.blood_group, blood_donor_consent: body.member.blood_donor_consent };
+        setProfile(loaded);
+        setBloodGroup(loaded.blood_group ?? "");
+        setDonorConsent(loaded.blood_donor_consent);
+        setState("ready");
+        setMessage("Current values loaded from your authoritative member profile.");
+      }
+    }).catch((error: Error & { status?: number }) => {
+      if (!cancelled) {
+        setProfile(null);
+        setState(error.status === 403 ? "forbidden" : "error");
+        setMessage(error.message || "Blood donor consent settings are unavailable.");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [authenticatedFetch, session]);
+
+  const canonicalBloodGroup = bloodGroup.trim().toUpperCase();
+  const changedBloodGroup = profile !== null && canonicalBloodGroup !== (profile.blood_group ?? "");
+  const changedConsent = profile !== null && donorConsent !== profile.blood_donor_consent;
+  const hasChanges = changedBloodGroup || changedConsent;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!profile || !session?.membership.club.id || !hasChanges || state === "submitting") {
+      setState("validation");
+      setMessage("Change the blood group or donor consent before submitting a reviewed request.");
+      return;
+    }
+    const changes: Record<string, string | boolean> = {};
+    if (changedBloodGroup) changes.blood_group = canonicalBloodGroup;
+    if (changedConsent) changes.blood_donor_consent = donorConsent;
+    setState("submitting");
+    setMessage("Submitting a Pending profile-update request...");
+    try {
+      // authenticatedFetch supplies the canonical http://127.0.0.1:8000/api/v1 client base.
+      const response = await authenticatedFetch(`/clubs/${session.membership.club.id}/profile-update-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changes })
+      });
+      if (!response.ok) {
+        const errorMessage = await donorConsentApiMessage(response, "The donor-consent request was not submitted.");
+        setState(response.status === 403 ? "forbidden" : response.status === 409 ? "conflict" : response.status === 422 ? "validation" : "error");
+        setMessage(errorMessage);
+        return;
+      }
+      setState("success");
+      setMessage("Pending request submitted. Your current profile values remain authoritative until President or Secretary review and approval.");
+    } catch {
+      setState("error");
+      setMessage("The donor-consent request could not be submitted. Your current profile values were not changed.");
+    }
   }
 
-  if (status === "error" || authenticatedUserId === null) {
-    return (
-      <section className="formPanel">
-        <div className="notice"><strong>Blood donor consent settings are unavailable.</strong>{error && <span> {error}</span>}</div>
-      </section>
-    );
-  }
-
-  const matches = currentMembers.filter((member) => member.userId === authenticatedUserId && typeof member.backendId === "number");
-  if (matches.length === 0) {
-    return (
-      <section className="formPanel">
-        <div className="notice">No genuine club member profile is linked to this development test account. Blood donor consent settings are unavailable.</div>
-        <div className="notice memberHelperText">Personal donor-consent settings can be managed only after a verified account-to-member link exists.</div>
-      </section>
-    );
-  }
-
-  if (matches.length > 1) {
-    return (
-      <section className="formPanel">
-        <div className="notice"><strong>Blood donor consent settings are unavailable because the authenticated account has multiple genuine member links.</strong></div>
-      </section>
-    );
-  }
-
-  const member = matches[0];
   return (
     <section className="formPanel">
-      <label>Blood group<input value={member.bloodGroup} readOnly /></label>
-      <label>Consent to donate<input value={member.donorConsent ? "Yes" : "No"} readOnly /></label>
-      <div className="notice">Donor-consent updates are not connected yet.</div>
+      <Toolbar title="Blood Donor Consent" actionLabel="Reviewed profile update" />
+      <div className="notice memberHelperText">This screen uses your authenticated own-member record. A proposal creates a Pending profile-update request for President or Secretary review; it does not directly change your member profile.</div>
+      {profile && <form onSubmit={submit}>
+        <div className="fieldGrid"><Field label="Current blood group" value={profile.blood_group ?? "Not recorded"} /><Field label="Current donor consent" value={profile.blood_donor_consent ? "Yes" : "No"} /></div>
+        <label>Proposed blood group<input aria-label="Proposed blood group" value={bloodGroup} onChange={event => setBloodGroup(event.target.value)} disabled={state === "submitting" || state === "success"} /></label>
+        <label>Proposed consent to donate<select aria-label="Proposed consent to donate" value={donorConsent ? "yes" : "no"} onChange={event => setDonorConsent(event.target.value === "yes")} disabled={state === "submitting" || state === "success"}><option value="yes">Yes</option><option value="no">No</option></select></label>
+        <div className="notice memberHelperText">Changing consent from Yes to No is a new reviewed profile-update request. Withdrawing an existing Pending profile-update request is a separate action available in My Profile Update Requests.</div>
+        <div className="buttonRow"><button type="submit" disabled={!hasChanges || state === "submitting" || state === "success"}>Submit Pending Request</button><button type="button" className="secondaryButton" onClick={onOpenRequests}>View My Profile Update Requests</button></div>
+      </form>}
+      <div className="notice" role="status"><strong>{state === "conflict" ? "Pending request conflict: " : state === "forbidden" ? "Unavailable: " : ""}</strong>{message}</div>
     </section>
   );
+}
+
+async function donorConsentApiMessage(response: Response, fallback: string) {
+  try {
+    const body = await response.json() as { message?: string; errors?: Record<string, string[]> };
+    return (body.errors && Object.values(body.errors)[0]?.[0]) || body.message || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function DonorSearch({ bloodGroup, setBloodGroup, allowedDonors }: { bloodGroup: string; setBloodGroup: (group: string) => void; allowedDonors: Member[] }) {

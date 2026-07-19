@@ -164,6 +164,7 @@ beforeEach(() => {
   authState.session.identity = authState.identity;
   authState.session.membership.role.slug = "treasurer";
   authState.session.membership.member = authState.member;
+  authState.auth.authenticatedFetch = async () => new Response(null, { status: 501 });
 });
 
 afterEach(() => {
@@ -175,6 +176,89 @@ afterEach(() => {
     member.birth_date = null;
     member.joined_at = "2015-06-01";
     member.wedding_anniversary = null;
+  });
+});
+
+async function openDonorConsent() {
+  render(<Prototype />);
+  fireEvent.click(await screen.findByRole("button", { name: /My Member Area/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /Blood Donor Consent/ }));
+  await screen.findAllByRole("heading", { name: "Blood Donor Consent" });
+}
+
+describe("Milestone 3IIO blood donor consent self-service", () => {
+  it("uses the authenticated own-member source and blocks an unchanged submission", async () => {
+    const client = vi.fn(async (path: string) => {
+      if (path === "/clubs/1/members/me") return json({ member: { id: 35, blood_group: "O+", blood_donor_consent: true } });
+      return json({ message: "Unexpected endpoint" }, 500);
+    });
+    authState.auth.authenticatedFetch = client;
+
+    await openDonorConsent();
+
+    expect(await screen.findByLabelText("Proposed blood group")).toHaveValue("O+");
+    expect(screen.getByLabelText("Proposed consent to donate")).toHaveValue("yes");
+    expect(screen.getByRole("button", { name: "Submit Pending Request" })).toBeDisabled();
+    expect(screen.getByText(/President or Secretary review/)).toBeInTheDocument();
+    expect(screen.queryByText(/\bAdmin\b/i)).not.toBeInTheDocument();
+    expect(client).toHaveBeenCalledTimes(1);
+    expect(client).toHaveBeenCalledWith("/clubs/1/members/me");
+    expect(client.mock.calls.some(([path]) => path.includes("/members?"))).toBe(false);
+  });
+
+  it("sends intentional false only as the changed field through the api-v1-based authenticated client", async () => {
+    const client = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/clubs/1/members/me") return json({ member: { id: 35, blood_group: "O+", blood_donor_consent: true } });
+      if (path === "/clubs/1/profile-update-requests" && init?.method === "POST") return json({ data: { id: 901, status: "pending" } }, 201);
+      return json({ message: "Unexpected endpoint" }, 500);
+    });
+    authState.auth.authenticatedFetch = client;
+
+    await openDonorConsent();
+    fireEvent.change(await screen.findByLabelText("Proposed consent to donate"), { target: { value: "no" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit Pending Request" }));
+
+    await screen.findByText(/Pending request submitted/);
+    const post = client.mock.calls.find(([path, init]) => path === "/clubs/1/profile-update-requests" && init?.method === "POST");
+    expect(post).toBeDefined();
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ changes: { blood_donor_consent: false } });
+    expect(`http://127.0.0.1:8000/api/v1${String(post?.[0])}`).toBe("http://127.0.0.1:8000/api/v1/clubs/1/profile-update-requests");
+    expect(String(post?.[0])).not.toContain("/api/v1/api/v1");
+    expect(String(post?.[0])).not.toContain("member_id");
+    expect(String(post?.[0])).not.toContain("user_id");
+    expect(JSON.stringify(JSON.parse(String(post?.[1]?.body)))).not.toContain("club_id");
+    expect(screen.getByText("Current donor consent").parentElement).toHaveTextContent("Yes");
+    expect(screen.getByText(/current profile values remain authoritative/i)).toBeInTheDocument();
+  });
+
+  it("fails closed without an authenticated member link and performs no identity lookup", async () => {
+    authState.session.membership.member = null;
+    const client = vi.fn();
+    authState.auth.authenticatedFetch = client;
+
+    await openDonorConsent();
+
+    expect(await screen.findByText(/unique authenticated user-to-member link is required/i)).toBeInTheDocument();
+    expect(client).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Submit Pending Request" })).not.toBeInTheDocument();
+  });
+
+  it("shows the existing pending-request conflict without combining or retrying", async () => {
+    const client = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/clubs/1/members/me") return json({ member: { id: 35, blood_group: "A+", blood_donor_consent: false } });
+      if (path === "/clubs/1/profile-update-requests" && init?.method === "POST") return json({ message: "A pending profile update request already exists." }, 409);
+      return json({ message: "Unexpected endpoint" }, 500);
+    });
+    authState.auth.authenticatedFetch = client;
+
+    await openDonorConsent();
+    fireEvent.change(await screen.findByLabelText("Proposed blood group"), { target: { value: "B+" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit Pending Request" }));
+
+    expect(await screen.findByText(/A pending profile update request already exists/)).toBeInTheDocument();
+    expect(client.mock.calls.filter(([path]) => path === "/clubs/1/profile-update-requests")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "View My Profile Update Requests" })).toBeInTheDocument();
+    expect(screen.getByText(/Withdrawing an existing Pending profile-update request is a separate action/)).toBeInTheDocument();
   });
 });
 
