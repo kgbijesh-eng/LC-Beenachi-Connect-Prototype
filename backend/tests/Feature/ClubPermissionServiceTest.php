@@ -39,8 +39,14 @@ class ClubPermissionServiceTest extends TestCase
         $this->assertTrue($service->userHasPermission($user, 'finance.club.statement.view', $club->id));
 
         $this->assertSame([
+            'announcements.approve',
+            'announcements.archive',
+            'announcements.drafts.manage',
             'announcements.management.view',
+            'announcements.publish',
+            'announcements.replace',
             'announcements.view',
+            'announcements.withdraw',
             'audit_logs.view',
             'club.manage',
             'club.view',

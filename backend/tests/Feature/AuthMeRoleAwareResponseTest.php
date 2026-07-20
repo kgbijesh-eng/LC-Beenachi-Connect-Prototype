@@ -72,8 +72,14 @@ class AuthMeRoleAwareResponseTest extends TestCase
             ->all();
 
         $this->assertSame([
+            'announcements.approve',
+            'announcements.archive',
+            'announcements.drafts.manage',
             'announcements.management.view',
+            'announcements.publish',
+            'announcements.replace',
             'announcements.view',
+            'announcements.withdraw',
             'audit_logs.view',
             'club.manage',
             'club.view',

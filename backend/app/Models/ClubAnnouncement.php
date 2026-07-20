@@ -266,4 +266,9 @@ class ClubAnnouncement extends Model
     {
         return $this->hasMany(self::class, 'replaces_announcement_id');
     }
+
+    public function publicationDecisions(): HasMany
+    {
+        return $this->hasMany(ClubAnnouncementPublicationDecision::class, 'club_announcement_id');
+    }
 }
