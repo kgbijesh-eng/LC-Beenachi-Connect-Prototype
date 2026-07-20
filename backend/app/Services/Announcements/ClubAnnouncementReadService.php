@@ -11,7 +11,7 @@ use Illuminate\Validation\ValidationException;
 
 class ClubAnnouncementReadService
 {
-    private const RELATIONS = ['club', 'creator', 'updater', 'publisher', 'withdrawer', 'archiver', 'replacedAnnouncement'];
+    private const RELATIONS = ['club', 'creator', 'updater', 'publisher', 'withdrawer', 'archiver', 'replacedAnnouncement', 'replacements'];
 
     public function listForClub(Club $club, array $filters, bool $management, Carbon $now): LengthAwarePaginator
     {
@@ -25,6 +25,7 @@ class ClubAnnouncementReadService
         $page = $query->paginate(perPage: $filters['per_page'], page: $filters['page']);
         foreach ($page->items() as $announcement) {
             $announcement->assertReadableIntegrity($club, $now);
+            $this->applyReplacementContext($announcement, $management);
         }
 
         return $page;
@@ -38,11 +39,17 @@ class ClubAnnouncementReadService
         $announcement->loadMissing(self::RELATIONS);
         $announcement->assertReadableIntegrity($club, $now);
         if ($management) {
+            $this->applyReplacementContext($announcement, true);
+
             return true;
         }
-
-        return $announcement->status === ClubAnnouncement::STATUS_PUBLISHED
+        $readable = $announcement->status === ClubAnnouncement::STATUS_PUBLISHED
             && $announcement->audience === ClubAnnouncement::AUDIENCE_CLUB_MEMBERS;
+        if ($readable) {
+            $this->applyReplacementContext($announcement, false);
+        }
+
+        return $readable;
     }
 
     private function applyScope(Builder $query, string $scope, bool $management, Carbon $now): void
@@ -50,9 +57,14 @@ class ClubAnnouncementReadService
         if (! $management) {
             $query->where('status', ClubAnnouncement::STATUS_PUBLISHED)
                 ->where('audience', ClubAnnouncement::AUDIENCE_CLUB_MEMBERS);
-            $scope === 'history'
-                ? $query->whereNotNull('expires_at')->where('expires_at', '<=', $now)
-                : $query->where(fn (Builder $q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', $now));
+            if ($scope === 'history') {
+                $query->where(fn (Builder $q) => $q
+                    ->where(fn (Builder $q) => $q->whereNotNull('expires_at')->where('expires_at', '<=', $now))
+                    ->orWhere(fn (Builder $q) => $this->whereHasVisiblePublishedReplacement($q)));
+            } else {
+                $query->where(fn (Builder $q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', $now));
+                $this->whereHasNoVisiblePublishedReplacement($query);
+            }
 
             return;
         }
@@ -64,7 +76,8 @@ class ClubAnnouncementReadService
             $query->where(function (Builder $q) use ($now): void {
                 $q->where('status', ClubAnnouncement::STATUS_DRAFT)
                     ->orWhere(fn (Builder $q) => $q->where('status', ClubAnnouncement::STATUS_PUBLISHED)
-                        ->where(fn (Builder $q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', $now)));
+                        ->where(fn (Builder $q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', $now))
+                        ->where(fn (Builder $q) => $this->whereHasNoVisiblePublishedReplacement($q)));
             });
 
             return;
@@ -72,7 +85,9 @@ class ClubAnnouncementReadService
         $query->where(function (Builder $q) use ($now): void {
             $q->where('status', ClubAnnouncement::STATUS_WITHDRAWN)
                 ->orWhere(fn (Builder $q) => $q->where('status', ClubAnnouncement::STATUS_PUBLISHED)
-                    ->whereNotNull('expires_at')->where('expires_at', '<=', $now));
+                    ->where(fn (Builder $q) => $q
+                        ->where(fn (Builder $q) => $q->whereNotNull('expires_at')->where('expires_at', '<=', $now))
+                        ->orWhere(fn (Builder $q) => $this->whereHasVisiblePublishedReplacement($q))));
         });
     }
 
@@ -147,5 +162,46 @@ class ClubAnnouncementReadService
         if ($invalid) {
             throw ValidationException::withMessages(['filters' => 'The requested announcement filters are incompatible.']);
         }
+    }
+
+    private function whereHasVisiblePublishedReplacement(Builder $query): Builder
+    {
+        return $query->whereExists(function ($replacement): void {
+            $replacement->selectRaw('1')->from('club_announcements as replacement')
+                ->whereColumn('replacement.replaces_announcement_id', 'club_announcements.id')
+                ->whereColumn('replacement.club_id', 'club_announcements.club_id')
+                ->whereColumn('replacement.audience', 'club_announcements.audience')
+                ->where('replacement.status', ClubAnnouncement::STATUS_PUBLISHED);
+        });
+    }
+
+    private function whereHasNoVisiblePublishedReplacement(Builder $query): Builder
+    {
+        return $query->whereNotExists(function ($replacement): void {
+            $replacement->selectRaw('1')->from('club_announcements as replacement')
+                ->whereColumn('replacement.replaces_announcement_id', 'club_announcements.id')
+                ->whereColumn('replacement.club_id', 'club_announcements.club_id')
+                ->whereColumn('replacement.audience', 'club_announcements.audience')
+                ->where('replacement.status', ClubAnnouncement::STATUS_PUBLISHED);
+        });
+    }
+
+    private function applyReplacementContext(ClubAnnouncement $announcement, bool $management): void
+    {
+        $direct = $announcement->replacements
+            ->filter(fn (ClubAnnouncement $candidate): bool => (int) $candidate->club_id === (int) $announcement->club_id)
+            ->sortBy('id')->values();
+        $published = $direct->first(fn (ClubAnnouncement $candidate): bool => $candidate->status === ClubAnnouncement::STATUS_PUBLISHED
+            && $candidate->audience === $announcement->audience
+        );
+
+        $announcement->setAttribute('replacement_effective_status', $published ? 'replaced' : null);
+        $announcement->setAttribute('safe_replaced_by_announcement_id', $published?->id);
+        $safePredecessor = $announcement->replacedAnnouncement !== null
+            && (int) $announcement->replacedAnnouncement->club_id === (int) $announcement->club_id
+            && ($management || ($announcement->replacedAnnouncement->status === ClubAnnouncement::STATUS_PUBLISHED
+                && $announcement->replacedAnnouncement->audience === ClubAnnouncement::AUDIENCE_CLUB_MEMBERS));
+        $announcement->setAttribute('safe_replaces_announcement_id', $safePredecessor ? $announcement->replaces_announcement_id : null);
+        $announcement->setAttribute('management_direct_replacement_ids', $management ? $direct->pluck('id')->map(fn ($id) => (int) $id)->all() : null);
     }
 }

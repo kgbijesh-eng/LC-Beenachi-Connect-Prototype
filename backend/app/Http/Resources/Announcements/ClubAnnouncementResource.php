@@ -27,13 +27,20 @@ class ClubAnnouncementResource extends JsonResource
             'title' => $this->title,
             'body' => $this->body,
             'priority' => $this->priority,
-            'effective_status' => $this->effectiveStatus($now),
+            'effective_status' => $this->replacement_effective_status ?: $this->effectiveStatus($now),
             'published_at' => $this->published_at?->toISOString(),
             'expires_at' => $this->expires_at?->toISOString(),
             'club_timezone' => $timezone,
             'issued_by' => $this->club?->name,
             'published_by_role' => $role,
         ];
+
+        if ($this->safe_replaced_by_announcement_id !== null) {
+            $data['replaced_by_announcement_id'] = (int) $this->safe_replaced_by_announcement_id;
+        }
+        if ($this->safe_replaces_announcement_id !== null) {
+            $data['replaces_announcement_id'] = (int) $this->safe_replaces_announcement_id;
+        }
 
         if ($management) {
             $data += [
@@ -45,6 +52,7 @@ class ClubAnnouncementResource extends JsonResource
                 'withdrawal_reason' => $this->withdrawal_reason,
                 'archived_at' => $this->archived_at?->toISOString(),
                 'replaces_announcement_id' => $this->replaces_announcement_id,
+                'direct_replacement_announcement_ids' => $this->management_direct_replacement_ids ?? [],
                 'published_by_user_id' => $this->published_by_user_id,
                 'created_by_user_id' => $this->created_by_user_id,
                 'updated_by_user_id' => $this->updated_by_user_id,
