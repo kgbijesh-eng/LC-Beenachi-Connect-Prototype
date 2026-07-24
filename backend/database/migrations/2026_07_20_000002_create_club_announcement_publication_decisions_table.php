@@ -20,7 +20,8 @@ return new class extends Migration
             $table->foreignId('decided_by_user_id')->constrained('users')->restrictOnDelete();
             $table->string('decided_by_role', 20);
             $table->foreignId('supersedes_decision_id')->nullable()
-                ->constrained('club_announcement_publication_decisions')->restrictOnDelete();
+                ->constrained('club_announcement_publication_decisions', indexName: 'club_ann_pub_decisions_supersedes_fk')
+                ->restrictOnDelete();
             $table->text('reason')->nullable();
             $table->timestamp('decided_at');
             $table->timestamp('created_at');
@@ -28,7 +29,7 @@ return new class extends Migration
             $table->index(['club_id', 'club_announcement_id', 'announcement_lock_version']);
             $table->index(['club_announcement_id', 'decision', 'decided_at']);
             $table->index('content_fingerprint');
-            $table->unique('supersedes_decision_id');
+            $table->unique('supersedes_decision_id', 'club_ann_pub_decisions_supersedes_unique');
         });
     }
 
