@@ -193,6 +193,7 @@ type BackendMemberRecord = {
 };
 
 type MemberLoadStatus = "loading" | "ready" | "error";
+const MEMBER_REQUEST_TIMEOUT_MS = 15_000;
 
 type PaymentRecordingFormState = {
   amount: string;
@@ -1323,6 +1324,8 @@ function ContextBack({ parent, onBack }: { parent: string; onBack: () => void })
 type MemberDataContextValue = {
   members: Member[];
   status: MemberLoadStatus;
+  activeMemberCount: number | null;
+  activeMemberStatus: MemberLoadStatus;
   error: string | null;
   token: string | null;
   clubId: number | null;
@@ -1333,6 +1336,8 @@ type MemberDataContextValue = {
 const MemberDataContext = createContext<MemberDataContextValue>({
   members: [],
   status: "loading",
+  activeMemberCount: null,
+  activeMemberStatus: "loading",
   error: null,
   token: null,
   clubId: null,
@@ -1385,6 +1390,16 @@ function memberFromBackend(record: BackendMemberRecord): Member {
 
 function isImportedCurrentMember(record: BackendMemberRecord) {
   return /^\d+$/.test(record.member_code);
+}
+
+function isBackendMemberRecord(value: unknown): value is BackendMemberRecord {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Partial<BackendMemberRecord>;
+  return typeof record.id === "number"
+    && typeof record.club_id === "number"
+    && typeof record.member_code === "string"
+    && typeof record.full_name === "string"
+    && typeof record.status === "string";
 }
 
 const verifiedLeadershipAssignments = [
@@ -1554,6 +1569,8 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
   const [screen, setScreen] = useState<Screen>(initialScreen);
   const [currentMembers, setCurrentMembers] = useState<Member[]>([]);
   const [memberStatus, setMemberStatus] = useState<MemberLoadStatus>("loading");
+  const [activeMemberCount, setActiveMemberCount] = useState<number | null>(null);
+  const [activeMemberStatus, setActiveMemberStatus] = useState<MemberLoadStatus>("loading");
   const [memberLoadError, setMemberLoadError] = useState<string | null>(null);
   const [memberToken, setMemberToken] = useState<string | null>(null);
   const [memberClubId, setMemberClubId] = useState<number | null>(null);
@@ -1669,9 +1686,17 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
+    let listReady = false;
+    let timedOut = false;
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, MEMBER_REQUEST_TIMEOUT_MS);
 
     async function loadCurrentMembers() {
       setMemberStatus("loading");
+      setActiveMemberStatus("loading");
+      setActiveMemberCount(null);
       setMemberLoadError(null);
       setCurrentMembers([]);
       setMemberToken(null);
@@ -1679,7 +1704,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
       setAuthenticatedUserId(null);
 
       try {
-        if (!session) throw new Error("No verified development session is available.");
+        if (!session) throw new Error("No verified session is available.");
         const token = session.token;
         const authHeaders = { Accept: "application/json", Authorization: "Bearer " + token };
         const mePayload = { user: session.user, club_memberships: [session.membership] };
@@ -1698,9 +1723,17 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
 
         const listResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members", { headers: authHeaders, signal: controller.signal });
         if (!listResponse.ok) throw new Error("Current member data could not be loaded.");
-        const listPayload = await listResponse.json();
-        const importedRecords = ((listPayload.members as BackendMemberRecord[] | undefined) || []).filter(isImportedCurrentMember);
+        const listPayload = await listResponse.json() as { members?: unknown };
+        if (!Array.isArray(listPayload.members) || !listPayload.members.every(isBackendMemberRecord)) {
+          throw new Error("Current member data could not be loaded.");
+        }
+        const importedRecords = listPayload.members.filter(isImportedCurrentMember);
         if (importedRecords.length !== 47) throw new Error("The expected 47 imported current members are not safely distinguishable.");
+        listReady = true;
+        if (!cancelled) {
+          setActiveMemberCount(importedRecords.filter((record) => record.status.toLowerCase() === "active").length);
+          setActiveMemberStatus("ready");
+        }
 
         let records: BackendMemberRecord[];
         if (role === "member") {
@@ -1711,9 +1744,9 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           if (!profileResponse.ok) {
             throw new Error("No genuine club member profile is linked.");
           }
-          const profilePayload = await profileResponse.json();
-          const selfRecord = profilePayload.member as BackendMemberRecord | undefined;
-          if (!selfRecord || Number(selfRecord.id) !== Number(linkedMemberInfo.id)) {
+          const profilePayload = await profileResponse.json() as { member?: unknown };
+          const selfRecord = profilePayload.member;
+          if (!isBackendMemberRecord(selfRecord) || Number(selfRecord.id) !== Number(linkedMemberInfo.id)) {
             throw new Error("No genuine club member profile is linked.");
           }
           records = importedRecords.map((record) => Number(record.id) === Number(selfRecord.id) ? selfRecord : record);
@@ -1721,8 +1754,11 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           records = await Promise.all(importedRecords.map(async (record) => {
             const profileResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members/" + record.id, { headers: authHeaders, signal: controller.signal });
             if (!profileResponse.ok) throw new Error("An imported member profile could not be loaded.");
-            const profilePayload = await profileResponse.json();
-            return profilePayload.member as BackendMemberRecord;
+            const profilePayload = await profileResponse.json() as { member?: unknown };
+            if (!isBackendMemberRecord(profilePayload.member)) {
+              throw new Error("An imported member profile could not be loaded.");
+            }
+            return profilePayload.member;
           }));
         }
 
@@ -1738,17 +1774,25 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           setMemberStatus("ready");
         }
       } catch (error) {
-        if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
+        const aborted = error instanceof DOMException && error.name === "AbortError";
+        if (!cancelled && (!aborted || timedOut)) {
           setCurrentMembers([]);
           setMemberStatus("error");
-          setMemberLoadError(error instanceof Error ? error.message : "Current member data could not be loaded.");
+          setMemberLoadError(timedOut ? "Current member data request timed out." : error instanceof Error ? error.message : "Current member data could not be loaded.");
+          if (!listReady) {
+            setActiveMemberCount(null);
+            setActiveMemberStatus("error");
+          }
         }
+      } finally {
+        window.clearTimeout(timeoutId);
       }
     }
 
     loadCurrentMembers();
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
       controller.abort();
     };
   }, [role, memberRefreshKey, session]);
@@ -2155,7 +2199,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
                       : null;
 
   return (
-    <MemberDataContext.Provider value={{ members: currentMembers, status: memberStatus, error: memberLoadError, token: memberToken, clubId: memberClubId, authenticatedUserId, retry: () => setMemberRefreshKey((key) => key + 1) }}>
+    <MemberDataContext.Provider value={{ members: currentMembers, status: memberStatus, activeMemberCount, activeMemberStatus, error: memberLoadError, token: memberToken, clubId: memberClubId, authenticatedUserId, retry: () => setMemberRefreshKey((key) => key + 1) }}>
     <main className="shell">
       <style>{`
         .sidebar {
@@ -2254,12 +2298,12 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           }
         }
       `}</style>
-      <aside className="sidebar" aria-label="Prototype navigation">
+      <aside className="sidebar" aria-label="Primary navigation">
         <div className="brand">
           <div className="brandMark">LC</div>
           <div>
             <strong>LC Beenachi Connect</strong>
-            <span>Milestone 1A prototype</span>
+            <span>Club Operations Platform</span>
           </div>
         </div>
 
@@ -2344,7 +2388,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           <>
             <Header
               role={roleLabels[role]}
-              user="Unavailable"
+              user={session?.user.name ?? identity}
               screen={screen}
               reportDetail={reportDetail}
               navTitle={navDetailTitle(navDetail.parent, navDetail.title)}
@@ -2362,7 +2406,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           <>
             <Header
               role={roleLabels[role]}
-              user={activeMember!.dashboardName}
+              user={session?.user.name ?? identity}
               screen={screen}
               reportDetail={reportDetail}
               navTitle={navDetailTitle(navDetail.parent, navDetail.title)}
@@ -2535,7 +2579,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
         )}
         {screen === "report-detail" && (
           reportDetail === "Profile Update Pending Report" && role !== "president" && role !== "secretary"
-            ? <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>
+            ? <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This account role is not authorized to access club-wide profile update administration.</div></section>
             : reportDetail === "Profile Update Pending Report"
               ? <ProfileUpdatesBackend role={role} mode="review" />
               : <ReportDetailScreen section={reportsSection} detail={reportDetail} setScreen={handleSetScreen} onSelectMember={selectAndOpenMemberProfile} amountPerSponsor={activeAmountPerSponsor} selectedSponsors={activeConfirmedSponsors.length ? activeConfirmedSponsors : activeSelectedSponsors} sponsorPayments={activeSponsorPayments} />
@@ -2579,7 +2623,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
             onCancel={cancelAdministrativeDocumentEdit}
           />
         ) : (
-          <section className="compactPanel"><p className="eyebrow">DOCUMENT ADMINISTRATION</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to manage club documents.</div></section>
+          <section className="compactPanel"><p className="eyebrow">DOCUMENT ADMINISTRATION</p><h2>Unauthorized</h2><div className="notice">This account role is not authorized to manage club documents.</div></section>
         ))}
         {screen === "activity-detail" && (
           <ActivityDetail
@@ -2596,7 +2640,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
         {screen === "profile-update-detail" && (
           role === "president" || role === "secretary"
             ? <ProfileUpdatesBackend role={role} mode="review" />
-            : <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>
+            : <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This account role is not authorized to access club-wide profile update administration.</div></section>
         )}
         {screen === "announcement-detail" && (
           <AnnouncementDetailScreen
@@ -2643,7 +2687,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           <section className="compactPanel">
             <p className="eyebrow">FELLOWSHIP ADMINISTRATION</p>
             <h2>Unauthorized</h2>
-            <div className="notice">This test role is not authorized to access club-wide Fellowship administration.</div>
+            <div className="notice">This account role is not authorized to access club-wide Fellowship administration.</div>
           </section>
         ))}
         {screen === "fellowship-queue" && canAccessFellowshipAdministration && (
@@ -2742,7 +2786,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
         {screen === "documents-administration" && (canManageClubDocuments ? (
           <DocumentAdministration onEdit={startAdministrativeDocumentEdit} />
         ) : (
-          <section className="compactPanel"><p className="eyebrow">DOCUMENT ADMINISTRATION</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club document management.</div></section>
+          <section className="compactPanel"><p className="eyebrow">DOCUMENT ADMINISTRATION</p><h2>Unauthorized</h2><div className="notice">This account role is not authorized to access club document management.</div></section>
         ))}
         {screen === "projects" && <ProjectsActivities role={role} setScreen={handleSetScreen} />}
         {screen === "celebrations" && <Celebrations role={role} setScreen={handleSetScreen} />}
@@ -2789,18 +2833,18 @@ function Header({
             ? fellowshipConfirmationTitle
           : screenTitle(screen);
   const sourceLabel = screen === "login"
-    ? "DEVELOPMENT ROLE SWITCHER"
+    ? "SECURE ACCOUNT ACCESS"
     : screen === "dashboard"
       ? "CLUB OPERATIONS DASHBOARD"
-      : backendMemberLabel || "LOCAL PROTOTYPE WORKFLOW";
-  const testRoleLabel = role === "Member" ? "Normal Member" : role;
+      : backendMemberLabel || "CLUB OPERATIONS WORKFLOW";
+  const displayRole = role === "Member" ? "Normal Member" : role;
   return (
     <header className="topbar">
       <div>
         <p className="eyebrow">{sourceLabel}</p>
         <h1>{title}</h1>
       </div>
-      <div className="statusPill">{screen === "login" ? `Selected local test role: ${user} — ${testRoleLabel}` : `Signed in as ${user} — ${testRoleLabel} Test Role`}</div>
+      <div className="statusPill">{screen === "login" ? `Account: ${user}` : `Signed in as ${user} — ${displayRole}`}</div>
     </header>
   );
 }
@@ -3492,7 +3536,7 @@ function ClubAccountStatement({ section }: { section: ClubStatementSection }) {
               Future Module: Member Kuri / Rotating Support Fund. Status: Deferred to Milestone 2 / V2. Accounting treatment will be handled through separate ledger heads after backend, CA, and legal review.
             </div>
             <div className="metricsGrid">
-              <Metric label="Milestone 1A status" value="Deferred" />
+              <Metric label="Kuri module status" value="Deferred" />
               <Metric label="Real operations" value="Not active" />
               <Metric label="Accounting mode" value="Separate ledger heads" />
               <Metric label="Next design phase" value="Milestone 2 / V2" />
@@ -3527,7 +3571,7 @@ function ClubAccountStatement({ section }: { section: ClubStatementSection }) {
                 ].map((head) => (
                   <div className="permissionItem" key={head}>
                     <strong>{head}</strong>
-                    <span>Future kuri ledger head. Not posted in Milestone 1A.</span>
+                    <span>Future kuri ledger head. Posting is not available.</span>
                   </div>
                 ))}
               </div>
@@ -3645,7 +3689,7 @@ function NotificationsReminders({ role, setScreen }: { role: Role; setScreen: (s
 
   return (
     <section className="stack">
-      <Toolbar title="Notifications & Reminders" actionLabel="Milestone 1A prototype only" />
+      <Toolbar title="Notifications & Reminders" actionLabel="Preview tools only" />
       <div className="notice">
         Prototype only. Real WhatsApp/SMS/in-app automation will be implemented in backend phase.
       </div>
@@ -4166,7 +4210,7 @@ function NavDetailScreen({
   };
   const boardCommitteeUnavailableState = parent === "People" ? boardCommitteeUnavailableStates[title] : undefined;
   if (isProfileUpdatePending && role !== "president" && role !== "secretary") {
-    return <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This test role is not authorized to access club-wide profile update administration.</div></section>;
+    return <section className="compactPanel"><p className="eyebrow">PROFILE UPDATE PENDING</p><h2>Unauthorized</h2><div className="notice">This account role is not authorized to access club-wide profile update administration.</div></section>;
   }
   if (isProfileUpdatePending) {
     return <ProfileUpdatesBackend role={role} mode="review" />;
@@ -4950,7 +4994,12 @@ function Dashboard({
   selectedMonthKey: string;
   setSelectedMonthKey: (key: string) => void;
 }) {
-  const { members: currentMembers, status: currentMemberStatus } = useCurrentMemberData();
+  const {
+    members: currentMembers,
+    status: currentMemberStatus,
+    activeMemberCount,
+    activeMemberStatus
+  } = useCurrentMemberData();
   const [clientDate, setClientDate] = useState<Date | null>(null);
   useEffect(() => {
     void Promise.resolve().then(() => setClientDate(new Date()));
@@ -4958,11 +5007,11 @@ function Dashboard({
 
   const officerRole = role !== "member";
   const genuineMembers = officerRole ? canonicalFellowshipMembers(currentMembers) : [];
-  const memberCountText = currentMemberStatus === "loading"
+  const memberCountText = activeMemberStatus === "loading"
     ? "Loading member records…"
-    : currentMemberStatus === "error"
+    : activeMemberStatus === "error"
       ? "Unable to load member records"
-      : `${genuineMembers.length}`;
+      : `${activeMemberCount ?? 0}`;
   const dateText = clientDate
     ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", year: "numeric" }).format(clientDate)
     : "Loading current date…";
@@ -5019,7 +5068,7 @@ function Dashboard({
     <section className="dashboardStack" style={{ minWidth: 0 }}>
       <div className="dashboardIntro">
         <div>
-          <p className="eyebrow">{roleName} Test Dashboard</p>
+          <p className="eyebrow">{roleName} Dashboard</p>
           <h2>{dateText}</h2>
           <p>Live club member and Fellowship information is shown where connected. Unconnected modules are marked as unavailable.</p>
         </div>
