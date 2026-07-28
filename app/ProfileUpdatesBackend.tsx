@@ -24,7 +24,8 @@ type Row = {
   }[];
 };
 
-const API = "http://127.0.0.1:8000/api/v1";
+import { getApiBaseUrl } from "./apiBaseUrl";
+const API = getApiBaseUrl();
 const RESTRICTED = [
   "birth_date",
   "spouse_name",

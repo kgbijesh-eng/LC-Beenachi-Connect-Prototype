@@ -9,6 +9,7 @@ import FinanceBackend from "./FinanceBackend";
 import PersonalProfileDocuments from "./PersonalProfileDocuments";
 import AnnouncementsBackend, { AnnouncementDashboardStatus } from "./AnnouncementsBackend";
 import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";
+import { getApiBaseUrl } from "./apiBaseUrl";
 
 type Role = DevRole;
 type FinanceSummaryStatus = "loading" | "ready" | "error";
@@ -95,7 +96,7 @@ type ClubBalanceSheet = {
   generated_at?: string | null;
 };
 
-const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+const API_BASE_URL = getApiBaseUrl();
 type ClubProjectRecord = {
   id: number;
   club_id?: number;

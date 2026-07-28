@@ -1,6 +1,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getApiBaseUrl } from "../apiBaseUrl";
 
 const auth = vi.hoisted(() => ({
   session: null as null | {
@@ -69,8 +70,31 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("production announcements workspace", () => {
+  it("uses the configured origin for list and create-draft requests", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8017");
+    signIn(["announcements.view", "announcements.management.view", "announcements.drafts.manage"]);
+    const calls: [string, RequestInit | undefined][] = [];
+    auth.authenticatedFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      const absolute = `${getApiBaseUrl()}${url}`;
+      calls.push([absolute, init]);
+      return init?.method === "POST"
+        ? json({ data: { ...draftAnnouncement, id: 99, title: "Configured draft" } }, 201)
+        : json({ data: [], meta: { current_page: 1, last_page: 1, per_page: 10, total: 0 } });
+    });
+    render(<AnnouncementsBackend />);
+    await screen.findByText("No announcements match this view.");
+    const list = calls.find(([url, init]) => url.includes("/announcements?") && !init?.method);
+    expect(list?.[0]).toMatch(/^http:\/\/127\.0\.0\.1:8017\/api\/v1\/clubs\/19\/announcements\?/);
+    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+    fireEvent.change(screen.getByLabelText("Announcement title"), { target: { value: "Configured draft" } });
+    fireEvent.change(screen.getByLabelText("Announcement body"), { target: { value: "Configured body" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(calls.some(([url, init]) => url === "http://127.0.0.1:8017/api/v1/clubs/19/announcements" && init?.method === "POST")).toBe(true));
+    expect(calls.every(([url]) => !url.includes(":8000"))).toBe(true);
+  });
   it("performs no protected request before a verified session exists", () => {
     render(<AnnouncementsBackend />);
     expect(auth.authenticatedFetch).not.toHaveBeenCalled();

@@ -13,7 +13,8 @@ type FinanceView="workspace"|"outstanding"|"record-payment"|"payment-history"|"s
 type ReadPane="summary"|"dues"|"payment-history";
 type FinanceMember={id:number;full_name:string;member_code:string;status?:string};
 type OutstandingRow=Obligation&{member_name:string;member_code:string};
-const API="http://127.0.0.1:8000/api/v1";
+import { getApiBaseUrl } from "./apiBaseUrl";
+const API=getApiBaseUrl();
 export default function FinanceBackend({role,memberId,isPersonal,view="workspace",obligationId,onRecordPayment,onBack,onReturnToSummary}:{role:Role;memberId?:number;isPersonal?:boolean;view?:FinanceView;obligationId?:number;onRecordPayment?:(memberId:number,obligationId:number)=>void;onBack?:()=>void;onReturnToSummary?:()=>void}) {
  const { session } = useDevAuth();
  const management=role!=="member"; const [token,setToken]=useState("");const [clubId,setClubId]=useState(0);const [members,setMembers]=useState<FinanceMember[]>([]);const [selected,setSelected]=useState(memberId??0);const [outstandingRows,setOutstandingRows]=useState<OutstandingRow[]>([]);

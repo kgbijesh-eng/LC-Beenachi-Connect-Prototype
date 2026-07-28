@@ -1,8 +1,9 @@
 "use client";
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { getApiBaseUrl } from "./apiBaseUrl";
 
-const ACTIVATION_ENDPOINT = "http://127.0.0.1:8000/api/v1/auth/activate";
+const ACTIVATION_ENDPOINT = `${getApiBaseUrl()}/auth/activate`;
 const GENERIC_FAILURE = "Account activation could not be completed.";
 
 export default function AccountActivationScreen({ onReturnToLogin }: { onReturnToLogin: () => void }) {

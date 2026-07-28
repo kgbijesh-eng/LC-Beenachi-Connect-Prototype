@@ -7,7 +7,8 @@ type Role = "president"|"secretary"|"treasurer"|"member";
 type Definition = { key:string; title:string; description:string; allowed_filters:string[]; aggregate_only:boolean; sensitivity:string; financial?:boolean };
 type Report = { key:string; title:string; description:string; generated_at:string; club_timezone:string; date_basis:string; applied_filters:Record<string,unknown>; summary:Record<string,unknown>; rows:Record<string,unknown>[] };
 type Meta = { current_page:number; last_page:number; per_page:number; total:number };
-const API="http://127.0.0.1:8000/api/v1";
+import { getApiBaseUrl } from "./apiBaseUrl";
+const API=getApiBaseUrl();
 export default function ReportsBackend({role,onReminders}:{role:Role;onReminders:()=>void}) {
   const { session } = useDevAuth();
   const [token,setToken]=useState(""); const [clubId,setClubId]=useState(0);

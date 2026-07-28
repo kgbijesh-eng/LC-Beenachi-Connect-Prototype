@@ -39,12 +39,54 @@ function AnnouncementAuthHarness() {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   sessionStorage.clear();
   localStorage.clear();
 });
 
 describe("secure frontend authentication", () => {
+  it("uses the configured origin for login, verification, and logout", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8017");
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ token: "configured-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(verifiedIdentity), { status: 200 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    render(<DevAuthProvider><AuthHarness /></DevAuthProvider>);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "member@example.test" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "runtime-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("button", { name: "Log out" });
+    expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8017/api/v1/auth/login");
+    expect(fetchMock.mock.calls[1][0]).toBe("http://127.0.0.1:8017/api/v1/auth/me");
+    expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer configured-token" }) }));
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("unauthenticated"));
+    expect(fetchMock.mock.calls[2][0]).toBe("http://127.0.0.1:8017/api/v1/auth/logout");
+    expect(fetchMock.mock.calls[2][1]).toEqual(expect.objectContaining({ method: "POST", headers: expect.objectContaining({ Authorization: "Bearer configured-token" }) }));
+    expect(fetchMock.mock.calls.every(([url]) => !String(url).includes(":8000"))).toBe(true);
+  });
+
+  it.each([
+    ["missing", ""],
+    ["invalid", "javascript:alert(1)"]
+  ])("renders a safe unavailable state for %s production API configuration", async (_label, configuredBase) => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", configuredBase);
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    render(<DevAuthProvider><AuthHarness /></DevAuthProvider>);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "member@example.test" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "runtime-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The application service is currently unavailable because its API connection is not configured.");
+    expect(alert).not.toHaveTextContent("Invalid login credentials.");
+    expect(alert).not.toHaveTextContent(configuredBase || "javascript");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(fetchMock).not.toHaveBeenCalled());
+  });
   it("shows the login form initially without attempting automatic authentication", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     render(<DevAuthProvider><AuthHarness /></DevAuthProvider>);

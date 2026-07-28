@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import { getApiBaseUrl } from "./apiBaseUrl";
 
 export type DevRole = "president" | "secretary" | "treasurer" | "member";
 export type DevIdentity = string;
@@ -32,8 +33,8 @@ type DevAuthContextValue = {
   authenticatedFetch: (input: string, init?: RequestInit) => Promise<Response>;
 };
 
-const API = "http://127.0.0.1:8000/api/v1";
 const GENERIC_LOGIN_ERROR = "Unable to sign in with the provided credentials.";
+const CONFIGURATION_ERROR = "The application service is currently unavailable because its API connection is not configured.";
 const DevAuthContext = createContext<DevAuthContextValue | null>(null);
 
 function roleFromMembership(membership: DevMembership): DevRole {
@@ -45,6 +46,7 @@ function roleFromMembership(membership: DevMembership): DevRole {
 }
 
 async function verifySession(token: string): Promise<VerifiedDevSession> {
+  const API = getApiBaseUrl();
   const response = await fetch(`${API}/auth/me`, {
     headers: { Accept: "application/json", Authorization: `Bearer ${token}` }
   });
@@ -79,6 +81,7 @@ export function DevAuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
 
     try {
+      const API = getApiBaseUrl();
       const response = await fetch(`${API}/auth/login`, {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
@@ -95,10 +98,10 @@ export function DevAuthProvider({ children }: { children: ReactNode }) {
       setSession(verified);
       setStatus("authenticated");
       return true;
-    } catch {
+    } catch (error) {
       setSession(null);
       setStatus("unauthenticated");
-      setError(GENERIC_LOGIN_ERROR);
+      setError(error instanceof Error && error.message === "API configuration is unavailable." ? CONFIGURATION_ERROR : GENERIC_LOGIN_ERROR);
       return false;
     }
   }, [status]);
@@ -111,6 +114,7 @@ export function DevAuthProvider({ children }: { children: ReactNode }) {
     if (!token) return;
 
     try {
+      const API = getApiBaseUrl();
       await fetch(`${API}/auth/logout`, {
         method: "POST",
         headers: { Accept: "application/json", Authorization: `Bearer ${token}` }
@@ -122,6 +126,8 @@ export function DevAuthProvider({ children }: { children: ReactNode }) {
 
   const authenticatedFetch = useCallback((input: string, init: RequestInit = {}) => {
     if (!session) return Promise.reject(new Error("No verified session is active."));
+    let API: string;
+    try { API = getApiBaseUrl(); } catch (error) { return Promise.reject(error); }
     const url = input.startsWith("http://") || input.startsWith("https://") ? input : `${API}${input}`;
     return fetch(url, {
       ...init,

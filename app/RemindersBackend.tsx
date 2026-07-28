@@ -13,7 +13,8 @@ type Reminder = {
 };
 type Meta = { current_page: number; last_page: number; total: number };
 
-const API = "http://127.0.0.1:8000/api/v1";
+import { getApiBaseUrl } from "./apiBaseUrl";
+const API = getApiBaseUrl();
 export default function RemindersBackend({ role, onBack }: { role: Role; onBack: () => void }) {
   const { session } = useDevAuth();
   const canManage = role === "president" || role === "secretary";
