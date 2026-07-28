@@ -60,6 +60,12 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                 'description' => 'Create and update member master records.',
             ],
             [
+                'name' => 'Issue Member Account Activations',
+                'slug' => 'members.account_activation.issue',
+                'group' => 'members',
+                'description' => 'Issue one-time account activation links for eligible linked members.',
+            ],
+            [
                 'name' => 'View Roles',
                 'slug' => 'roles.view',
                 'group' => 'roles',
@@ -203,6 +209,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'memberships.manage',
                     'members.view',
                     'members.manage',
+                    'members.account_activation.issue',
                     'roles.view',
                     'roles.manage',
                     'permissions.view',
@@ -242,6 +249,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
                     'memberships.view',
                     'members.view',
                     'members.manage',
+                    'members.account_activation.issue',
                     'audit_logs.view',
                     'events.view',
                     'events.manage',

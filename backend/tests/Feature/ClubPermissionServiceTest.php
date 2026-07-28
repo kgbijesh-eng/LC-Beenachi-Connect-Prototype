@@ -30,6 +30,7 @@ class ClubPermissionServiceTest extends TestCase
         $this->assertTrue($service->userHasPermission($user, 'users.manage', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'members.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'members.manage', $club->id));
+        $this->assertTrue($service->userHasPermission($user, 'members.account_activation.issue', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'audit_logs.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'events.view', $club->id));
         $this->assertTrue($service->userHasPermission($user, 'events.manage', $club->id));
@@ -57,6 +58,7 @@ class ClubPermissionServiceTest extends TestCase
             'finance.manage',
             'finance.self.view',
             'finance.void',
+            'members.account_activation.issue',
             'members.manage',
             'members.view',
             'memberships.manage',

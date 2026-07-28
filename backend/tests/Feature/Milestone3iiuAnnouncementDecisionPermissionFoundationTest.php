@@ -222,8 +222,8 @@ class Milestone3iiuAnnouncementDecisionPermissionFoundationTest extends TestCase
             $this->assertTrue($permissions->contains('announcements.view'));
             $this->assertFalse($permissions->contains('announcements.management.view'));
         }
-        $this->assertDatabaseCount('permissions', 36);
-        $this->assertDatabaseCount('role_permissions', 91);
+        $this->assertDatabaseCount('permissions', 37);
+        $this->assertDatabaseCount('role_permissions', 93);
 
         $routes = collect(Route::getRoutes())->filter(fn ($route) => str_contains($route->uri(), 'clubs/{club}/announcements'));
         $this->assertCount(2, $routes);

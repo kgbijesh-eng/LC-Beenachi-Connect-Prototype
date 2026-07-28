@@ -1,5 +1,6 @@
 <?php
 
+use App\Console\Commands\IssueAccountActivation;
 use App\Http\Middleware\EnsureClubPermission;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -13,6 +14,9 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withCommands([
+        IssueAccountActivation::class,
+    ])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'club.permission' => EnsureClubPermission::class,

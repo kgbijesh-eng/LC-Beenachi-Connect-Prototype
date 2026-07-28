@@ -17,8 +17,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 36);
-        $this->assertDatabaseCount('role_permissions', 91);
+        $this->assertDatabaseCount('permissions', 37);
+        $this->assertDatabaseCount('role_permissions', 93);
 
         $president = Role::where('slug', 'president-admin')->firstOrFail();
         $secretary = Role::where('slug', 'secretary')->firstOrFail();
@@ -28,8 +28,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertSame('President/Admin', $president->name);
         $this->assertTrue($president->is_system);
 
-        $this->assertSame(36, $president->permissions()->count());
-        $this->assertSame(29, $secretary->permissions()->count());
+        $this->assertSame(37, $president->permissions()->count());
+        $this->assertSame(30, $secretary->permissions()->count());
         $this->assertSame(17, $treasurer->permissions()->count());
         $this->assertSame(9, $member->permissions()->count());
 
@@ -38,6 +38,7 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertTrue($president->permissions->contains('slug', 'audit_logs.view'));
         $this->assertTrue($president->permissions->contains('slug', 'members.view'));
         $this->assertTrue($president->permissions->contains('slug', 'members.manage'));
+        $this->assertTrue($president->permissions->contains('slug', 'members.account_activation.issue'));
         $this->assertTrue($president->permissions->contains('slug', 'events.view'));
         $this->assertTrue($president->permissions->contains('slug', 'events.manage'));
         $this->assertTrue($president->permissions->contains('slug', 'projects.view'));
@@ -53,6 +54,7 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertTrue($secretary->permissions->contains('slug', 'club.view'));
         $this->assertTrue($secretary->permissions->contains('slug', 'members.view'));
         $this->assertTrue($secretary->permissions->contains('slug', 'members.manage'));
+        $this->assertTrue($secretary->permissions->contains('slug', 'members.account_activation.issue'));
         $this->assertTrue($secretary->permissions->contains('slug', 'events.view'));
         $this->assertTrue($secretary->permissions->contains('slug', 'events.manage'));
         $this->assertTrue($secretary->permissions->contains('slug', 'projects.view'));
@@ -132,8 +134,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 36);
-        $this->assertDatabaseCount('role_permissions', 91);
+        $this->assertDatabaseCount('permissions', 37);
+        $this->assertDatabaseCount('role_permissions', 93);
     }
 
     public function test_database_seeder_calls_default_roles_and_permissions_seeder(): void

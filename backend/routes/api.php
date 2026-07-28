@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Announcements\ClubAnnouncementController;
+use App\Http\Controllers\Api\V1\Auth\AccountActivationController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Club\ClubController;
 use App\Http\Controllers\Api\V1\Events\ClubEventController;
@@ -33,11 +34,14 @@ Route::prefix('v1')->group(function (): void {
         ],
     ]));
 
-    Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
+    Route::post('/auth/activate', [AccountActivationController::class, 'complete'])->middleware('throttle:account-activation');
 
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::post('/clubs/{club}/members/account-activations', [AccountActivationController::class, 'issue'])
+            ->middleware('club.permission:members.account_activation.issue,club');
         Route::get('/clubs/{club}/members/me', [MemberController::class, 'own']);
 
         Route::middleware('club.permission:club.view,club')->group(function (): void {
