@@ -16,7 +16,7 @@ const authState = vi.hoisted(() => ({
       club_id: 1,
       club: { id: 1, code: "LCB", name: "LC Beenachi" },
       role: { slug: "treasurer" },
-      member: { id: 35, member_code: "26766860", full_name: "Ranjith MR" }
+      member: { id: 35, member_code: "26766860", full_name: "Ranjith MR" } as { id: number; member_code: string; full_name: string } | null
     }
   },
   auth: null as unknown as Record<string, unknown>
@@ -39,7 +39,7 @@ vi.mock("../DevAuthSession", () => ({
 }));
 
 vi.mock("../FinanceBackend", () => ({
-  default: ({ role, memberId, isPersonal, view, obligationId, onRecordPayment, onReturnToSummary }: { role: string; memberId?: number; isPersonal?: boolean; view?: string; obligationId?: number; onRecordPayment?: (memberId: number, obligationId: number) => void; onReturnToSummary?: () => void }) => {
+  default: function MockFinanceBackend({ role, memberId, isPersonal, view, obligationId, onRecordPayment, onReturnToSummary }: { role: string; memberId?: number; isPersonal?: boolean; view?: string; obligationId?: number; onRecordPayment?: (memberId: number, obligationId: number) => void; onReturnToSummary?: () => void }) {
     const [pane, setPane] = React.useState(view ?? "workspace");
     const returnToSummary = () => onReturnToSummary ? onReturnToSummary() : setPane("summary");
     return (

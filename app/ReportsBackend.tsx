@@ -33,8 +33,8 @@ export default function ReportsBackend({role,onReminders}:{role:Role;onReminders
       const b=await r.json();setCatalog(b.data??[]);setState((b.data??[]).length?"ready":"empty");setMessage("Authorized backend report catalog loaded.");
     }catch{setState("error");setMessage("Reports are unavailable. Previous report output was cleared.");}
   }
-  useEffect(()=>{let cancelled=false;setToken("");setClubId(0);setCatalog([]);clearOutput();setSelected(null);setState("loading");
-    (async()=>{try{if(!session)throw new Error("No verified development session is available.");const club=session.membership.club.id;
+  useEffect(()=>{let cancelled=false;
+    (async()=>{await Promise.resolve();if(cancelled)return;setToken("");setClubId(0);setCatalog([]);clearOutput();setSelected(null);setState("loading");try{if(!session)throw new Error("No verified development session is available.");const club=session.membership.club.id;
       if(!cancelled){setToken(session.token);setClubId(club);await loadCatalog(session.token,club)}}
       catch(e){if(!cancelled){setState("error");setMessage(e instanceof Error?e.message:"Reports are unavailable.")}}})();return()=>{cancelled=true}},[role,session]);
   async function run(def:Definition,page=1,chosen=filters){

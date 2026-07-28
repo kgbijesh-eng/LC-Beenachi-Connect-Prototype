@@ -63,8 +63,10 @@ export default function RemindersBackend({ role, onBack }: { role: Role; onBack:
 
   useEffect(() => {
     let cancelled = false;
-    setToken(""); setClubId(0); setRows([]); setMeta(null); setSelected(null); setState("loading");
     (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setToken(""); setClubId(0); setRows([]); setMeta(null); setSelected(null); setState("loading");
       try {
         if (!session) throw new Error("No verified development session is available.");
         const activeClub = session.membership.club.id;

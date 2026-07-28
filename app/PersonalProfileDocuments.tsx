@@ -156,7 +156,7 @@ export default function PersonalProfileDocuments() {
   }, [authenticatedFetch, session]);
 
   useEffect(() => {
-    void load();
+    void Promise.resolve().then(load);
     return () => {
       generation.current += 1;
       activeController.current?.abort();

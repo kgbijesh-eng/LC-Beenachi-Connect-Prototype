@@ -361,6 +361,58 @@ h3 {
   gap: 16px;
 }
 
+.loginPage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(20px, 5vw, 64px);
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at top left, var(--blue-100), transparent 42%),
+    var(--page);
+}
+
+.loginCard {
+  width: min(100%, 480px);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.loginCard .loginPanel {
+  width: 100%;
+  min-height: 0;
+  padding: clamp(24px, 5vw, 40px);
+  box-shadow: 0 18px 50px rgb(15 47 102 / 12%);
+}
+
+.loginBrand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.loginBrand > div {
+  display: grid;
+  gap: 5px;
+}
+
+.loginIntro {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.loginForm {
+  display: grid;
+  gap: 12px;
+}
+
+.loginForm button {
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 18px;
+}
+
 .loginPanel,
 .profilePanel,
 .fieldsPanel,
@@ -1672,6 +1724,15 @@ h3 {
 }
 
 @media (max-width: 640px) {
+  .loginPage {
+    place-items: start center;
+    padding: 18px;
+  }
+
+  .loginCard .loginPanel {
+    padding: 24px 20px;
+  }
+
   .workspace,
   .sidebar {
     padding: 14px;

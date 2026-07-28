@@ -95,16 +95,6 @@ type ClubBalanceSheet = {
 };
 
 const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
-const devIdentityOptions: Array<{ identity: DevIdentity; label: string; description: string }> = [
-  { identity: "bijesh-president", label: "Bijesh K. G. — Linked President", description: "Genuine member 4794370" },
-  { identity: "rajeesh-secretary", label: "Rajeesh P. R. — Linked Secretary", description: "Genuine member 26766796" },
-  { identity: "ranjith-treasurer", label: "Ranjith MR — Linked Treasurer", description: "Genuine member 26766860" },
-  { identity: "sajith-member", label: "Sajith K — Linked Normal Member", description: "Genuine member 4794369" },
-  { identity: "generic-president", label: "Generic President — Unlinked", description: "Truthful unlinked development account" },
-  { identity: "generic-secretary", label: "Generic Secretary — Unlinked", description: "Truthful unlinked development account" },
-  { identity: "generic-treasurer", label: "Generic Treasurer — Unlinked", description: "Truthful unlinked development account" },
-  { identity: "generic-member", label: "Generic Normal Member — Unlinked", description: "Truthful unlinked development account" }
-];
 type ClubProjectRecord = {
   id: number;
   club_id?: number;
@@ -1553,14 +1543,14 @@ export default function Prototype() {
 
 function PrototypeGate() {
   const auth = useDevAuth();
-  if (auth.status === "loading") return <main className="shell"><section className="compactPanel"><h2>Development authentication</h2><div className="notice">Verifying the local development session...</div></section></main>;
-  if (auth.status === "disabled") return <main className="shell"><section className="compactPanel"><h2>Sign in unavailable</h2><div className="notice">Development test authentication is disabled for this host or environment.</div></section></main>;
-  if (auth.status === "error" || !auth.session) return <main className="shell"><section className="compactPanel"><h2>Development authentication failed</h2><div className="notice">{auth.error || "No verified development session is available."}</div></section></main>;
-  return <PrototypeWorkspace key={auth.session.identity} identity={auth.session.identity} role={auth.session.role} changeAuthIdentity={auth.switchIdentity} authError={auth.error} switchingIdentity={auth.switching} initialScreen={auth.restoredFromStorage ? "dashboard" : "login"} />;
+  if (!auth.session) {
+    return <main className="loginPage" data-testid="unauthenticated-login-page"><LoginScreen login={auth.login} error={auth.error} submitting={auth.status === "authenticating"} /></main>;
+  }
+  return <PrototypeWorkspace key={auth.session.identity} identity={auth.session.identity} role={auth.session.role} initialScreen="dashboard" />;
 }
 
-function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, switchingIdentity, initialScreen }: { identity: DevIdentity; role: Role; changeAuthIdentity: (identity: DevIdentity) => Promise<boolean>; authError: string | null; switchingIdentity: boolean; initialScreen: Screen }) {
-  const { session } = useDevAuth();
+function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevIdentity; role: Role; initialScreen: Screen }) {
+  const { session, logout } = useDevAuth();
   const [screen, setScreen] = useState<Screen>(initialScreen);
   const [currentMembers, setCurrentMembers] = useState<Member[]>([]);
   const [memberStatus, setMemberStatus] = useState<MemberLoadStatus>("loading");
@@ -2025,10 +2015,6 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
     [bloodGroup, currentMembers]
   );
 
-  function switchIdentity(nextIdentity: DevIdentity) {
-    void changeAuthIdentity(nextIdentity);
-  }
-
   function navItemMatches(item: NavItem) {
     if (!item.screen) return false;
     const isFellowshipMatch = item.screen === "fellowship-administration" && (screen === "fellowship-administration" || (screen === "operations-module" && operationsSection === "Fellowship"));
@@ -2278,20 +2264,9 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
         </div>
 
         <div className="prototypeSwitcher">
-          <span>Developer testing identity switcher</span>
-          <small>Linked and generic-unlinked local accounts</small>
-          <select
-            aria-label="Prototype-only identity switcher"
-            value={identity}
-            disabled={switchingIdentity}
-            onChange={(event) => switchIdentity(event.target.value as DevIdentity)}
-          >
-            {devIdentityOptions.map((option) => (
-              <option key={option.identity} value={option.identity}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <span>Signed in</span>
+          <small>{session?.user.email ?? identity}</small>
+          <button type="button" onClick={() => void logout()}>Sign out</button>
         </div>
 
         <nav className={role === "member" ? "memberNav" : undefined}>
@@ -2460,7 +2435,6 @@ function PrototypeWorkspace({ identity, role, changeAuthIdentity, authError, swi
                 />
               )
             )}
-            {screen === "login" && <LoginScreen switchIdentity={switchIdentity} error={authError} switching={switchingIdentity} />}
             {screen === "dashboard" && (
               <Dashboard
                 role={role}
@@ -2889,24 +2863,36 @@ function screenTitle(screen: Screen) {
   return names[screen];
 }
 
-function LoginScreen({ switchIdentity, error, switching }: { switchIdentity: (identity: DevIdentity) => void; error: string | null; switching: boolean }) {
+export function LoginScreen({ login, error, submitting }: { login: (email: string, password: string) => Promise<boolean>; error: string | null; submitting: boolean }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const submittedPassword = password;
+    setPassword("");
+    await login(email.trim(), submittedPassword);
+  }
+
   return (
-    <section className="loginGrid">
+    <section className="loginGrid loginCard" data-testid="login-card">
       <div className="loginPanel">
-        <p className="eyebrow">DEVELOPMENT IDENTITY SWITCHER</p>
-        <h2>Local prototype access</h2>
-        <p>Choose a linked member identity or a generic-unlinked test account.</p>
-        <div className="notice">This is not the production sign-in screen. These controls authenticate local development accounts only.</div>
-        <div className="notice memberHelperText"><strong>Local test credentials:</strong> handled internally by the existing prototype workflow. No imported member credentials or private information are displayed here.</div>
-        {error && <div className="notice">{error}</div>}
-      </div>
-      <div className="loginRoles">
-        {devIdentityOptions.map((item) => (
-          <button key={item.identity} disabled={switching} onClick={() => switchIdentity(item.identity)}>
-            {item.label}
-            <span>{item.description}</span>
-          </button>
-        ))}
+        <div className="loginBrand">
+          <span className="brandMark" aria-hidden="true">LC</span>
+          <div>
+            <p className="eyebrow">LC BEENACHI CONNECT</p>
+            <h2>Sign in</h2>
+          </div>
+        </div>
+        <p className="loginIntro">Use your LC Connect account credentials.</p>
+        <form className="loginForm" onSubmit={submit}>
+          <label htmlFor="login-email">Email</label>
+          <input id="login-email" name="email" type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} />
+          <label htmlFor="login-password">Password</label>
+          <input id="login-password" name="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
+          {error && <div className="notice" role="alert">{error}</div>}
+          <button type="submit" disabled={submitting}>{submitting ? "Signing in..." : "Sign in"}</button>
+        </form>
       </div>
     </section>
   );
@@ -3757,7 +3743,7 @@ function NotificationsReminders({ role, setScreen }: { role: Role; setScreen: (s
       {section === "Celebration Reminders" && (
         <section className="compactPanel">
           <Toolbar title="Celebration Reminders" actionLabel="Official greeting tracking" />
-          <div className="notice">Members see only today's celebrations and recently completed celebrations. Secretary and President manage official greeting status here.</div>
+          <div className="notice">Members see only today&apos;s celebrations and recently completed celebrations. Secretary and President manage official greeting status here.</div>
           <div className="tableLike">
             {["Lion Ajith - Birthday today", "Lion Pradeep - Anniversary recently completed", "Lion Rajesh - Birthday today"].map((item, index) => (
               <div className="staticRow reminderSimpleRow" key={item}>
@@ -3959,7 +3945,7 @@ function ReportDetailScreen({
   useEffect(() => {
     if (!isMonthlyCelebrationReport) return;
     const currentDate = new Date();
-    setReportPeriod({ month: currentDate.getMonth() + 1, year: currentDate.getFullYear() });
+    void Promise.resolve().then(() => setReportPeriod({ month: currentDate.getMonth() + 1, year: currentDate.getFullYear() }));
   }, [isMonthlyCelebrationReport]);
   if (section === "Finance / Ledger Reports") {
     return <OperationalReportsUnavailable setScreen={setScreen} />;
@@ -4966,7 +4952,9 @@ function Dashboard({
 }) {
   const { members: currentMembers, status: currentMemberStatus } = useCurrentMemberData();
   const [clientDate, setClientDate] = useState<Date | null>(null);
-  useEffect(() => setClientDate(new Date()), []);
+  useEffect(() => {
+    void Promise.resolve().then(() => setClientDate(new Date()));
+  }, []);
 
   const officerRole = role !== "member";
   const genuineMembers = officerRole ? canonicalFellowshipMembers(currentMembers) : [];
@@ -6720,7 +6708,7 @@ function FellowshipQueue({
       ) : selectedCount === 0 ? (
         <div className="stack" style={{ gap: "8px", marginBottom: "1rem" }}>
           <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", fontSize: "0.9rem" }}>
-            <strong>Each member's share: ₹0.00</strong>
+            <strong>Each member&apos;s share: ₹0.00</strong>
           </div>
           <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", fontSize: "0.9rem" }}>
             Select sponsors first to calculate each member’s share.
@@ -6731,7 +6719,7 @@ function FellowshipQueue({
         </div>
       ) : (
         <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-          <strong>Each member's share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
+          <strong>Each member&apos;s share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
           <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "4px" }}>
             * Final accounting can apply rounding rules before payment records are created.
           </div>
@@ -6916,7 +6904,7 @@ function ConfirmSponsors({
       {selectedCount === 0 ? (
         <div className="stack" style={{ gap: "8px", marginBottom: "1rem" }}>
           <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", fontSize: "0.9rem" }}>
-            <strong>Each member's share: ₹0.00</strong>
+            <strong>Each member&apos;s share: ₹0.00</strong>
           </div>
           <div style={{ padding: "12px 16px", backgroundColor: "#fff3cd", color: "#664d03", borderRadius: "6px", fontSize: "0.9rem" }}>
             Select sponsors first to calculate each member’s share.
@@ -6931,7 +6919,7 @@ function ConfirmSponsors({
         </div>
       ) : (
         <div style={{ padding: "12px 16px", backgroundColor: "#e8f0fe", color: "#1a73e8", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-          <strong>Each member's share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
+          <strong>Each member&apos;s share: {formatSponsorShare(amountPerSponsor)}</strong> (Total {formatSponsorShare(totalFellowshipExpense)} divided among {selectedSponsors.length} sponsors).
           <div style={{ fontSize: "0.8rem", color: "#5f6368", marginTop: "4px" }}>
             * Final accounting can apply rounding rules before payment records are created.
           </div>
@@ -7416,7 +7404,7 @@ function ProfileUpdateDetail({
           </tbody>
         </table>
         <div style={{ marginTop: "1rem" }} className="notice">
-          <strong>Member's Reason / Comments:</strong><br />
+          <strong>Member&apos;s Reason / Comments:</strong><br />
           {changeDetails.reason}
         </div>
       </div>
@@ -8441,7 +8429,7 @@ function PaymentHistory({ role }: { role: Role }) {
           </div>
         </div>
       ) : (
-        <div className="notice memberHelperText">Member view loads only your own payment history. Other members' payment history is not requested.</div>
+        <div className="notice memberHelperText">Member view loads only your own payment history. Other members&apos; payment history is not requested.</div>
       )}
 
       {message && <div className="notice memberHelperText">{message}</div>}
@@ -9754,10 +9742,12 @@ function ProjectsActivities({ role, setScreen }: { role: Role; setScreen: (scree
 
   useEffect(() => {
     let cancelled = false;
-    setToken(null); setClubId(null); setRecords([]); setSelected(null); setView("list");
-    setForm(emptyClubProjectForm); setState("loading");
-    setMessage("Loading role-authorized Projects and Activities...");
     async function initialize() {
+      await Promise.resolve();
+      if (cancelled) return;
+      setToken(null); setClubId(null); setRecords([]); setSelected(null); setView("list");
+      setForm(emptyClubProjectForm); setState("loading");
+      setMessage("Loading role-authorized Projects and Activities...");
       try {
         if (!session) throw new Error("Projects session missing.");
         const accessToken = session.token;
@@ -9915,7 +9905,7 @@ function Celebrations({ role, setScreen }: { role: Role; setScreen: (screen: Scr
   const [period, setPeriod] = useState<{ month: number; year: number } | null>(null);
   useEffect(() => {
     const currentDate = new Date();
-    setPeriod({ month: currentDate.getMonth() + 1, year: currentDate.getFullYear() });
+    void Promise.resolve().then(() => setPeriod({ month: currentDate.getMonth() + 1, year: currentDate.getFullYear() }));
   }, []);
   const month = period?.month ?? 0;
   return (
@@ -9999,15 +9989,17 @@ function DonorConsent({ onOpenRequests }: { onOpenRequests: () => void }) {
 
   useEffect(() => {
     let cancelled = false;
-    setProfile(null);
-    setState("loading");
-    setMessage("Loading your authoritative donor-consent settings...");
-    if (!session?.membership.member || !session.membership.club.id) {
-      setState("forbidden");
-      setMessage("A unique authenticated user-to-member link is required. Blood donor consent settings are unavailable.");
-      return () => { cancelled = true; };
-    }
-    void authenticatedFetch(`/clubs/${session.membership.club.id}/members/me`).then(async response => {
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      setProfile(null);
+      setState("loading");
+      setMessage("Loading your authoritative donor-consent settings...");
+      if (!session?.membership.member || !session.membership.club.id) {
+        setState("forbidden");
+        setMessage("A unique authenticated user-to-member link is required. Blood donor consent settings are unavailable.");
+        return;
+      }
+      const response = await authenticatedFetch(`/clubs/${session.membership.club.id}/members/me`);
       if (!response.ok) throw Object.assign(new Error(await donorConsentApiMessage(response, "Blood donor consent settings are unavailable.")), { status: response.status });
       const body = await response.json() as { member?: { id?: unknown; blood_group?: unknown; blood_donor_consent?: unknown } };
       if (!body.member || body.member.id !== session.membership.member?.id || (body.member.blood_group !== null && typeof body.member.blood_group !== "string") || typeof body.member.blood_donor_consent !== "boolean") {

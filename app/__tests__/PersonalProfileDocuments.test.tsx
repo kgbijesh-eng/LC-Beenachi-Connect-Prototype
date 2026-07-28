@@ -6,8 +6,8 @@ const auth = vi.hoisted(() => ({
   session: {
     identity: "linked-member",
     membership: { club: { id: 1 }, member: { id: 35, member_code: "LCB-35", full_name: "Linked Member" } }
-  } as any,
-  authenticatedFetch: vi.fn() as any
+  },
+  authenticatedFetch: vi.fn()
 }));
 
 vi.mock("../DevAuthSession", () => ({ useDevAuth: () => auth }));
@@ -71,11 +71,11 @@ describe("Milestone 3IIP personal profile documents", () => {
     expect(screen.getByText(/File content, upload, download and preview are not available through this screen/)).toBeInTheDocument();
     expect(screen.queryByText(/not stored anywhere/i)).not.toBeInTheDocument();
     expect(await screen.findByText("membership_form")).toBeInTheDocument();
-    expect(auth.authenticatedFetch.mock.calls.map(([path]: [string]) => path)).toEqual([
+    expect(auth.authenticatedFetch.mock.calls.map((call) => call[0])).toEqual([
       "/clubs/1/members/me",
       "/clubs/1/members/35/profile-documents"
     ]);
-    expect(auth.authenticatedFetch.mock.calls.some(([path]: [string]) => path === "/clubs/1/members")).toBe(false);
+    expect(auth.authenticatedFetch.mock.calls.some((call) => call[0] === "/clubs/1/members")).toBe(false);
   });
 
   it("distinguishes a verified empty array from malformed guessed envelopes", async () => {

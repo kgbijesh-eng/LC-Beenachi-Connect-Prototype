@@ -18,8 +18,8 @@ type Row = {
   changed_fields: string[];
   changes?: {
     field_key: string;
-    original_value: any;
-    proposed_value: any;
+    original_value: unknown;
+    proposed_value: unknown;
     classification: string;
   }[];
 };
@@ -69,7 +69,7 @@ export default function ProfileUpdatesBackend({
   // Form states
   const [phone, setPhone] = useState("");
   const [occupation, setOccupation] = useState("");
-  const [currentMember, setCurrentMember] = useState<any | null>(null);
+  const [currentMember, setCurrentMember] = useState<{ phone?: string | null; occupation?: string | null } | null>(null);
 
   // Review action state
   const [reason, setReason] = useState("");
@@ -161,14 +161,15 @@ export default function ProfileUpdatesBackend({
 
   useEffect(() => {
     let off = false;
-    setToken("");
-    setClub(0);
-    clearListAndSelection();
-    setState("loading");
-    setCurrentMember(null);
-    setPage(1);
-
     (async () => {
+      await Promise.resolve();
+      if (off) return;
+      setToken("");
+      setClub(0);
+      clearListAndSelection();
+      setState("loading");
+      setCurrentMember(null);
+      setPage(1);
       try {
         if (mode === "review" && !canReviewRequests) {
           if (!off) {
@@ -375,7 +376,7 @@ export default function ProfileUpdatesBackend({
     void load(token, club, newPage);
   }
 
-  function renderValue(fieldKey: string, val: any) {
+  function renderValue(fieldKey: string, val: unknown) {
     if (val === null || val === undefined) return "Not set";
     if (RESTRICTED.includes(fieldKey) && !showSensitive) {
       return "•••••••• (Restricted)";
