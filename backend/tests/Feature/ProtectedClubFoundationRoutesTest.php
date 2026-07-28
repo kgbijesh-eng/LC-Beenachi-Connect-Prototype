@@ -98,6 +98,7 @@ class ProtectedClubFoundationRoutesTest extends TestCase
             'finance.manage',
             'finance.self.view',
             'finance.void',
+            'members.account_activation.issue',
             'members.manage',
             'members.view',
             'memberships.manage',

@@ -7,7 +7,10 @@ use Tests\TestCase;
 class Milestone3emMemberDirectorySelectedMemberReadFailureNarrowImplementationTest extends TestCase
 {
     private string $docPath = __DIR__.'/../../docs/milestone_3em_member_directory_selected_member_read_failure_narrow_implementation.md';
+
     private string $appPagePath = __DIR__.'/../../../app/page.tsx';
+
+    private string $authSessionPath = __DIR__.'/../../../app/DevAuthSession.tsx';
 
     public function test_3em_creates_implementation_document(): void
     {
@@ -92,21 +95,31 @@ class Milestone3emMemberDirectorySelectedMemberReadFailureNarrowImplementationTe
             'app/page.tsx must clear selectedMember to null on navigation'
         );
 
-        // 7. Identity and role switching come from the verified shared development-auth session.
+        // 7. Verified authentication owns identity and role, and identity changes remount workspace state.
         $this->assertStringContainsString(
             'import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";',
             $code
         );
+        $this->assertStringContainsString(
+            'return <DevAuthProvider><PrototypeGate /></DevAuthProvider>;',
+            $code
+        );
         $this->assertStringContainsString('const auth = useDevAuth();', $code);
         $this->assertStringContainsString(
-            'role={auth.session.role} changeAuthIdentity={auth.switchIdentity}',
+            'if (!auth.session) {',
             $code
         );
-        $this->assertStringContainsString('function switchIdentity(nextIdentity: DevIdentity)', $code);
         $this->assertStringContainsString(
-            'onChange={(event) => switchIdentity(event.target.value as DevIdentity)}',
+            'return <PrototypeWorkspace key={auth.session.identity} identity={auth.session.identity} role={auth.session.role} initialScreen="dashboard" />;',
             $code
         );
+
+        $this->assertFileExists($authSessionPath = $this->authSessionPath);
+        $authCode = file_get_contents($authSessionPath);
+        $this->assertStringContainsString('const [session, setSession] = useState<VerifiedDevSession | null>(null);', $authCode);
+        $this->assertStringContainsString('const verified = await verifySession(payload.token);', $authCode);
+        $this->assertStringContainsString('setSession(verified);', $authCode);
+        $this->assertStringNotContainsString('switchIdentity', $authCode);
     }
 
     public function test_3em_current_file_changes_are_limited_to_approved_files(): void
@@ -115,6 +128,7 @@ class Milestone3emMemberDirectorySelectedMemberReadFailureNarrowImplementationTe
         $branch = trim(shell_exec('git -C '.escapeshellarg($repoRoot).' rev-parse --abbrev-ref HEAD') ?? '');
         if ($branch !== 'milestone-3em-member-directory-selected-member-read-failure-narrow-implementation') {
             $this->assertTrue(true);
+
             return;
         }
 
@@ -136,6 +150,7 @@ class Milestone3emMemberDirectorySelectedMemberReadFailureNarrowImplementationTe
     private function scopeDocument(): string
     {
         $this->assertFileExists($this->docPath);
+
         return file_get_contents($this->docPath);
     }
 

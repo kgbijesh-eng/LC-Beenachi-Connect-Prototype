@@ -7,7 +7,10 @@ use Tests\TestCase;
 class Milestone3enMemberDirectorySelectedMemberReadFailureFixClosureReviewTest extends TestCase
 {
     private string $docPath = __DIR__.'/../../docs/milestone_3en_member_directory_selected_member_read_failure_fix_closure_review.md';
+
     private string $appPagePath = __DIR__.'/../../../app/page.tsx';
+
+    private string $authSessionPath = __DIR__.'/../../../app/DevAuthSession.tsx';
 
     public function test_3en_creates_closure_review_document(): void
     {
@@ -115,22 +118,26 @@ class Milestone3enMemberDirectorySelectedMemberReadFailureFixClosureReviewTest e
             'app/page.tsx must clear selectedMember to null'
         );
 
-        // 5. Shared-session identity switching remounts identity-scoped workspace state.
+        // 5. The verified session remounts identity-scoped workspace state.
         $this->assertStringContainsString('const auth = useDevAuth();', $code);
         $this->assertStringContainsString(
-            'key={auth.session.identity} identity={auth.session.identity} role={auth.session.role} changeAuthIdentity={auth.switchIdentity}',
+            'if (!auth.session) {',
+            $code
+        );
+        $this->assertStringContainsString(
+            'return <PrototypeWorkspace key={auth.session.identity} identity={auth.session.identity} role={auth.session.role} initialScreen="dashboard" />;',
             $code
         );
         $this->assertStringContainsString(
             'const [selectedMember, setSelectedMember] = useState<Member | null>(null);',
             $code
         );
-        $this->assertStringContainsString('function switchIdentity(nextIdentity: DevIdentity)', $code);
-        $this->assertStringContainsString('void changeAuthIdentity(nextIdentity);', $code);
-        $this->assertStringContainsString(
-            'onChange={(event) => switchIdentity(event.target.value as DevIdentity)}',
-            $code
-        );
+
+        $this->assertFileExists($authSessionPath = $this->authSessionPath);
+        $authCode = file_get_contents($authSessionPath);
+        $this->assertStringContainsString('const verified = await verifySession(payload.token);', $authCode);
+        $this->assertStringContainsString('setSession(verified);', $authCode);
+        $this->assertStringNotContainsString('switchIdentity', $authCode);
     }
 
     public function test_3en_current_file_changes_are_limited_to_approved_files(): void
@@ -139,6 +146,7 @@ class Milestone3enMemberDirectorySelectedMemberReadFailureFixClosureReviewTest e
         $branch = trim(shell_exec('git -C '.escapeshellarg($repoRoot).' rev-parse --abbrev-ref HEAD') ?? '');
         if ($branch !== 'milestone-3en-member-directory-selected-member-read-failure-fix-closure-review') {
             $this->assertTrue(true);
+
             return;
         }
 
@@ -159,6 +167,7 @@ class Milestone3enMemberDirectorySelectedMemberReadFailureFixClosureReviewTest e
     private function scopeDocument(): string
     {
         $this->assertFileExists($this->docPath);
+
         return file_get_contents($this->docPath);
     }
 

@@ -7,7 +7,10 @@ use Tests\TestCase;
 class Milestone3eoMemberDirectorySelectedMemberReadHumanOperatorRetestScopeGateTest extends TestCase
 {
     private string $docPath = __DIR__.'/../../docs/milestone_3eo_member_directory_selected_member_read_human_operator_retest_scope_gate.md';
+
     private string $appPagePath = __DIR__.'/../../../app/page.tsx';
+
+    private string $authSessionPath = __DIR__.'/../../../app/DevAuthSession.tsx';
 
     public function test_3eo_creates_scope_gate_document(): void
     {
@@ -103,22 +106,26 @@ class Milestone3eoMemberDirectorySelectedMemberReadHumanOperatorRetestScopeGateT
             'app/page.tsx must clear selectedMember to null'
         );
 
-        // 5. Shared-session identity switching remounts identity-scoped workspace state.
+        // 5. The verified session remounts identity-scoped workspace state.
         $this->assertStringContainsString('const auth = useDevAuth();', $code);
         $this->assertStringContainsString(
-            'key={auth.session.identity} identity={auth.session.identity} role={auth.session.role} changeAuthIdentity={auth.switchIdentity}',
+            'if (!auth.session) {',
+            $code
+        );
+        $this->assertStringContainsString(
+            'return <PrototypeWorkspace key={auth.session.identity} identity={auth.session.identity} role={auth.session.role} initialScreen="dashboard" />;',
             $code
         );
         $this->assertStringContainsString(
             'const [selectedMember, setSelectedMember] = useState<Member | null>(null);',
             $code
         );
-        $this->assertStringContainsString('function switchIdentity(nextIdentity: DevIdentity)', $code);
-        $this->assertStringContainsString('void changeAuthIdentity(nextIdentity);', $code);
-        $this->assertStringContainsString(
-            'onChange={(event) => switchIdentity(event.target.value as DevIdentity)}',
-            $code
-        );
+
+        $this->assertFileExists($authSessionPath = $this->authSessionPath);
+        $authCode = file_get_contents($authSessionPath);
+        $this->assertStringContainsString('const verified = await verifySession(payload.token);', $authCode);
+        $this->assertStringContainsString('setSession(verified);', $authCode);
+        $this->assertStringNotContainsString('switchIdentity', $authCode);
     }
 
     public function test_3eo_current_file_changes_are_limited_to_approved_files(): void
@@ -127,6 +134,7 @@ class Milestone3eoMemberDirectorySelectedMemberReadHumanOperatorRetestScopeGateT
         $branch = trim(shell_exec('git -C '.escapeshellarg($repoRoot).' rev-parse --abbrev-ref HEAD') ?? '');
         if ($branch !== 'milestone-3eo-member-directory-selected-member-read-human-operator-retest-scope-gate') {
             $this->assertTrue(true);
+
             return;
         }
 
@@ -147,6 +155,7 @@ class Milestone3eoMemberDirectorySelectedMemberReadHumanOperatorRetestScopeGateT
     private function scopeDocument(): string
     {
         $this->assertFileExists($this->docPath);
+
         return file_get_contents($this->docPath);
     }
 
