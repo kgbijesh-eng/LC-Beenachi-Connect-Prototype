@@ -86,10 +86,12 @@ class Milestone3eoMemberDirectorySelectedMemberReadHumanOperatorRetestScopeGateT
         $this->assertStringContainsString('const clubId = memberships?.[0]?.club?.id;', $code);
         $this->assertStringContainsString('if (role === "member") {', $code);
         $this->assertStringContainsString('API_BASE_URL + "/clubs/" + clubId + "/members/me"', $code);
+        $this->assertStringContainsString('const selfRecord = profilePayload.member;', $code);
         $this->assertStringContainsString(
-            'if (!selfRecord || Number(selfRecord.id) !== Number(linkedMemberInfo.id))',
+            'if (!isBackendMemberRecord(selfRecord) || Number(selfRecord.id) !== Number(linkedMemberInfo.id))',
             $code
         );
+        $this->assertStringContainsString('throw new Error("No genuine club member profile is linked.");', $code);
         $this->assertStringContainsString('if (importedRecords.length !== 47)', $code);
         $this->assertStringContainsString(
             'records = importedRecords.map((record) => Number(record.id) === Number(selfRecord.id) ? selfRecord : record);',
