@@ -4,12 +4,22 @@ namespace App\Http\Controllers\Api\V1\Announcements;
 
 use App\Exceptions\Announcements\InvalidClubAnnouncementReadStateException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Announcements\AnnouncementLockVersionRequest;
+use App\Http\Requests\Announcements\DecideClubAnnouncementRequest;
 use App\Http\Requests\Announcements\ListClubAnnouncementsRequest;
+use App\Http\Requests\Announcements\RejectClubAnnouncementApprovalRequest;
+use App\Http\Requests\Announcements\StoreClubAnnouncementReplacementRequest;
+use App\Http\Requests\Announcements\StoreClubAnnouncementRequest;
+use App\Http\Requests\Announcements\UpdateClubAnnouncementRequest;
+use App\Http\Requests\Announcements\WithdrawClubAnnouncementRequest;
+use App\Http\Resources\Announcements\ClubAnnouncementPublicationDecisionResource;
 use App\Http\Resources\Announcements\ClubAnnouncementResource;
 use App\Models\Club;
 use App\Models\ClubAnnouncement;
+use App\Models\ClubAnnouncementPublicationDecision;
 use App\Services\Access\ClubPermissionService;
 use App\Services\Announcements\ClubAnnouncementReadService;
+use App\Services\Announcements\ClubAnnouncementWriteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -67,6 +77,116 @@ class ClubAnnouncementController extends Controller
         $request->attributes->set('announcements_effective_now', $now);
 
         return response()->json(['data' => (new ClubAnnouncementResource($announcement))->resolve($request)]);
+    }
+
+    public function store(StoreClubAnnouncementRequest $request, Club $club, ClubAnnouncementWriteService $announcements): JsonResponse
+    {
+        $announcement = $announcements->createDraft($club, $request->user(), $request->validated());
+
+        return $this->managementResource($request, $announcement, 201);
+    }
+
+    public function update(UpdateClubAnnouncementRequest $request, Club $club, ClubAnnouncement $announcement, ClubAnnouncementWriteService $announcements): JsonResponse
+    {
+        $data = $request->validated();
+        $lockVersion = (int) $data['lock_version'];
+        unset($data['lock_version']);
+
+        return $this->managementResource(
+            $request,
+            $announcements->updateDraft($club, $announcement, $request->user(), $lockVersion, $data),
+        );
+    }
+
+    public function storeReplacement(StoreClubAnnouncementReplacementRequest $request, Club $club, ClubAnnouncement $announcement, ClubAnnouncementWriteService $announcements): JsonResponse
+    {
+        return $this->managementResource(
+            $request,
+            $announcements->createReplacementDraft($club, $announcement, $request->user(), $request->validated()),
+            201,
+        );
+    }
+
+    public function approve(DecideClubAnnouncementRequest $request, Club $club, ClubAnnouncement $announcement, ClubAnnouncementWriteService $announcements): JsonResponse
+    {
+        $data = $request->validated();
+        $decision = $announcements->approve(
+            $club,
+            $announcement,
+            $request->user(),
+            (int) $data['lock_version'],
+            $data['reason'] ?? null,
+        );
+
+        return $this->decisionResource($request, $decision, 201);
+    }
+
+    public function rejectApproval(RejectClubAnnouncementApprovalRequest $request, Club $club, ClubAnnouncement $announcement, ClubAnnouncementWriteService $announcements): JsonResponse
+    {
+        $data = $request->validated();
+        $decision = $announcements->rejectApproval(
+            $club,
+            $announcement,
+            $request->user(),
+            (int) $data['lock_version'],
+            $data['reason'],
+        );
+
+        return $this->decisionResource($request, $decision, 201);
+    }
+
+    public function revokeApproval(RejectClubAnnouncementApprovalRequest $request, Club $club, ClubAnnouncement $announcement, ClubAnnouncementPublicationDecision $approval, ClubAnnouncementWriteService $announcements): JsonResponse
+    {
+        $data = $request->validated();
+        $decision = $announcements->revokeApproval(
+            $club,
+            $announcement,
+            $request->user(),
+            (int) $data['lock_version'],
+            $approval,
+            $data['reason'],
+        );
+
+        return $this->decisionResource($request, $decision, 201);
+    }
+
+    public function publish(AnnouncementLockVersionRequest $request, Club $club, ClubAnnouncement $announcement, ClubAnnouncementWriteService $announcements): JsonResponse
+    {
+        return $this->managementResource(
+            $request,
+            $announcements->publish($club, $announcement, $request->user(), (int) $request->validated('lock_version')),
+        );
+    }
+
+    public function withdraw(WithdrawClubAnnouncementRequest $request, Club $club, ClubAnnouncement $announcement, ClubAnnouncementWriteService $announcements): JsonResponse
+    {
+        $data = $request->validated();
+
+        return $this->managementResource(
+            $request,
+            $announcements->withdraw($club, $announcement, $request->user(), (int) $data['lock_version'], $data['reason']),
+        );
+    }
+
+    public function archive(AnnouncementLockVersionRequest $request, Club $club, ClubAnnouncement $announcement, ClubAnnouncementWriteService $announcements): JsonResponse
+    {
+        return $this->managementResource(
+            $request,
+            $announcements->archive($club, $announcement, $request->user(), (int) $request->validated('lock_version')),
+        );
+    }
+
+    private function managementResource(Request $request, ClubAnnouncement $announcement, int $status = 200): JsonResponse
+    {
+        $request->attributes->set('announcements_management_reader', true);
+        $request->attributes->set('announcements_effective_now', Carbon::now('UTC'));
+
+        return response()->json(['data' => (new ClubAnnouncementResource($announcement))->resolve($request)], $status);
+    }
+
+    private function decisionResource(Request $request, ClubAnnouncementPublicationDecision $decision, int $status): JsonResponse
+    {
+        return response()->json(['data' => (new ClubAnnouncementPublicationDecisionResource($decision))->resolve($request)], $status);
     }
 
     private function notFound(): JsonResponse

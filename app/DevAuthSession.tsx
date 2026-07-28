@@ -10,6 +10,7 @@ export type DevMembership = {
   club_id?: number;
   club: { id: number; name?: string; code?: string };
   role: { slug: string; name?: string };
+  permissions?: { id?: number; name?: string; slug: string; group?: string }[];
   member: { id: number; member_code: string; full_name: string } | null;
 };
 

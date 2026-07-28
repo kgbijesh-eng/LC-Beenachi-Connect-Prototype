@@ -133,6 +133,23 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/announcements', [ClubAnnouncementController::class, 'index']);
             Route::get('/clubs/{club}/announcements/{announcement}', [ClubAnnouncementController::class, 'show']);
         });
+        Route::middleware('club.permission:announcements.drafts.manage,club')->group(function (): void {
+            Route::post('/clubs/{club}/announcements', [ClubAnnouncementController::class, 'store']);
+            Route::patch('/clubs/{club}/announcements/{announcement}', [ClubAnnouncementController::class, 'update']);
+        });
+        Route::post('/clubs/{club}/announcements/{announcement}/replacements', [ClubAnnouncementController::class, 'storeReplacement'])
+            ->middleware('club.permission:announcements.replace,club');
+        Route::middleware('club.permission:announcements.approve,club')->group(function (): void {
+            Route::post('/clubs/{club}/announcements/{announcement}/approvals', [ClubAnnouncementController::class, 'approve']);
+            Route::post('/clubs/{club}/announcements/{announcement}/approval-rejections', [ClubAnnouncementController::class, 'rejectApproval']);
+            Route::post('/clubs/{club}/announcements/{announcement}/approvals/{approval}/revoke', [ClubAnnouncementController::class, 'revokeApproval']);
+        });
+        Route::post('/clubs/{club}/announcements/{announcement}/publish', [ClubAnnouncementController::class, 'publish'])
+            ->middleware('club.permission:announcements.publish,club');
+        Route::post('/clubs/{club}/announcements/{announcement}/withdraw', [ClubAnnouncementController::class, 'withdraw'])
+            ->middleware('club.permission:announcements.withdraw,club');
+        Route::post('/clubs/{club}/announcements/{announcement}/archive', [ClubAnnouncementController::class, 'archive'])
+            ->middleware('club.permission:announcements.archive,club');
         Route::middleware('club.permission:reminders.manage,club')->group(function (): void {
             Route::post('/clubs/{club}/reminders', [ClubReminderController::class, 'store']);
             Route::patch('/clubs/{club}/reminders/{reminder}', [ClubReminderController::class, 'update']);

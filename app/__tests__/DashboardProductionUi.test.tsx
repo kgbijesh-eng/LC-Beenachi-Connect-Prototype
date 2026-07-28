@@ -95,7 +95,7 @@ describe("production dashboard UI", () => {
     await signIn();
 
     expect(screen.getByText("Club Operations Platform")).toBeInTheDocument();
-    expect(screen.getByText("Signed in as LC Beenachi President — President")).toBeInTheDocument();
+    expect(screen.getByText("Signed in as LC Beenachi President")).toBeInTheDocument();
     expect(screen.queryByText(/President Test Role/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Milestone 1A prototype/i)).not.toBeInTheDocument();
   });
@@ -109,7 +109,7 @@ describe("production dashboard UI", () => {
     successfulFetch({ role, name });
     render(<Prototype />);
     await signIn();
-    expect(screen.getByText(`Signed in as ${name} — ${label}`)).toBeInTheDocument();
+    expect(screen.getByText(`Signed in as ${name}`)).toBeInTheDocument();
   });
 
   it("does not request protected dashboard data before authentication", () => {
@@ -158,8 +158,8 @@ describe("production dashboard UI", () => {
 
     await screen.findByText("1 member birthday today");
     expect(screen.getByText("47")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(50);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(50));
+    expect(fetchMock).toHaveBeenCalledTimes(51);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(51));
   });
 
   it("renders a clear empty birthday state and preserves a valid zero count", async () => {

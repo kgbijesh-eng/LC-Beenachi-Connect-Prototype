@@ -226,17 +226,12 @@ class Milestone3iiuAnnouncementDecisionPermissionFoundationTest extends TestCase
         $this->assertDatabaseCount('role_permissions', 93);
 
         $routes = collect(Route::getRoutes())->filter(fn ($route) => str_contains($route->uri(), 'clubs/{club}/announcements'));
-        $this->assertCount(2, $routes);
-        foreach ($routes as $route) {
-            $this->assertContains('GET', $route->methods());
-            foreach (['POST', 'PUT', 'PATCH', 'DELETE'] as $method) {
-                $this->assertNotContains($method, $route->methods());
-            }
-        }
+        $this->assertCount(11, $routes);
+        $this->assertCount(0, $routes->filter(fn ($route) => in_array('DELETE', $route->methods(), true)));
         $publicEndpoints = collect((new ReflectionClass(ClubAnnouncementController::class))->getMethods(\ReflectionMethod::IS_PUBLIC))
             ->filter(fn ($method) => $method->getDeclaringClass()->getName() === ClubAnnouncementController::class)
             ->pluck('name')->sort()->values()->all();
-        $this->assertSame(['index', 'show'], $publicEndpoints);
+        $this->assertSame(['approve', 'archive', 'index', 'publish', 'rejectApproval', 'revokeApproval', 'show', 'store', 'storeReplacement', 'update', 'withdraw'], $publicEndpoints);
 
         $beforeAnnouncements = ClubAnnouncement::count();
         $beforeDecisions = ClubAnnouncementPublicationDecision::count();

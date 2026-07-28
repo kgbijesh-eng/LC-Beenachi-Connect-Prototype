@@ -361,6 +361,163 @@ h3 {
   gap: 16px;
 }
 
+.announcementWorkspace {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.announcementWorkspaceHeader,
+.announcementFilters,
+.announcementActions,
+.announcementPagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.announcementFilters,
+.announcementDetailPanel,
+.announcementFormPanel {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 1rem;
+}
+
+.announcementFilters label,
+.announcementFormPanel label {
+  display: grid;
+  gap: 0.4rem;
+  min-width: min(100%, 12rem);
+}
+
+.announcementFilters input,
+.announcementFilters select,
+.announcementFormPanel input,
+.announcementFormPanel select,
+.announcementFormPanel textarea {
+  width: 100%;
+}
+
+.announcementFormPanel textarea {
+  min-height: 10rem;
+  resize: vertical;
+}
+
+.announcementSplit {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.85fr) minmax(0, 1.4fr);
+  gap: 1rem;
+  min-width: 0;
+}
+
+.announcementBackendList {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.announcementBackendCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.6rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.9rem;
+  text-align: left;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.announcementBackendCard.selected {
+  border-color: var(--blue-700);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue-700) 16%, transparent);
+}
+
+.announcementBackendCard > span:first-child {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.announcementBackendCard small {
+  color: var(--muted);
+}
+
+.announcementDetailPanel {
+  min-height: 18rem;
+  min-width: 0;
+}
+
+.announcementBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+
+.announcementMetadata {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.announcementMetadata div {
+  padding: 0.75rem;
+  background: var(--page);
+  border-radius: 12px;
+}
+
+.announcementMetadata dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.announcementMetadata dd {
+  margin: 0.25rem 0 0;
+}
+
+.announcementActions {
+  justify-content: flex-start;
+  margin-top: 1rem;
+}
+
+.announcementFormGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.fieldError {
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 760px) {
+  .announcementSplit,
+  .announcementFormGrid,
+  .announcementMetadata {
+    grid-template-columns: 1fr;
+  }
+
+  .announcementFilters,
+  .announcementFilters label,
+  .announcementActions button,
+  .announcementFormPanel button {
+    width: 100%;
+  }
+
+  .announcementBackendCard {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
 .loginPage {
   display: grid;
   place-items: center;

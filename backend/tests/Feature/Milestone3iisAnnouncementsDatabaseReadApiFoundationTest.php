@@ -297,21 +297,19 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $this->getJson("/api/v1/clubs/{$club->id}/announcements/{$self->id}")->assertNotFound();
     }
 
-    public function test_only_two_get_routes_and_controller_endpoint_methods_exist_and_reads_create_nothing(): void
+    public function test_read_routes_remain_non_mutating_after_narrow_write_adapters_are_added(): void
     {
         $routes = collect(Route::getRoutes())->filter(fn ($route) => str_contains($route->uri(), 'clubs/{club}/announcements'));
-        $this->assertCount(2, $routes);
-        foreach ($routes as $route) {
-            $this->assertContains('GET', $route->methods());
-            foreach (['POST', 'PUT', 'PATCH', 'DELETE'] as $method) {
-                $this->assertNotContains($method, $route->methods());
-            }
-        }
+        $this->assertCount(11, $routes);
+        $this->assertCount(2, $routes->filter(fn ($route) => in_array('GET', $route->methods(), true)));
+        $this->assertCount(8, $routes->filter(fn ($route) => in_array('POST', $route->methods(), true)));
+        $this->assertCount(1, $routes->filter(fn ($route) => in_array('PATCH', $route->methods(), true)));
+        $this->assertCount(0, $routes->filter(fn ($route) => in_array('DELETE', $route->methods(), true)));
 
         $publicEndpoints = collect((new ReflectionClass(ClubAnnouncementController::class))->getMethods(\ReflectionMethod::IS_PUBLIC))
             ->filter(fn ($method) => $method->getDeclaringClass()->getName() === ClubAnnouncementController::class)
             ->pluck('name')->sort()->values()->all();
-        $this->assertSame(['index', 'show'], $publicEndpoints);
+        $this->assertSame(['approve', 'archive', 'index', 'publish', 'rejectApproval', 'revokeApproval', 'show', 'store', 'storeReplacement', 'update', 'withdraw'], $publicEndpoints);
 
         $club = $this->club('NO-WRITE');
         $member = $this->actor($club, 'member');
@@ -319,19 +317,19 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $before = ClubAnnouncement::count();
         $this->getJson("/api/v1/clubs/{$club->id}/announcements")->assertOk();
         $this->assertSame($before, ClubAnnouncement::count());
-        $this->postJson("/api/v1/clubs/{$club->id}/announcements", [])->assertMethodNotAllowed();
+        $this->postJson("/api/v1/clubs/{$club->id}/announcements", [])->assertForbidden();
         $this->putJson("/api/v1/clubs/{$club->id}/announcements/1", [])->assertMethodNotAllowed();
-        $this->patchJson("/api/v1/clubs/{$club->id}/announcements/1", [])->assertMethodNotAllowed();
+        $this->patchJson("/api/v1/clubs/{$club->id}/announcements/1", [])->assertNotFound();
         $this->deleteJson("/api/v1/clubs/{$club->id}/announcements/1")->assertMethodNotAllowed();
     }
 
     public function test_frontend_fabricated_announcement_suppression_remains_in_force(): void
     {
         $frontend = file_get_contents(base_path('../app/page.tsx'));
-        $test = file_get_contents(base_path('../app/__tests__/MemberProfile.test.tsx'));
-        $this->assertStringContainsString('verifiedOperationalSourceConnected("announcements")', $frontend);
-        $this->assertStringContainsString('No announcement records are shown.', $frontend);
-        $this->assertStringContainsString('does not present fabricated announcement records or actions', $test);
+        $workspace = file_get_contents(base_path('../app/AnnouncementsBackend.tsx'));
+        $this->assertStringContainsString('AnnouncementsBackend', $frontend);
+        $this->assertStringContainsString('authenticatedFetch', $workspace);
+        $this->assertStringNotContainsString('District Governor Visit Planning', $frontend);
     }
 
     private function club(string $code, string $timezone = 'UTC'): Club

@@ -1,5 +1,5 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const authState = vi.hoisted(() => ({
@@ -201,7 +201,7 @@ describe("Milestone 3IIO blood donor consent self-service", () => {
     expect(screen.getByRole("button", { name: "Submit Pending Request" })).toBeDisabled();
     expect(screen.getByText(/President or Secretary review/)).toBeInTheDocument();
     expect(screen.queryByText(/\bAdmin\b/i)).not.toBeInTheDocument();
-    expect(client).toHaveBeenCalledTimes(1);
+    expect(client).toHaveBeenCalledTimes(2);
     expect(client).toHaveBeenCalledWith("/clubs/1/members/me");
     expect(client.mock.calls.some(([path]) => path.includes("/members?"))).toBe(false);
   });
@@ -239,7 +239,7 @@ describe("Milestone 3IIO blood donor consent self-service", () => {
     await openDonorConsent();
 
     expect(await screen.findByText(/unique authenticated user-to-member link is required/i)).toBeInTheDocument();
-    expect(client).not.toHaveBeenCalled();
+    expect(client.mock.calls.some(([path]) => path === "/clubs/1/members/me")).toBe(false);
     expect(screen.queryByRole("button", { name: "Submit Pending Request" })).not.toBeInTheDocument();
   });
 
@@ -491,7 +491,7 @@ describe("MemberProfile document loading boundary", () => {
   it.each([
     ["president", "bijesh-president", "president-admin"],
     ["secretary", "rajeesh-secretary", "secretary"]
-  ] as const)("does not present fabricated announcement records or actions for %s", async (role, identity, roleSlug) => {
+  ] as const)("opens the authoritative announcement workspace without fabricated records for %s", async (role, identity, roleSlug) => {
     authState.role = role;
     authState.identity = identity;
     authState.session.role = role;
@@ -502,12 +502,11 @@ describe("MemberProfile document loading boundary", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Operations/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Announcements/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Published" }));
 
-    expect(await screen.findByText("Announcement records are not connected to a verified backend source. No announcement records are shown.")).toBeInTheDocument();
+    expect((await screen.findAllByRole("heading", { name: "Announcements" })).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Announcements are unavailable. Please try again.")).toBeInTheDocument();
     expect(screen.queryByText("District Governor Visit Update")).not.toBeInTheDocument();
     expect(screen.queryByText("Monthly Fellowship Notice")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "View" })).not.toBeInTheDocument();
   });
 
   it.each([

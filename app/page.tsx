@@ -7,6 +7,7 @@ import { eventMeetingSection } from "./eventMeetingPeriod";
 import ProfileUpdatesBackend from "./ProfileUpdatesBackend";
 import FinanceBackend from "./FinanceBackend";
 import PersonalProfileDocuments from "./PersonalProfileDocuments";
+import AnnouncementsBackend, { AnnouncementDashboardStatus } from "./AnnouncementsBackend";
 import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";
 
 type Role = DevRole;
@@ -736,12 +737,6 @@ const eventsMeetings: EventMeeting[] = [
   }
 ];
 
-const announcements = [
-  { title: "District Governor Visit Planning", priority: "High", audience: "Members", status: "Published", date: "03 Jun 2026", preview: "Important announcement for members regarding the upcoming District Governor visit." },
-  { title: "Monthly Family Fellowship Sponsorship", priority: "Medium", audience: "Sponsors", status: "Draft", date: "04 Jun 2026", preview: "Sponsor confirmation for the Monthly Family Fellowship." },
-  { title: "Annual Plan Updated", priority: "Normal", audience: "Members", status: "Published", date: "02 Jun 2026", preview: "The updated Annual Plan 2026 is now available in Documents." }
-];
-
 type ClubDocumentRecord = { id: string; title: string; category: string; visibility: "Members" | "Board" | "Treasurer" | "Committee"; date: string };
 type DocumentEditDraft = { title: string; category: string; visibility: ClubDocumentRecord["visibility"]; date: string };
 
@@ -1109,11 +1104,7 @@ const operationsMenuItems: NavItem[] = [
   },
   {
     label: "Announcements",
-    children: [
-      { label: "Published", screen: "announcement-detail", announcementDetail: "Published" },
-      { label: "Draft / Pending", screen: "announcement-detail", announcementDetail: "Draft / Pending" },
-      { label: "High Priority", screen: "announcement-detail", announcementDetail: "High Priority" }
-    ]
+    screen: "announcements"
   },
   {
     label: "Documents",
@@ -2837,14 +2828,13 @@ function Header({
     : screen === "dashboard"
       ? "CLUB OPERATIONS DASHBOARD"
       : backendMemberLabel || "CLUB OPERATIONS WORKFLOW";
-  const displayRole = role === "Member" ? "Normal Member" : role;
   return (
     <header className="topbar">
       <div>
         <p className="eyebrow">{sourceLabel}</p>
         <h1>{title}</h1>
       </div>
-      <div className="statusPill">{screen === "login" ? `Account: ${user}` : `Signed in as ${user} — ${displayRole}`}</div>
+      <div className="statusPill">{screen === "login" ? `Account: ${user}` : `Signed in as ${user}`}</div>
     </header>
   );
 }
@@ -3806,17 +3796,7 @@ function NotificationsReminders({ role, setScreen }: { role: Role; setScreen: (s
       {section === "Announcement Reminders" && (
         <section className="compactPanel">
           <Toolbar title="Announcement Reminders" actionLabel="Secretary workflow" />
-          <div className="tableLike">
-            {announcements.map((item) => (
-              <div className="staticRow reminderSimpleRow" key={item.title}>
-                <strong>{item.title}</strong>
-                <span>{item.audience}</span>
-                <span className="tag">{item.status}</span>
-                <button className="filterButton" onClick={() => openPreview(item.title, "Prototype status: announcement reminder preview opened.")}>Preview</button>
-                <button className="filterButton" onClick={() => openPreview(item.title, "Prototype status: dummy schedule saved.")}>Schedule</button>
-              </div>
-            ))}
-          </div>
+          <div className="notice">Announcement reminder scheduling is not supported. Use the authoritative Announcements workspace to review current records.</div>
           <ReminderPreview title={previewTitle} status={prototypeStatus} />
         </section>
       )}
@@ -5104,7 +5084,7 @@ function Dashboard({
             <DashboardSectionHeader title="Member dashboard sources" label="Own authorized records only" />
             <div className="compactDashboardGrid">
               <TruthStatusCard label="Meetings" value="Available in Events & Meetings." />
-              <TruthStatusCard label="Announcements" value="Announcements are not connected to the Dashboard yet." />
+              <TruthStatusCard label="Announcements" value={<AnnouncementDashboardStatus />} />
               <TruthStatusCard label="Documents" value="Document activity is not connected to the Dashboard yet." />
             </div>
           </section>
@@ -5114,7 +5094,7 @@ function Dashboard({
           <DashboardSectionHeader title="Operational source status" label="Unknown is not reported as zero" />
           <div className="compactDashboardGrid">
             <TruthStatusCard label="Finance & Dues" value="Available in Finance." />
-            <TruthStatusCard label="Announcements" value="Announcements are not connected to the Dashboard yet." />
+            <TruthStatusCard label="Announcements" value={<AnnouncementDashboardStatus />} />
             <TruthStatusCard label="Events" value="Available in Events & Meetings." />
             <TruthStatusCard label="Meetings" value="Available in Events & Meetings." />
             <TruthStatusCard label="Recent Payments" value="Recent payment activity is unavailable here." />
@@ -5140,7 +5120,7 @@ function Dashboard({
   );
 }
 
-function TruthStatusCard({ label, value }: { label: string; value: string }) {
+function TruthStatusCard({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="compactDashboardCard" style={{ cursor: "default", overflowWrap: "anywhere" }}>
       <span>{label}</span>
@@ -5243,7 +5223,7 @@ function PstOverview({ role, totalOutstanding, openDashboardDetail }: { role: Ro
     { label: "Fellowship month status", value: "Draft", detail: "fellowship-status", action: "Continue" },
     { label: role === "secretary" ? "Pending dues summary (view only)" : "Pending dues summary", value: money(totalOutstanding), detail: "pending-dues", action: "Review" },
     { label: "Pending activity/project reports", value: "2", detail: "activity-reports", action: "Update" },
-    { label: "Recent announcements/docs", value: "6", detail: "published-items", action: "Open" },
+    { label: "Recent documents", value: "Available in Documents", detail: "published-items", action: "Open" },
     { label: "View PST Profiles", value: "Verified assignments", detail: "pst-profiles", action: "Open" },
     { label: "Celebration reminders", value: "4 this week", detail: "celebration-reminders", action: "Review" },
     { label: "Important club reminders", value: "PST review due", detail: "club-reminders", action: "Review" }
@@ -5577,10 +5557,9 @@ function ActivityReportsDetail({ role }: { role: Role }) {
 }
 
 function PublishedItemsDetail({ role }: { role: Role }) {
-  const rows = [
-    ...announcements.map((item) => ({ title: item.title, type: "Announcement", visibility: item.audience, date: item.date, status: item.status })),
-    ...documents.map((item) => ({ title: item.title, type: "Document", visibility: item.visibility, date: "03 Jun 2026", status: "Published" }))
-  ].filter((item) => role !== "member" || item.visibility.includes("Members"));
+  const rows = documents
+    .map((item) => ({ title: item.title, type: "Document", visibility: item.visibility, date: "03 Jun 2026", status: "Published" }))
+    .filter((item) => role !== "member" || item.visibility.includes("Members"));
   return (
     <div className="tableLike">
       {rows.map((item) => (
@@ -9548,57 +9527,8 @@ async function eventApiError(response: Response, fallback: string) {
     return response.status === 401 ? "Please sign in again." : response.status === 403 ? "This role is not authorized for that Events & Meetings action." : response.status === 409 ? "This Events & Meetings record changed or is not in a valid lifecycle state. Refresh and try again." : fallback;
   }
 }
-function Announcements({ role, member, selectedSponsors }: { role: Role; member: Member; selectedSponsors: string[] }) {
-  if (!verifiedOperationalSourceConnected("announcements")) return <section className="stack"><Toolbar title="Announcements" actionLabel="Not connected" /><div className="notice">The Announcements workflow is not connected to a verified operational source yet.</div><div className="notice memberHelperText">Real announcements will appear here only after a verified operational source is connected.</div></section>;
-
-  const memberIsSponsor = selectedSponsors.includes(member.name) || selectedSponsors.includes(member.dashboardName);
-  const visibleAnnouncements = role === "member"
-    ? announcements.filter((item) => item.status === "Published" && (item.audience === "Members" || (item.audience === "Sponsors" && memberIsSponsor)))
-    : announcements;
-
-  if (role === "member") {
-    return (
-      <section className="stack">
-        <Toolbar title="Announcements" actionLabel="Latest Announcements" />
-        <div className="memberAnnouncementList">
-          {visibleAnnouncements.map((item) => (
-            <article className="memberAnnouncementCard" key={item.title}>
-              <div>
-                <h2>{item.title}</h2>
-                <p>{item.date} · {item.priority === "High" ? "High Priority" : item.priority}</p>
-                <span>{item.preview}</span>
-              </div>
-              <button className="filterButton">View Details</button>
-            </article>
-          ))}
-          {visibleAnnouncements.length === 0 && <div className="memberEmptyState">No new announcements at the moment.</div>}
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="stack">
-      <Toolbar title="Announcements" actionLabel="Compact communication list" />
-      <div className="announcementList">
-        {announcements.map((item) => (
-          <article className="announcementCard" key={item.title}>
-            <div>
-              <h2>{item.title}</h2>
-              <span>Visible to: {item.audience}</span>
-            </div>
-            <span className="tag">{item.priority}</span>
-            <span>{item.status}</span>
-            <span>{item.date}</span>
-            <div className="miniActions">
-              <button className="filterButton">View</button>
-              <button className="filterButton">Edit</button>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
+function Announcements(_props: { role: Role; member: Member; selectedSponsors: string[] }) {
+  return <AnnouncementsBackend />;
 }
 
 function DocumentAdministration({ onEdit }: { onEdit: (documentId: string) => void }) {

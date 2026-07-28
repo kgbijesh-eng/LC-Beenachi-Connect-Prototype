@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DevAuthProvider, useDevAuth } from "../DevAuthSession";
+import AnnouncementsBackend from "../AnnouncementsBackend";
 import Prototype, { LoginScreen } from "../page";
 
 const verifiedIdentity = {
@@ -10,6 +11,7 @@ const verifiedIdentity = {
     club_id: 1,
     club: { id: 1, code: "LCB", name: "LC Beenachi" },
     role: { slug: "member", name: "Member" },
+    permissions: [{ slug: "announcements.view", name: "View Announcements" }],
     member: { id: 9, member_code: "TEST-009", full_name: "Test Member" }
   }]
 };
@@ -20,11 +22,19 @@ function AuthHarness() {
     <div>
       <span data-testid="status">{auth.status}</span>
       <span data-testid="identity">{auth.session?.user.email ?? "none"}</span>
+      <span data-testid="announcement-permission">{auth.session?.membership.permissions?.some(permission => permission.slug === "announcements.view") ? "yes" : "no"}</span>
       {!auth.session && <LoginScreen login={auth.login} error={auth.error} submitting={auth.status === "authenticating"} />}
       {auth.session && <button onClick={() => void auth.logout()}>Log out</button>}
       {auth.session && <button onClick={() => void auth.authenticatedFetch("/protected")}>Load protected</button>}
     </div>
   );
+}
+
+function AnnouncementAuthHarness() {
+  const auth = useDevAuth();
+  return auth.session
+    ? <AnnouncementsBackend />
+    : <LoginScreen login={auth.login} error={auth.error} submitting={auth.status === "authenticating"} />;
 }
 
 afterEach(() => {
@@ -70,6 +80,7 @@ describe("secure frontend authentication", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     await waitFor(() => expect(screen.getByTestId("identity")).toHaveTextContent("member@example.test"));
+    expect(screen.getByTestId("announcement-permission")).toHaveTextContent("yes");
     expect(fetchMock).toHaveBeenNthCalledWith(1, "http://127.0.0.1:8000/api/v1/auth/login", expect.objectContaining({
       method: "POST",
       body: JSON.stringify({ email: "member@example.test", password: "fake-runtime-secret" })
@@ -86,6 +97,35 @@ describe("secure frontend authentication", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(3, "http://127.0.0.1:8000/api/v1/protected", expect.objectContaining({
       headers: expect.objectContaining({ Authorization: "Bearer fake-bearer-token" })
     }));
+  });
+
+  it("adds the verified in-memory bearer token to announcement requests only after /auth/me succeeds", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ token: "announcement-session-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(verifiedIdentity), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: [],
+        meta: { current_page: 1, last_page: 1, per_page: 10, total: 0 }
+      }), { status: 200 }));
+    const storageSet = vi.spyOn(Storage.prototype, "setItem");
+
+    render(<DevAuthProvider><AnnouncementAuthHarness /></DevAuthProvider>);
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "member@example.test" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "runtime-only-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await screen.findByText("No announcements match this view.");
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://127.0.0.1:8000/api/v1/auth/me", expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: "Bearer announcement-session-token" })
+    }));
+    const announcementCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/clubs/1/announcements?"));
+    expect(announcementCall).toBeDefined();
+    expect(announcementCall?.[1]).toEqual(expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: "Bearer announcement-session-token" })
+    }));
+    expect(fetchMock.mock.invocationCallOrder[2]).toBeGreaterThan(fetchMock.mock.invocationCallOrder[1]);
+    expect(storageSet).not.toHaveBeenCalled();
   });
 
   it("clears the password and displays only a generic invalid-credentials error", async () => {
