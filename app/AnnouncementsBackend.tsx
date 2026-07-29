@@ -55,6 +55,22 @@ const emptyForm: FormState = {
   expires_at: ""
 };
 
+function hasCompleteMutationProjection(
+  resource: Announcement | undefined,
+  id: number
+): resource is Announcement {
+  return Boolean(
+    resource &&
+    resource.id === id &&
+    typeof resource.title === "string" &&
+    typeof resource.body === "string" &&
+    typeof resource.lock_version === "number" &&
+    Object.prototype.hasOwnProperty.call(resource, "expires_at") &&
+    Object.prototype.hasOwnProperty.call(resource, "priority") &&
+    Object.prototype.hasOwnProperty.call(resource, "audience")
+  );
+}
+
 function permissionSet(permissions: { slug: string }[] | undefined) {
   return new Set((permissions ?? []).map(permission => permission.slug));
 }
@@ -240,6 +256,36 @@ export default function AnnouncementsBackend() {
     }
   }
 
+  async function synchronizeMutation(id: number, resource?: Announcement) {
+    let authoritative = resource;
+
+    if (!hasCompleteMutationProjection(authoritative, id)) {
+      try {
+        const response = await authenticatedFetch(`/clubs/${clubId}/announcements/${id}`);
+
+        if (response.ok) {
+          authoritative = (await response.json() as { data: Announcement }).data;
+        }
+      } catch {
+        // The list refresh below still reflects the confirmed mutation.
+      }
+    }
+
+    if (!hasCompleteMutationProjection(authoritative, id)) return;
+
+    setItems(current => current.map(item => item.id === authoritative.id ? authoritative : item));
+    setDetail(current => current?.id === authoritative.id ? authoritative : current);
+    setForm(current => formMode === "edit" || formMode === "replacement" ? {
+      ...current,
+      title: authoritative.title,
+      body: authoritative.body,
+      priority: authoritative.priority,
+      audience: authoritative.audience ?? current.audience,
+      expires_at: authoritative.expires_at ? authoritative.expires_at.slice(0, 16) : ""
+    } : current);
+    setApprovalContext(null);
+  }
+
   async function submitForm(event: FormEvent) {
     event.preventDefault();
     if (pending || !clubId || !formMode) return;
@@ -279,10 +325,13 @@ export default function AnnouncementsBackend() {
         return;
       }
       const body = await response.json() as { data: Announcement };
+      const mutatedId = body.data.id;
       setFormMode(null);
-      setMessage("Announcement saved.");
-      setSelectedId(body.data.id);
+      await synchronizeMutation(mutatedId, body.data);
+      setMessage("");
+      setSelectedId(mutatedId);
       await loadList();
+      setMessage("Announcement saved.");
     } catch {
       setMessage("The announcement could not be saved. No change was confirmed.");
     } finally {
@@ -330,22 +379,23 @@ export default function AnnouncementsBackend() {
         return;
       }
       const body = await response.json() as { data: Announcement | { id: number; announcement_id: number; announcement_lock_version: number; decision: string } };
-      if ("decision" in body.data && action === "approve") {
-        setApprovalContext({
-          approvalId: body.data.id,
-          announcementId: body.data.announcement_id,
-          lockVersion: body.data.announcement_lock_version,
-          sessionKey
-        });
-      } else {
-        setApprovalContext(null);
-      }
-      setMessage(`Announcement ${action} completed.`);
+      const approval = "decision" in body.data && action === "approve" ? {
+        approvalId: body.data.id,
+        announcementId: body.data.announcement_id,
+        lockVersion: body.data.announcement_lock_version,
+        sessionKey
+      } : null;
+      setApprovalContext(null);
+      const mutationResource = "decision" in body.data ? undefined : body.data;
+      await synchronizeMutation(detail.id, mutationResource);
+      setMessage("");
       await loadList();
       if (action !== "approve") {
         setSelectedId(null);
         queueMicrotask(() => setSelectedId(detail.id));
       }
+      if (approval) setApprovalContext(approval);
+      setMessage(`Announcement ${action} completed.`);
     } catch {
       setMessage("The announcement action could not be completed. No change was confirmed.");
     } finally {

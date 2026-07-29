@@ -73,6 +73,62 @@ afterEach(cleanup);
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("production announcements workspace", () => {
+  it("synchronizes edited detail, list row, expiry, lock version, and next publish without refresh", async () => {
+    signIn(["announcements.view", "announcements.management.view", "announcements.drafts.manage", "announcements.publish"]);
+    const other = { ...announcement, id: 77, title: "Other announcement" };
+    const draft = { ...draftAnnouncement, id: 51, title: "Old title", body: "Old body.", expires_at: null, lock_version: 1 } as unknown as typeof draftAnnouncement;
+    const updated = { ...draft, title: "New title", body: "New body.", expires_at: "2026-08-01T12:00:00.000Z", lock_version: 2 } as unknown as typeof draftAnnouncement;
+    const published = { ...updated, effective_status: "published", stored_status: "published", lock_version: 3 } as unknown as typeof draftAnnouncement;
+    let list = [draft, other];
+    auth.authenticatedFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") { list = [updated, other]; return json({ data: updated }); }
+      if (init?.method === "POST") { list = [published, other]; return json({ data: published }); }
+      if (url.endsWith("/51")) return json({ data: list[0] });
+      return json({ data: list, meta: { current_page: 1, last_page: 1, per_page: 10, total: 2 } });
+    });
+    render(<AnnouncementsBackend />);
+    await screen.findByText("Old body.");
+    fireEvent.click(screen.getByRole("button", { name: "Edit draft" }));
+    fireEvent.change(screen.getByLabelText("Announcement title"), { target: { value: "New title" } });
+    fireEvent.change(screen.getByLabelText("Announcement body"), { target: { value: "New body." } });
+    fireEvent.change(screen.getByLabelText("Announcement expiry"), { target: { value: "2026-08-01T12:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByText("New body.");
+    expect(screen.getByRole("heading", { name: "New title" })).toBeInTheDocument();
+    expect(screen.getByText(/Expires/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /New title/ })).toBeInTheDocument();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(auth.authenticatedFetch.mock.calls.some(([, init]) => init?.method === "POST" && String(init.body).includes('"lock_version":2'))).toBe(true));
+    expect(screen.queryByText("Other announcement")).toBeInTheDocument();
+  });
+
+  it("refetches detail when a mutation response is incomplete and preserves stale-409 protection", async () => {
+    signIn(["announcements.view", "announcements.management.view", "announcements.drafts.manage"]);
+    const draft = { ...draftAnnouncement, id: 61, lock_version: 1 };
+    const refreshed = { ...draft, title: "Authoritative refreshed title", body: "Authoritative body", lock_version: 2 };
+    let detailReads = 0;
+    auth.authenticatedFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        return json({
+          data: {
+            id: 61,
+            title: "Projected title",
+            body: "Projected body",
+            lock_version: 2
+          }
+        });
+      }
+      if (url.endsWith("/61")) { detailReads += 1; return json({ data: detailReads > 1 ? refreshed : draft }); }
+      return json({ data: [draft], meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 } });
+    });
+    render(<AnnouncementsBackend />);
+    await screen.findByText("Draft A body.");
+    fireEvent.click(screen.getByRole("button", { name: "Edit draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByText("Authoritative body");
+    expect(detailReads).toBeGreaterThan(1);
+  });
   it("uses the configured origin for list and create-draft requests", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8017");
     signIn(["announcements.view", "announcements.management.view", "announcements.drafts.manage"]);
