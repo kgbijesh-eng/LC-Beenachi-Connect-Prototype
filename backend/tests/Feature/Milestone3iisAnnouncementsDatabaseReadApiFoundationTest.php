@@ -100,7 +100,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         }
     }
 
-    public function test_management_and_ordinary_visibility_resources_and_officer_concealment(): void
+    public function test_management_treasurer_and_member_visibility_boundaries(): void
     {
         Carbon::setTestNow('2026-07-20 12:00:00 UTC');
         foreach (['president-admin', 'secretary'] as $slug) {
@@ -115,21 +115,68 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
             $this->assertArrayHasKey('created_by_user_id', $payload);
         }
 
-        foreach (['treasurer', 'member'] as $slug) {
-            $club = $this->club('O-'.$slug);
-            $reader = $this->actor($club, $slug);
-            $visible = $this->announcement($club, $this->published(['title' => 'Visible member notice']));
-            $officers = $this->announcement($club, $this->published(['title' => 'Officer notice', 'audience' => 'officers']));
-            $this->announcement($club, ['title' => 'Hidden draft']);
-            Sanctum::actingAs($reader);
-            $payload = $this->getJson("/api/v1/clubs/{$club->id}/announcements")
-                ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $visible->id)->json('data.0');
+        $treasurerClub = $this->club('O-treasurer');
+        $treasurer = $this->actor($treasurerClub, 'treasurer');
+        $treasurerMemberNotice = $this->announcement($treasurerClub, $this->published(['title' => 'Visible member notice']));
+        $treasurerOfficerNotice = $this->announcement($treasurerClub, $this->published(['title' => 'Officer notice', 'audience' => 'officers']));
+        $treasurerDraft = $this->announcement($treasurerClub, ['title' => 'Hidden draft', 'audience' => 'officers']);
+        Sanctum::actingAs($treasurer);
+        $treasurerData = $this->getJson("/api/v1/clubs/{$treasurerClub->id}/announcements")
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonFragment(['id' => $treasurerMemberNotice->id])
+            ->assertJsonFragment(['id' => $treasurerOfficerNotice->id])
+            ->assertJsonMissing(['id' => $treasurerDraft->id])
+            ->json('data');
+        foreach ($treasurerData as $payload) {
             foreach (['club_id', 'audience', 'stored_status', 'created_by_user_id', 'lock_version', 'scheduled_publish_at', 'replaces_announcement_id'] as $hidden) {
                 $this->assertArrayNotHasKey($hidden, $payload);
             }
             $this->assertSame('President', $payload['published_by_role']);
-            $this->getJson("/api/v1/clubs/{$club->id}/announcements/{$officers->id}")->assertNotFound();
         }
+        $treasurerDetail = $this->getJson("/api/v1/clubs/{$treasurerClub->id}/announcements/{$treasurerOfficerNotice->id}")
+            ->assertOk()
+            ->json('data');
+        foreach (['club_id', 'audience', 'stored_status', 'created_by_user_id', 'lock_version', 'scheduled_publish_at', 'replaces_announcement_id'] as $hidden) {
+            $this->assertArrayNotHasKey($hidden, $treasurerDetail);
+        }
+        $this->getJson("/api/v1/clubs/{$treasurerClub->id}/announcements/{$treasurerDraft->id}")->assertNotFound();
+        $this->getJson("/api/v1/clubs/{$treasurerClub->id}/announcements?audience=officers")->assertForbidden();
+
+        $memberClub = $this->club('O-member');
+        $member = $this->actor($memberClub, 'member');
+        $memberNotice = $this->announcement($memberClub, $this->published(['title' => 'Visible member notice']));
+        $memberOfficerNotice = $this->announcement($memberClub, $this->published(['title' => 'Officer notice', 'audience' => 'officers']));
+        $memberDraft = $this->announcement($memberClub, ['title' => 'Hidden draft']);
+        Sanctum::actingAs($member);
+        $memberPayload = $this->getJson("/api/v1/clubs/{$memberClub->id}/announcements")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $memberNotice->id)
+            ->assertJsonMissing(['id' => $memberOfficerNotice->id])
+            ->assertJsonMissing(['id' => $memberDraft->id])
+            ->json('data.0');
+        foreach (['club_id', 'audience', 'stored_status', 'created_by_user_id', 'lock_version', 'scheduled_publish_at', 'replaces_announcement_id'] as $hidden) {
+            $this->assertArrayNotHasKey($hidden, $memberPayload);
+        }
+        $this->getJson("/api/v1/clubs/{$memberClub->id}/announcements/{$memberOfficerNotice->id}")->assertNotFound();
+        $this->getJson("/api/v1/clubs/{$memberClub->id}/announcements/{$memberDraft->id}")->assertNotFound();
+    }
+
+    public function test_cross_audience_predecessor_context_is_concealed_from_non_management_reader(): void
+    {
+        $club = $this->club('REPLACE-AUDIENCE');
+        $treasurer = $this->actor($club, 'treasurer');
+        $memberPredecessor = $this->announcement($club, $this->published(['audience' => 'club-members']));
+        $officerReplacement = $this->announcement($club, $this->published([
+            'audience' => 'officers',
+            'replaces_announcement_id' => $memberPredecessor->id,
+        ]));
+
+        Sanctum::actingAs($treasurer);
+        $this->getJson("/api/v1/clubs/{$club->id}/announcements/{$officerReplacement->id}")
+            ->assertOk()
+            ->assertJsonMissingPath('data.replaces_announcement_id');
     }
 
     public function test_authentication_permissions_inactive_membership_and_cross_club_access_fail_closed(): void

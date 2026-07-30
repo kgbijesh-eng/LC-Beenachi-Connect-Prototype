@@ -13,25 +13,25 @@ class ClubAnnouncementReadService
 {
     private const RELATIONS = ['club', 'creator', 'updater', 'publisher', 'withdrawer', 'archiver', 'replacedAnnouncement', 'replacements'];
 
-    public function listForClub(Club $club, array $filters, bool $management, Carbon $now): LengthAwarePaginator
+    public function listForClub(Club $club, array $filters, bool $management, array $readablePublishedAudiences, Carbon $now): LengthAwarePaginator
     {
         $this->assertCompatibleFilters($filters, $management);
 
         $query = ClubAnnouncement::query()->with(self::RELATIONS)->where('club_id', $club->id);
-        $this->applyScope($query, $filters['scope'], $management, $now);
+        $this->applyScope($query, $filters['scope'], $management, $readablePublishedAudiences, $now);
         $this->applyFilters($query, $filters, $club, $now);
         $this->applyOrdering($query, $filters, $management);
 
         $page = $query->paginate(perPage: $filters['per_page'], page: $filters['page']);
         foreach ($page->items() as $announcement) {
             $announcement->assertReadableIntegrity($club, $now);
-            $this->applyReplacementContext($announcement, $management);
+            $this->applyReplacementContext($announcement, $management, $readablePublishedAudiences);
         }
 
         return $page;
     }
 
-    public function canReadDetail(Club $club, ClubAnnouncement $announcement, bool $management, Carbon $now): bool
+    public function canReadDetail(Club $club, ClubAnnouncement $announcement, bool $management, array $readablePublishedAudiences, Carbon $now): bool
     {
         if ((int) $announcement->club_id !== (int) $club->id) {
             return false;
@@ -39,24 +39,24 @@ class ClubAnnouncementReadService
         $announcement->loadMissing(self::RELATIONS);
         $announcement->assertReadableIntegrity($club, $now);
         if ($management) {
-            $this->applyReplacementContext($announcement, true);
+            $this->applyReplacementContext($announcement, true, $readablePublishedAudiences);
 
             return true;
         }
         $readable = $announcement->status === ClubAnnouncement::STATUS_PUBLISHED
-            && $announcement->audience === ClubAnnouncement::AUDIENCE_CLUB_MEMBERS;
+            && in_array($announcement->audience, $readablePublishedAudiences, true);
         if ($readable) {
-            $this->applyReplacementContext($announcement, false);
+            $this->applyReplacementContext($announcement, false, $readablePublishedAudiences);
         }
 
         return $readable;
     }
 
-    private function applyScope(Builder $query, string $scope, bool $management, Carbon $now): void
+    private function applyScope(Builder $query, string $scope, bool $management, array $readablePublishedAudiences, Carbon $now): void
     {
         if (! $management) {
             $query->where('status', ClubAnnouncement::STATUS_PUBLISHED)
-                ->where('audience', ClubAnnouncement::AUDIENCE_CLUB_MEMBERS);
+                ->whereIn('audience', $readablePublishedAudiences);
             if ($scope === 'history') {
                 $query->where(fn (Builder $q) => $q
                     ->where(fn (Builder $q) => $q->whereNotNull('expires_at')->where('expires_at', '<=', $now))
@@ -186,7 +186,7 @@ class ClubAnnouncementReadService
         });
     }
 
-    private function applyReplacementContext(ClubAnnouncement $announcement, bool $management): void
+    private function applyReplacementContext(ClubAnnouncement $announcement, bool $management, array $readablePublishedAudiences): void
     {
         $direct = $announcement->replacements
             ->filter(fn (ClubAnnouncement $candidate): bool => (int) $candidate->club_id === (int) $announcement->club_id)
@@ -200,7 +200,8 @@ class ClubAnnouncementReadService
         $safePredecessor = $announcement->replacedAnnouncement !== null
             && (int) $announcement->replacedAnnouncement->club_id === (int) $announcement->club_id
             && ($management || ($announcement->replacedAnnouncement->status === ClubAnnouncement::STATUS_PUBLISHED
-                && $announcement->replacedAnnouncement->audience === ClubAnnouncement::AUDIENCE_CLUB_MEMBERS));
+                && $announcement->replacedAnnouncement->audience === $announcement->audience
+                && in_array($announcement->replacedAnnouncement->audience, $readablePublishedAudiences, true)));
         $announcement->setAttribute('safe_replaces_announcement_id', $safePredecessor ? $announcement->replaces_announcement_id : null);
         $announcement->setAttribute('management_direct_replacement_ids', $management ? $direct->pluck('id')->map(fn ($id) => (int) $id)->all() : null);
     }
