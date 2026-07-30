@@ -271,4 +271,9 @@ class ClubAnnouncement extends Model
     {
         return $this->hasMany(ClubAnnouncementPublicationDecision::class, 'club_announcement_id');
     }
+
+    public function reads(): HasMany
+    {
+        return $this->hasMany(ClubAnnouncementRead::class, 'club_announcement_id');
+    }
 }

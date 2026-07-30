@@ -24,11 +24,21 @@ type Announcement = {
   lock_version?: number;
   created_at?: string | null;
   updated_at?: string | null;
+  is_read?: boolean;
+  read_at?: string | null;
 };
 
 type ListResponse = {
   data: Announcement[];
   meta: { current_page: number; last_page: number; per_page: number; total: number };
+};
+
+type ReadStateResponse = {
+  data: {
+    announcement_id: number;
+    is_read: boolean;
+    read_at: string;
+  };
 };
 
 type FieldErrors = Record<string, string[]>;
@@ -69,6 +79,11 @@ function hasCompleteMutationProjection(
     Object.prototype.hasOwnProperty.call(resource, "priority") &&
     Object.prototype.hasOwnProperty.call(resource, "audience")
   );
+}
+
+function isMarkReadEligible(announcement: Announcement) {
+  return announcement.effective_status === "published"
+    || (announcement.effective_status === "replaced" && announcement.stored_status === "published");
 }
 
 function permissionSet(permissions: { slug: string }[] | undefined) {
@@ -129,6 +144,24 @@ export default function AnnouncementsBackend() {
   const [approvalContext, setApprovalContext] = useState<ApprovalContext | null>(null);
   const listController = useRef<AbortController | null>(null);
   const detailController = useRef<AbortController | null>(null);
+  const markReadControllers = useRef(new Map<number, AbortController>());
+  const readStateByAnnouncement = useRef(new Map<number, { sessionKey: string; is_read: boolean; read_at: string | null }>());
+  const activeSessionKey = useRef(sessionKey);
+
+  const preserveReadState = useCallback((resource: Announcement, fallback?: Announcement | null): Announcement => {
+    const known = readStateByAnnouncement.current.get(resource.id);
+    if (known?.sessionKey === sessionKey) {
+      return { ...resource, is_read: known.is_read, read_at: known.read_at };
+    }
+    if (typeof resource.is_read === "boolean" && Object.prototype.hasOwnProperty.call(resource, "read_at")) return resource;
+    if (fallback
+      && fallback.id === resource.id
+      && typeof fallback.is_read === "boolean"
+      && Object.prototype.hasOwnProperty.call(fallback, "read_at")) {
+      return { ...resource, is_read: fallback.is_read, read_at: fallback.read_at };
+    }
+    return resource;
+  }, [sessionKey]);
 
   const loadList = useCallback(async () => {
     if (!session || !clubId) return;
@@ -160,7 +193,7 @@ export default function AnnouncementsBackend() {
       }
       const body = await response.json() as ListResponse;
       if (!controller.signal.aborted) {
-        setItems(body.data);
+        setItems(current => body.data.map(item => preserveReadState(item, current.find(existing => existing.id === item.id))));
         setMeta(body.meta);
         setListState("ready");
         setSelectedId(current => body.data.some(item => item.id === current) ? current : body.data[0]?.id ?? null);
@@ -173,7 +206,19 @@ export default function AnnouncementsBackend() {
         setMessage(error instanceof Error ? "Announcements could not be loaded." : "Announcements are unavailable.");
       }
     }
-  }, [authenticatedFetch, clubId, page, priority, scope, search, session]);
+  }, [authenticatedFetch, clubId, page, preserveReadState, priority, scope, search, session]);
+
+  useEffect(() => {
+    activeSessionKey.current = sessionKey;
+    const controllers = markReadControllers.current;
+    const readStates = readStateByAnnouncement.current;
+
+    return () => {
+      for (const controller of controllers.values()) controller.abort();
+      controllers.clear();
+      readStates.clear();
+    };
+  }, [sessionKey]);
 
   useEffect(() => {
     let active = true;
@@ -218,7 +263,7 @@ export default function AnnouncementsBackend() {
       })
       .then(body => {
         if (!controller.signal.aborted) {
-          setDetail(body.data);
+          setDetail(current => preserveReadState(body.data, current));
           setDetailState("ready");
           setApprovalContext(current => current
             && current.sessionKey === sessionKey
@@ -232,11 +277,60 @@ export default function AnnouncementsBackend() {
         if (!controller.signal.aborted) setDetailState("error");
       });
     return () => controller.abort();
-  }, [authenticatedFetch, clubId, selectedId, session, sessionKey]);
+  }, [authenticatedFetch, clubId, preserveReadState, selectedId, session, sessionKey]);
 
-  function selectAnnouncement(id: number) {
-    if (id !== selectedId) setApprovalContext(null);
-    setSelectedId(id);
+  function selectAnnouncement(announcement: Announcement) {
+    if (announcement.id !== selectedId) setApprovalContext(null);
+    setSelectedId(announcement.id);
+    void markAnnouncementRead(announcement);
+  }
+
+  async function markAnnouncementRead(announcement: Announcement) {
+    if (!clubId || !session || !isMarkReadEligible(announcement) || announcement.is_read !== false || markReadControllers.current.has(announcement.id)) return;
+
+    const controller = new AbortController();
+    const requestSessionKey = sessionKey;
+    markReadControllers.current.set(announcement.id, controller);
+    try {
+      const response = await authenticatedFetch(`/clubs/${clubId}/announcements/${announcement.id}/read`, {
+        method: "PUT",
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const error = await apiError(response, "The announcement could not be marked as read.");
+        if (!controller.signal.aborted && activeSessionKey.current === requestSessionKey) setMessage(error.message);
+        return;
+      }
+      const body = await response.json() as ReadStateResponse;
+      const authoritative = body.data;
+      if (controller.signal.aborted
+        || activeSessionKey.current !== requestSessionKey
+        || authoritative.announcement_id !== announcement.id
+        || authoritative.is_read !== true
+        || typeof authoritative.read_at !== "string") return;
+
+      const readState = {
+        sessionKey: requestSessionKey,
+        is_read: authoritative.is_read,
+        read_at: authoritative.read_at
+      };
+      readStateByAnnouncement.current.set(announcement.id, readState);
+      setMessage("");
+      setItems(current => current.map(item => item.id === announcement.id
+        ? { ...item, is_read: readState.is_read, read_at: readState.read_at }
+        : item));
+      setDetail(current => current?.id === announcement.id
+        ? { ...current, is_read: readState.is_read, read_at: readState.read_at }
+        : current);
+    } catch {
+      if (!controller.signal.aborted && activeSessionKey.current === requestSessionKey) {
+        setMessage("The announcement could not be marked as read.");
+      }
+    } finally {
+      if (markReadControllers.current.get(announcement.id) === controller) {
+        markReadControllers.current.delete(announcement.id);
+      }
+    }
   }
 
   function openForm(mode: FormMode) {
@@ -273,8 +367,8 @@ export default function AnnouncementsBackend() {
 
     if (!hasCompleteMutationProjection(authoritative, id)) return;
 
-    setItems(current => current.map(item => item.id === authoritative.id ? authoritative : item));
-    setDetail(current => current?.id === authoritative.id ? authoritative : current);
+    setItems(current => current.map(item => item.id === authoritative.id ? preserveReadState(authoritative, item) : item));
+    setDetail(current => current?.id === authoritative.id ? preserveReadState(authoritative, current) : current);
     setForm(current => formMode === "edit" || formMode === "replacement" ? {
       ...current,
       title: authoritative.title,
@@ -433,10 +527,11 @@ export default function AnnouncementsBackend() {
 
       <div className="announcementSplit">
         <div className="announcementBackendList" aria-label="Announcement list">
-          {items.map(item => <button className={`announcementBackendCard ${selectedId === item.id ? "selected" : ""}`} key={item.id} onClick={() => selectAnnouncement(item.id)}>
+          {items.map(item => <button className={`announcementBackendCard ${selectedId === item.id ? "selected" : ""}`} key={item.id} onClick={() => selectAnnouncement(item)}>
             <span><strong>{item.title}</strong><small>{item.issued_by || "Club announcement"} · {safeDate(item.published_at, item.club_timezone)}</small></span>
             <span className={`tag announcementStatus-${item.effective_status}`}>{item.effective_status}</span>
             <span className="tag">{item.priority}</span>
+            {isMarkReadEligible(item) && item.is_read === false && <span className="tag">Unread</span>}
             {item.replaced_by_announcement_id && <small>Replaced by #{item.replaced_by_announcement_id}</small>}
           </button>)}
           {meta && meta.last_page > 1 && <div className="announcementPagination">
@@ -457,6 +552,8 @@ export default function AnnouncementsBackend() {
               <div><dt>Priority</dt><dd>{detail.priority}</dd></div>
               <div><dt>Published</dt><dd>{safeDate(detail.published_at, detail.club_timezone)}</dd></div>
               <div><dt>Issuer</dt><dd>{detail.issued_by || "Unavailable"}</dd></div>
+              {typeof detail.is_read === "boolean" && (detail.is_read || isMarkReadEligible(detail))
+                && <div><dt>Read status</dt><dd>{detail.is_read ? "Read" : "Unread"}</dd></div>}
               {detail.audience && <div><dt>Audience</dt><dd>{detail.audience}</dd></div>}
               {detail.expires_at && <div><dt>Expires</dt><dd>{safeDate(detail.expires_at, detail.club_timezone)}</dd></div>}
               {detail.withdrawal_reason && <div><dt>Withdrawal reason</dt><dd>{detail.withdrawal_reason}</dd></div>}

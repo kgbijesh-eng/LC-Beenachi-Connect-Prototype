@@ -132,6 +132,7 @@ Route::prefix('v1')->group(function (): void {
         Route::middleware('club.permission:announcements.view,club')->group(function (): void {
             Route::get('/clubs/{club}/announcements', [ClubAnnouncementController::class, 'index']);
             Route::get('/clubs/{club}/announcements/{announcement}', [ClubAnnouncementController::class, 'show']);
+            Route::put('/clubs/{club}/announcements/{announcement}/read', [ClubAnnouncementController::class, 'markRead']);
         });
         Route::middleware('club.permission:announcements.drafts.manage,club')->group(function (): void {
             Route::post('/clubs/{club}/announcements', [ClubAnnouncementController::class, 'store']);

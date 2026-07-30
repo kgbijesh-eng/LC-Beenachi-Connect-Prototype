@@ -2,7 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DevAuthProvider, useDevAuth } from "../DevAuthSession";
 import AnnouncementsBackend from "../AnnouncementsBackend";
-import Prototype, { LoginScreen } from "../page";
+import LoginScreen from "../LoginScreen";
+import Prototype from "../page";
 
 const verifiedIdentity = {
   user: { id: 7, name: "Test Member", email: "member@example.test" },

@@ -347,16 +347,20 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
     public function test_read_routes_remain_non_mutating_after_narrow_write_adapters_are_added(): void
     {
         $routes = collect(Route::getRoutes())->filter(fn ($route) => str_contains($route->uri(), 'clubs/{club}/announcements'));
-        $this->assertCount(11, $routes);
+        $this->assertCount(12, $routes);
         $this->assertCount(2, $routes->filter(fn ($route) => in_array('GET', $route->methods(), true)));
         $this->assertCount(8, $routes->filter(fn ($route) => in_array('POST', $route->methods(), true)));
+        $this->assertCount(1, $routes->filter(fn ($route) => in_array('PUT', $route->methods(), true)));
         $this->assertCount(1, $routes->filter(fn ($route) => in_array('PATCH', $route->methods(), true)));
         $this->assertCount(0, $routes->filter(fn ($route) => in_array('DELETE', $route->methods(), true)));
+        $this->assertFalse($routes->contains(fn ($route) => str_contains($route->uri(), '/unread')
+            || str_contains($route->uri(), '/readers')
+            || str_contains($route->uri(), '/read-report')));
 
         $publicEndpoints = collect((new ReflectionClass(ClubAnnouncementController::class))->getMethods(\ReflectionMethod::IS_PUBLIC))
             ->filter(fn ($method) => $method->getDeclaringClass()->getName() === ClubAnnouncementController::class)
             ->pluck('name')->sort()->values()->all();
-        $this->assertSame(['approve', 'archive', 'index', 'publish', 'rejectApproval', 'revokeApproval', 'show', 'store', 'storeReplacement', 'update', 'withdraw'], $publicEndpoints);
+        $this->assertSame(['approve', 'archive', 'index', 'markRead', 'publish', 'rejectApproval', 'revokeApproval', 'show', 'store', 'storeReplacement', 'update', 'withdraw'], $publicEndpoints);
 
         $club = $this->club('NO-WRITE');
         $member = $this->actor($club, 'member');

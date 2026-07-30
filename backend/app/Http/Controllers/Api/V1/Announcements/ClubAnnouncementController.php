@@ -19,6 +19,7 @@ use App\Models\ClubAnnouncement;
 use App\Models\ClubAnnouncementPublicationDecision;
 use App\Services\Access\ClubPermissionService;
 use App\Services\Announcements\ClubAnnouncementReadService;
+use App\Services\Announcements\ClubAnnouncementReadStateService;
 use App\Services\Announcements\ClubAnnouncementWriteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,6 +34,7 @@ class ClubAnnouncementController extends Controller
         Club $club,
         ClubPermissionService $permissions,
         ClubAnnouncementReadService $announcements,
+        ClubAnnouncementReadStateService $readState,
     ): JsonResponse {
         $management = $permissions->userHasPermission($request->user(), ClubAnnouncement::PERMISSION_MANAGEMENT_VIEW, (int) $club->id);
         $readablePublishedAudiences = $this->readablePublishedAudiences($request, $club, $management);
@@ -43,6 +45,7 @@ class ClubAnnouncementController extends Controller
         } catch (InvalidClubAnnouncementReadStateException) {
             return response()->json(['message' => 'Announcement records are unavailable because stored data failed integrity validation.'], 500);
         }
+        $readState->attachToList($page->items(), $club, $request->user());
 
         $request->attributes->set('announcements_management_reader', $management);
         $request->attributes->set('announcements_effective_now', $now);
@@ -65,6 +68,7 @@ class ClubAnnouncementController extends Controller
         ClubAnnouncement $announcement,
         ClubPermissionService $permissions,
         ClubAnnouncementReadService $announcements,
+        ClubAnnouncementReadStateService $readState,
     ): JsonResponse {
         $management = $permissions->userHasPermission($request->user(), ClubAnnouncement::PERMISSION_MANAGEMENT_VIEW, (int) $club->id);
         $readablePublishedAudiences = $this->readablePublishedAudiences($request, $club, $management);
@@ -76,11 +80,47 @@ class ClubAnnouncementController extends Controller
         } catch (InvalidClubAnnouncementReadStateException) {
             return $this->notFound();
         }
+        $readState->attachToDetail($announcement, $club, $request->user());
 
         $request->attributes->set('announcements_management_reader', $management);
         $request->attributes->set('announcements_effective_now', $now);
 
         return response()->json(['data' => (new ClubAnnouncementResource($announcement))->resolve($request)]);
+    }
+
+    public function markRead(
+        Request $request,
+        Club $club,
+        ClubAnnouncement $announcement,
+        ClubPermissionService $permissions,
+        ClubAnnouncementReadStateService $readState,
+    ): JsonResponse {
+        $management = $permissions->userHasPermission($request->user(), ClubAnnouncement::PERMISSION_MANAGEMENT_VIEW, (int) $club->id);
+        $readablePublishedAudiences = $this->readablePublishedAudiences($request, $club, $management);
+
+        try {
+            $read = $readState->markRead(
+                $club,
+                $announcement,
+                $request->user(),
+                $readablePublishedAudiences,
+                Carbon::now('UTC'),
+            );
+        } catch (InvalidClubAnnouncementReadStateException) {
+            return $this->notFound();
+        }
+
+        if ($read === null) {
+            return $this->notFound();
+        }
+
+        return response()->json([
+            'data' => [
+                'announcement_id' => (int) $read->club_announcement_id,
+                'is_read' => true,
+                'read_at' => $read->read_at->toISOString(),
+            ],
+        ]);
     }
 
     public function store(StoreClubAnnouncementRequest $request, Club $club, ClubAnnouncementWriteService $announcements): JsonResponse

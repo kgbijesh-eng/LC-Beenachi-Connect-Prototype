@@ -42,6 +42,12 @@ class ClubAnnouncementResource extends JsonResource
             $data['replaces_announcement_id'] = (int) $this->safe_replaces_announcement_id;
         }
 
+        if (array_key_exists('current_user_is_read', $this->resource->getAttributes())
+            && array_key_exists('current_user_read_at', $this->resource->getAttributes())) {
+            $data['is_read'] = (bool) $this->current_user_is_read;
+            $data['read_at'] = $this->current_user_read_at?->toISOString();
+        }
+
         if ($management) {
             $data += [
                 'club_id' => $this->club_id,

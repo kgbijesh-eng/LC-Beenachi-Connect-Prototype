@@ -73,6 +73,268 @@ afterEach(cleanup);
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("production announcements workspace", () => {
+  it("keeps initial list and automatic detail loading side-effect free, then marks only a deliberate unread click", async () => {
+    signIn();
+    const unread = { ...announcement, is_read: false, read_at: null };
+    let resolveMark: ((response: Response) => void) | undefined;
+    auth.authenticatedFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return new Promise<Response>(resolve => { resolveMark = resolve; });
+      }
+      if (url.endsWith("/41")) return json({ data: unread });
+      return json({ data: [unread], meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 } });
+    });
+
+    render(<AnnouncementsBackend />);
+    const card = await screen.findByRole("button", { name: /Authoritative club notice/ });
+    await screen.findByText("Verified announcement body.");
+    expect(card).toHaveTextContent("Unread");
+    expect(screen.getByText("Read status").parentElement).toHaveTextContent("Unread");
+    expect(auth.authenticatedFetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(0);
+
+    fireEvent.click(card);
+    await waitFor(() => expect(auth.authenticatedFetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1));
+    expect(auth.authenticatedFetch).toHaveBeenCalledWith(
+      "/clubs/19/announcements/41/read",
+      expect.objectContaining({ method: "PUT", signal: expect.any(AbortSignal) })
+    );
+    fireEvent.click(card);
+    expect(auth.authenticatedFetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+    expect(card).toHaveTextContent("Unread");
+
+    resolveMark?.(json({ data: { announcement_id: 41, is_read: true, read_at: "2026-07-30T08:00:00.000000Z" } }));
+    await waitFor(() => expect(card).not.toHaveTextContent("Unread"));
+    expect(screen.getByText("Read status").parentElement).toHaveTextContent("Read");
+
+    fireEvent.click(card);
+    expect(auth.authenticatedFetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+  });
+
+  it("leaves failed marks unread and permits a later deliberate retry", async () => {
+    signIn();
+    const unread = { ...announcement, is_read: false, read_at: null };
+    let attempts = 0;
+    auth.authenticatedFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        attempts += 1;
+        return attempts === 1
+          ? json({ message: "Read state is temporarily unavailable." }, 503)
+          : json({ data: { announcement_id: 41, is_read: true, read_at: "2026-07-30T08:05:00.000000Z" } });
+      }
+      if (url.endsWith("/41")) return json({ data: unread });
+      return json({ data: [unread], meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 } });
+    });
+
+    render(<AnnouncementsBackend />);
+    const card = await screen.findByRole("button", { name: /Authoritative club notice/ });
+    await screen.findByText("Verified announcement body.");
+    fireEvent.click(card);
+    await screen.findByText("Read state is temporarily unavailable.");
+    expect(card).toHaveTextContent("Unread");
+    expect(screen.getByText("Read status").parentElement).toHaveTextContent("Unread");
+
+    fireEvent.click(card);
+    await waitFor(() => expect(attempts).toBe(2));
+    await waitFor(() => expect(card).not.toHaveTextContent("Unread"));
+    expect(screen.getByText("Read status").parentElement).toHaveTextContent("Read");
+  });
+
+  it("does not mark already-read or unpublished management announcements", async () => {
+    signIn(["announcements.view", "announcements.management.view"]);
+    const read = { ...announcement, is_read: true, read_at: "2026-07-30T07:00:00.000000Z" };
+    const draft = { ...draftAnnouncement, id: 52, title: "Unpublished management draft", is_read: false, read_at: null };
+    auth.authenticatedFetch.mockImplementation(async (url: string) => {
+      if (url.endsWith("/41")) return json({ data: read });
+      if (url.endsWith("/52")) return json({ data: draft });
+      return json({ data: [read, draft], meta: { current_page: 1, last_page: 1, per_page: 10, total: 2 } });
+    });
+
+    render(<AnnouncementsBackend />);
+    const readCard = await screen.findByRole("button", { name: /Authoritative club notice/ });
+    await screen.findByText("Verified announcement body.");
+    fireEvent.click(readCard);
+    const draftCard = screen.getByRole("button", { name: /Unpublished management draft/ });
+    fireEvent.click(draftCard);
+    await screen.findByText("Draft A body.");
+    fireEvent.click(draftCard);
+
+    expect(auth.authenticatedFetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(0);
+    expect(draftCard).not.toHaveTextContent("Unread");
+  });
+
+  it("does not mark expired management records but keeps published replacement predecessors eligible", async () => {
+    signIn(["announcements.view", "announcements.management.view"]);
+    const expired = {
+      ...announcement,
+      id: 61,
+      title: "Expired management notice",
+      effective_status: "expired",
+      stored_status: "published",
+      is_read: false,
+      read_at: null
+    };
+    const replaced = {
+      ...announcement,
+      id: 62,
+      title: "Published replacement predecessor",
+      effective_status: "replaced",
+      stored_status: "published",
+      is_read: false,
+      read_at: null
+    };
+    auth.authenticatedFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return json({ data: { announcement_id: 62, is_read: true, read_at: "2026-07-30T08:07:00.000000Z" } });
+      }
+      if (url.endsWith("/61")) return json({ data: expired });
+      if (url.endsWith("/62")) return json({ data: replaced });
+      return json({ data: [expired, replaced], meta: { current_page: 1, last_page: 1, per_page: 10, total: 2 } });
+    });
+
+    render(<AnnouncementsBackend />);
+    const expiredCard = await screen.findByRole("button", { name: /Expired management notice/ });
+    await screen.findByRole("heading", { name: "Expired management notice" });
+    expect(expiredCard).not.toHaveTextContent("Unread");
+    expect(screen.queryByText("Read status")).not.toBeInTheDocument();
+    fireEvent.click(expiredCard);
+    expect(auth.authenticatedFetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(0);
+
+    const replacedCard = screen.getByRole("button", { name: /Published replacement predecessor/ });
+    expect(replacedCard).toHaveTextContent("Unread");
+    fireEvent.click(replacedCard);
+    await waitFor(() => expect(auth.authenticatedFetch).toHaveBeenCalledWith(
+      "/clubs/19/announcements/62/read",
+      expect.objectContaining({ method: "PUT" })
+    ));
+    await waitFor(() => expect(replacedCard).not.toHaveTextContent("Unread"));
+  });
+
+  it("does not copy detail read state from a previously selected announcement with a different id", async () => {
+    signIn();
+    const first = { ...announcement, is_read: true, read_at: "2026-07-30T07:00:00.000000Z" };
+    const secondListItem = {
+      ...announcement,
+      id: 42,
+      title: "Second announcement",
+      body: "Second list body.",
+      is_read: undefined,
+      read_at: undefined
+    };
+    const secondDetail = {
+      ...announcement,
+      id: 42,
+      title: "Second announcement",
+      body: "Second detail body."
+    };
+    auth.authenticatedFetch.mockImplementation(async (url: string) => {
+      if (url.endsWith("/41")) return json({ data: first });
+      if (url.endsWith("/42")) return json({ data: secondDetail });
+      return json({ data: [first, secondListItem], meta: { current_page: 1, last_page: 1, per_page: 10, total: 2 } });
+    });
+
+    render(<AnnouncementsBackend />);
+    await screen.findByText("Verified announcement body.");
+    expect(screen.getByText("Read status").parentElement).toHaveTextContent("Read");
+    fireEvent.click(screen.getByRole("button", { name: /Second announcement/ }));
+    await screen.findByText("Second detail body.");
+    expect(screen.queryByText("Read status")).not.toBeInTheDocument();
+    expect(auth.authenticatedFetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(0);
+  });
+
+  it("preserves same-announcement read state when a mutation response omits read fields", async () => {
+    signIn(["announcements.view", "announcements.management.view", "announcements.drafts.manage"]);
+    const readDraft = { ...draftAnnouncement, is_read: true, read_at: "2026-07-30T07:30:00.000000Z" };
+    const updated = { ...draftAnnouncement, title: "Updated read draft", body: "Updated read body.", lock_version: 2 };
+    let listCalls = 0;
+    let resolveRefresh: ((response: Response) => void) | undefined;
+    auth.authenticatedFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") return json({ data: updated });
+      if (url.endsWith("/51")) return json({ data: readDraft });
+      listCalls += 1;
+      if (listCalls === 1) {
+        return json({ data: [readDraft], meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 } });
+      }
+      return new Promise<Response>(resolve => { resolveRefresh = resolve; });
+    });
+
+    render(<AnnouncementsBackend />);
+    await screen.findByText("Draft A body.");
+    expect(screen.getByText("Read status").parentElement).toHaveTextContent("Read");
+    fireEvent.click(screen.getByRole("button", { name: "Edit draft" }));
+    fireEvent.change(screen.getByLabelText("Announcement title"), { target: { value: "Updated read draft" } });
+    fireEvent.change(screen.getByLabelText("Announcement body"), { target: { value: "Updated read body." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await screen.findByText("Updated read body.");
+    expect(screen.getByText("Read status").parentElement).toHaveTextContent("Read");
+    expect(auth.authenticatedFetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+    resolveRefresh?.(json({ data: [{ ...updated, is_read: true, read_at: readDraft.read_at }], meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 } }));
+  });
+
+  it("does not mark during automatic reselection after a list filter refresh", async () => {
+    signIn();
+    const unread = { ...announcement, is_read: false, read_at: null };
+    auth.authenticatedFetch.mockImplementation(async (url: string) => url.endsWith("/41")
+      ? json({ data: unread })
+      : json({ data: [unread], meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 } }));
+
+    render(<AnnouncementsBackend />);
+    await screen.findByText("Verified announcement body.");
+    fireEvent.change(screen.getByLabelText("Priority"), { target: { value: "high" } });
+    await waitFor(() => expect(auth.authenticatedFetch.mock.calls.filter(([url]) => String(url).includes("priority=high")).length).toBeGreaterThan(0));
+    expect(auth.authenticatedFetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(0);
+  });
+
+  it("aborts an in-flight mark and ignores its stale response after session replacement", async () => {
+    signIn();
+    const unread = { ...announcement, is_read: false, read_at: null };
+    const replacement = {
+      ...announcement,
+      id: 91,
+      title: "Replacement session notice",
+      body: "Replacement session body.",
+      is_read: false,
+      read_at: null
+    };
+    let resolveMark: ((response: Response) => void) | undefined;
+    let markSignal: AbortSignal | undefined;
+    auth.authenticatedFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        markSignal = init.signal ?? undefined;
+        return new Promise<Response>(resolve => { resolveMark = resolve; });
+      }
+      if (url.includes("/clubs/20/")) {
+        return url.endsWith("/91")
+          ? json({ data: replacement })
+          : json({ data: [replacement], meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 } });
+      }
+      return url.endsWith("/41")
+        ? json({ data: unread })
+        : json({ data: [unread], meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 } });
+    });
+
+    const rendered = render(<AnnouncementsBackend />);
+    const oldCard = await screen.findByRole("button", { name: /Authoritative club notice/ });
+    await screen.findByText("Verified announcement body.");
+    fireEvent.click(oldCard);
+    await waitFor(() => expect(markSignal).toBeDefined());
+
+    auth.session = {
+      ...auth.session!,
+      identity: "replacement@example.test",
+      membership: { ...auth.session!.membership, id: 8, club: { id: 20 } }
+    };
+    rendered.rerender(<AnnouncementsBackend />);
+    expect(await screen.findByText("Replacement session body.")).toBeInTheDocument();
+    await waitFor(() => expect(markSignal?.aborted).toBe(true));
+
+    resolveMark?.(json({ data: { announcement_id: 41, is_read: true, read_at: "2026-07-30T08:10:00.000000Z" } }));
+    await Promise.resolve();
+    const replacementCard = screen.getByRole("button", { name: /Replacement session notice/ });
+    expect(replacementCard).toHaveTextContent("Unread");
+    expect(screen.getByText("Read status").parentElement).toHaveTextContent("Unread");
+  });
+
   it("synchronizes edited detail, list row, expiry, lock version, and next publish without refresh", async () => {
     signIn(["announcements.view", "announcements.management.view", "announcements.drafts.manage", "announcements.publish"]);
     const other = { ...announcement, id: 77, title: "Other announcement" };
@@ -101,6 +363,7 @@ describe("production announcements workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     await waitFor(() => expect(auth.authenticatedFetch.mock.calls.some(([, init]) => init?.method === "POST" && String(init.body).includes('"lock_version":2'))).toBe(true));
     expect(screen.queryByText("Other announcement")).toBeInTheDocument();
+    expect(auth.authenticatedFetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
   });
 
   it("refetches detail when a mutation response is incomplete and preserves stale-409 protection", async () => {

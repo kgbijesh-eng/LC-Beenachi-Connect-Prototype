@@ -43,8 +43,25 @@ class ClubAnnouncementReadService
 
             return true;
         }
-        $readable = $announcement->status === ClubAnnouncement::STATUS_PUBLISHED
-            && in_array($announcement->audience, $readablePublishedAudiences, true);
+        $readable = $this->isPublishedAudienceReadable($announcement, $readablePublishedAudiences);
+        if ($readable) {
+            $this->applyReplacementContext($announcement, false, $readablePublishedAudiences);
+        }
+
+        return $readable;
+    }
+
+    public function canMarkRead(Club $club, ClubAnnouncement $announcement, array $readablePublishedAudiences, Carbon $now): bool
+    {
+        if ((int) $announcement->club_id !== (int) $club->id) {
+            return false;
+        }
+
+        $announcement->loadMissing(self::RELATIONS);
+        $announcement->assertReadableIntegrity($club, $now);
+        $readable = $this->isPublishedAudienceReadable($announcement, $readablePublishedAudiences)
+            && ! $announcement->isEffectivelyExpired($now);
+
         if ($readable) {
             $this->applyReplacementContext($announcement, false, $readablePublishedAudiences);
         }
@@ -162,6 +179,12 @@ class ClubAnnouncementReadService
         if ($invalid) {
             throw ValidationException::withMessages(['filters' => 'The requested announcement filters are incompatible.']);
         }
+    }
+
+    private function isPublishedAudienceReadable(ClubAnnouncement $announcement, array $readablePublishedAudiences): bool
+    {
+        return $announcement->status === ClubAnnouncement::STATUS_PUBLISHED
+            && in_array($announcement->audience, $readablePublishedAudiences, true);
     }
 
     private function whereHasVisiblePublishedReplacement(Builder $query): Builder
