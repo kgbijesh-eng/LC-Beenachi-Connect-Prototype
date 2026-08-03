@@ -8,10 +8,15 @@ use App\Models\Club;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingPeriod;
 use App\Models\ClubJournalEntry;
+use App\Models\ClubMembership;
 use App\Models\LedgerAccount;
+use App\Models\Role;
 use App\Models\User;
 use App\Services\Finance\ClubAccountingCutoverPackageService;
+use App\Services\Finance\ClubCutoverAuthorityAdministrationService;
+use App\Services\Finance\ClubCutoverLifecycleService;
 use App\Services\Finance\Exceptions\CutoverPackageException;
+use Database\Seeders\DefaultRolesAndPermissionsSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -139,12 +144,12 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
     {
         $fixture = $this->fixture();
         $package = $this->reviewablePackage($fixture, 'OPENING-BALANCE-EQUITY');
-        $this->assertCutoverFailure(fn () => $this->service()->recordAccountingReview($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, 'CA Reviewer', '2027-07-10', 'NET-ASSETS-SURPLUS', str_repeat('Valid rationale. ', 3)));
+        $this->assertCutoverFailure(fn () => app(ClubCutoverLifecycleService::class)->review($package, $fixture['ca'], $package->lock_version, 'NET-ASSETS-SURPLUS', 'CA-REVIEW-INVALID', '2027-07-02', str_repeat('Valid rationale. ', 3)));
         $this->assertNull($package->fresh()->dr033_classification);
 
         foreach (['OPENING-BALANCE-EQUITY', 'ACCUMULATED-SURPLUS'] as $classification) {
             $candidate = $classification === 'OPENING-BALANCE-EQUITY' ? $package : $this->reviewablePackage($fixture, $classification, 2);
-            $review = $this->service()->recordAccountingReview($fixture['club']->id, $candidate->id, $fixture['actor']->id, $candidate->lock_version, 'CA Reviewer', '2027-07-10', $classification, 'Evidence establishes the selected historical equity classification.');
+            $review = app(ClubCutoverLifecycleService::class)->review($candidate, $fixture['ca'], $candidate->lock_version, $classification, 'CA-REVIEW-'.$candidate->id, '2027-07-02', 'Evidence establishes the selected historical equity classification.');
             $this->assertSame($classification, $review->selected_classification);
             $this->assertSame($classification, $candidate->fresh()->dr033_classification);
         }
@@ -160,13 +165,10 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
 
         $rows = $this->rows($fixture, 'OPENING-BALANCE-EQUITY');
         $rows[0]['amount_paise']++;
-        $package = $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, $rows);
-        $this->assertNull($package->dr033_classification);
-        $this->assertNull($package->canonical_checksum);
-        $this->assertFalse($package->activation_ready);
-        $this->assertSame('invalidated', $package->reviews()->firstOrFail()->status);
-        $this->assertSame('invalidated', $package->approvals()->firstOrFail()->status);
-        $this->assertNotNull($package->reviews()->firstOrFail()->invalidated_at);
+        $this->assertCutoverFailure(fn () => $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, $rows));
+        $this->assertSame('OPENING-BALANCE-EQUITY', $package->fresh()->dr033_classification);
+        $this->assertSame('current', $package->reviews()->firstOrFail()->status);
+        $this->assertSame('current', $package->approvals()->firstOrFail()->status);
     }
 
     public function test_readiness_is_true_only_for_current_review_approval_zero_difference_and_balanced_preview(): void
@@ -188,28 +190,18 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
         $this->assertFalse($this->service()->readiness($package)['checks']['no_previous_activation']);
     }
 
-    public function test_readiness_rejects_review_classification_that_differs_from_persisted_package(): void
+    public function test_database_rejects_a_persisted_classification_change_after_review(): void
     {
         $fixture = $this->fixture();
         $package = $this->approvedPackage($fixture);
-        DB::table('club_accounting_cutover_packages')->where('id', $package->id)->update([
-            'dr033_classification' => 'ACCUMULATED-SURPLUS',
-        ]);
-        DB::table('club_accounting_cutover_schedule_rows')
-            ->where('cutover_package_id', $package->id)->where('schedule_type', 'equity_preview')
-            ->update(['ledger_account_id' => $fixture['accounts']['surplus']->id]);
-        $package = $package->fresh();
-        $changedChecksum = $this->service()->checksum($package);
-        DB::table('club_accounting_cutover_packages')->where('id', $package->id)->update(['canonical_checksum' => $changedChecksum]);
-        DB::table('club_accounting_cutover_reviews')->where('cutover_package_id', $package->id)->where('status', 'current')->update(['package_checksum' => $changedChecksum]);
-        DB::table('club_accounting_cutover_approvals')->where('cutover_package_id', $package->id)->where('status', 'current')->update(['package_checksum' => $changedChecksum]);
-
-        $readiness = $this->service()->readiness($package->fresh());
-        $this->assertTrue($readiness['checks']['checksum_current']);
-        $this->assertTrue($readiness['checks']['eligible_accounts']);
-        $this->assertFalse($readiness['checks']['accounting_review_current']);
-        $this->assertContains('accounting_review_current', $readiness['failure_reasons']);
-        $this->assertFalse($readiness['ready']);
+        try {
+            DB::table('club_accounting_cutover_packages')->where('id', $package->id)->update(['dr033_classification' => 'ACCUMULATED-SURPLUS']);
+            $this->fail('The reviewed DR-033 classification must be database-immutable.');
+        } catch (QueryException) {
+            $this->addToAssertionCount(1);
+        }
+        $this->assertSame('OPENING-BALANCE-EQUITY', $package->fresh()->dr033_classification);
+        $this->assertTrue($this->service()->readiness($package->fresh())['checks']['accounting_review_current']);
     }
 
     public function test_stale_lock_and_wrong_club_are_rejected_without_mutation(): void
@@ -258,22 +250,17 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
         }
     }
 
-    public function test_repeated_review_and_approval_leave_exactly_one_current_binding(): void
+    public function test_review_and_approval_are_single_authorized_lifecycle_transitions(): void
     {
         $fixture = $this->fixture();
         $package = $this->approvedPackage($fixture);
 
-        $this->service()->recordAccountingReview($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, 'Second independent CA reviewer', '2027-07-13', 'OPENING-BALANCE-EQUITY', 'A second written review confirms the exact same evidence-bound classification.');
-        $package = $package->fresh();
+        $this->assertCutoverFailure(fn () => app(ClubCutoverLifecycleService::class)->review($package, $fixture['ca'], $package->lock_version, 'OPENING-BALANCE-EQUITY', 'CA-REVIEW-REPEAT', '2027-07-02', 'A second written review confirms the exact same evidence-bound classification.'));
         $this->assertSame(1, $package->reviews()->where('status', 'current')->count());
-        $this->assertSame(1, $package->reviews()->where('status', 'invalidated')->count());
-        $this->assertSame(0, $package->approvals()->where('status', 'current')->count());
-
-        $this->service()->recordClubApproval($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, 'President and authorised club body', '2027-07-14', 'CLUB-APPROVAL-2027-002');
-        $package = $package->fresh();
-        $this->service()->recordClubApproval($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, 'President and authorised club body', '2027-07-15', 'CLUB-APPROVAL-2027-003');
+        $this->assertSame(0, $package->reviews()->where('status', 'invalidated')->count());
+        $this->assertCutoverFailure(fn () => app(ClubCutoverLifecycleService::class)->approve($package, $fixture['president'], $package->lock_version, '2027-07-03', 'CLUB-APPROVAL-REPEAT'));
         $this->assertSame(1, $package->approvals()->where('status', 'current')->count());
-        $this->assertSame(2, $package->approvals()->where('status', 'invalidated')->count());
+        $this->assertSame(0, $package->approvals()->where('status', 'invalidated')->count());
     }
 
     public function test_readiness_is_read_only_and_any_accounting_mutation_clears_a_stored_ready_snapshot(): void
@@ -287,11 +274,8 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
         $this->assertEquals($before, $afterRead);
 
         $package = $package->fresh();
-        $package = $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, $this->rows($fixture, 'OPENING-BALANCE-EQUITY'));
-        $this->assertFalse($package->activation_ready);
-        $this->assertNull($package->readiness_checked_at);
-        $this->assertNull($package->canonical_checksum);
-        $this->assertNull($package->dr033_classification);
+        $this->assertCutoverFailure(fn () => $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, $this->rows($fixture, 'OPENING-BALANCE-EQUITY')));
+        $this->assertSame('OPENING-BALANCE-EQUITY', $package->fresh()->dr033_classification);
     }
 
     public function test_no_routes_permissions_coverage_or_posting_capability_are_added(): void
@@ -347,8 +331,14 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
 
     private function fixture(): array
     {
+        $this->seed(DefaultRolesAndPermissionsSeeder::class);
         $actor = User::factory()->create();
+        $preparer = User::factory()->create();
+        $verifier = User::factory()->create();
+        $ca = User::factory()->create();
+        $president = User::factory()->create();
         $club = Club::create(['name' => 'Beenachi', 'code' => 'LCB']);
+        ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']);
         $otherClub = Club::create(['name' => 'Other', 'code' => 'OTH']);
         $accounts = [
             'cash' => $this->account($club, $actor, 'CASH-ON-HAND', 'asset', 'debit'),
@@ -362,7 +352,7 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
         ];
         $period = ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $actor->id]);
 
-        return compact('actor', 'club', 'otherClub', 'accounts', 'period');
+        return compact('actor', 'preparer', 'verifier', 'ca', 'president', 'club', 'otherClub', 'accounts', 'period');
     }
 
     private function account(Club $club, User $actor, string $code, string $type, string $normal): LedgerAccount
@@ -411,17 +401,27 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
     private function reviewablePackage(array $fixture, string $classification, int $version = 1): ClubAccountingCutoverPackage
     {
         $package = $this->service()->createDraft($fixture['club']->id, $fixture['actor']->id, $version);
-        $package = $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, 1, $this->rows($fixture, $classification));
+        $package = $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, 1, $this->rows($fixture));
+        $package = $this->service()->replaceEvidenceReferences($fixture['club']->id, $package->id, $fixture['actor']->id, 2, $this->evidence());
+        $package = $this->service()->refreshValidation($fixture['club']->id, $package->id, $fixture['actor']->id, 3);
+        $admin = app(ClubCutoverAuthorityAdministrationService::class);
+        $admin->assignPermission($package, $fixture['preparer'], 'finance.cutover.package.prepare', 'PREPARE-'.$package->id, $fixture['actor']);
+        $admin->assignPermission($package, $fixture['verifier'], 'finance.cutover.package.verify', 'VERIFY-'.$package->id, $fixture['actor']);
+        $admin->assignPermission($package, $fixture['ca'], 'finance.cutover.package.accounting-review', 'REVIEW-'.$package->id, $fixture['actor']);
+        $admin->assignPermission($package, $fixture['president'], 'finance.cutover.package.business-approve', 'APPROVE-'.$package->id, $fixture['actor']);
+        $admin->appoint($package, $fixture['ca'], 'independent_ca', 'CA-'.$package->id, $fixture['actor']);
+        $life = app(ClubCutoverLifecycleService::class);
+        $package = $life->prepare($package, $fixture['preparer'], $package->lock_version);
 
-        return $this->service()->replaceEvidenceReferences($fixture['club']->id, $package->id, $fixture['actor']->id, 2, $this->evidence());
+        return $life->verify($package, $fixture['verifier'], $package->lock_version);
     }
 
     private function approvedPackage(array $fixture): ClubAccountingCutoverPackage
     {
         $package = $this->reviewablePackage($fixture, 'OPENING-BALANCE-EQUITY');
-        $this->service()->recordAccountingReview($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, 'Independent CA reviewer', '2027-07-10', 'OPENING-BALANCE-EQUITY', 'Evidence establishes a one-time opening equity classification for this exact package.');
+        app(ClubCutoverLifecycleService::class)->review($package, $fixture['ca'], $package->lock_version, 'OPENING-BALANCE-EQUITY', 'Independent-CA-'.$package->id, '2027-07-02', 'Evidence establishes a one-time opening equity classification for this exact package.');
         $package = $package->fresh();
-        $this->service()->recordClubApproval($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, 'President and authorised club body', '2027-07-12', 'CLUB-APPROVAL-2027-001');
+        app(ClubCutoverLifecycleService::class)->approve($package, $fixture['president'], $package->lock_version, '2027-07-03', 'CLUB-APPROVAL-'.$package->id);
 
         return $package->fresh();
     }

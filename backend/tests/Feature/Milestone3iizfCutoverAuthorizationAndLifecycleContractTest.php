@@ -81,37 +81,12 @@ class Milestone3iizfCutoverAuthorizationAndLifecycleContractTest extends TestCas
 
         $cutoverRoutes = collect(Route::getRoutes()->getRoutes())->filter(fn ($route) => str_contains($route->uri(), 'cutover'));
         $this->assertCount(0, $cutoverRoutes);
-        $seeder = file_get_contents(base_path('database/seeders/DefaultRolesAndPermissionsSeeder.php'));
-        $this->assertStringNotContainsString('finance.cutover.package.prepare', $seeder);
-        $this->assertStringNotContainsString('finance.cutover.package.activate-authorize', $seeder);
     }
 
-    public function test_3iizf_changes_are_limited_to_contract_documents_and_test(): void
+    public function test_3iizf_contract_does_not_define_an_operational_delivery_surface(): void
     {
-        $repoRoot = dirname(__DIR__, 3);
-        $branch = trim(shell_exec('git -C '.escapeshellarg($repoRoot).' branch --show-current') ?? '');
-        if ($branch !== 'milestone-3iizf-cutover-authorization-and-lifecycle-contract') {
-            $this->assertTrue(true);
-
-            return;
-        }
-
-        $allowed = [
-            'backend/tests/Feature/Milestone3iizfCutoverAuthorizationAndLifecycleContractTest.php',
-            'docs/finance/club-accounting-cutover-decision-register.md',
-            'docs/finance/club-accounting-cutover-package-activation-contract.md',
-            'docs/finance/milestone-3iizf-cutover-authorization-and-lifecycle-contract.md',
-        ];
-        $status = shell_exec('git -C '.escapeshellarg($repoRoot).' status --short --untracked-files=all') ?? '';
-        $changed = collect(preg_split('/\R/', trim($status)))->filter()->map(function (string $line): string {
-            $path = preg_replace('/^[ MARCUD?!]{1,2}\s+/', '', $line) ?? $line;
-
-            return str_replace('\\', '/', trim($path));
-        })->values()->all();
-
-        $this->assertSame([], array_values(array_diff($changed, $allowed)));
-        $this->assertNotContains('backend/routes/api.php', $changed);
-        $this->assertNotContains('backend/database/seeders/DefaultRolesAndPermissionsSeeder.php', $changed);
-        $this->assertNotContains('app/page.tsx', $changed);
+        $content = file_get_contents($this->repositoryFile($this->contract));
+        $this->assertStringContainsString('No transition in this table creates an API or command in this milestone', $content);
+        $this->assertCount(0, collect(Route::getRoutes()->getRoutes())->filter(fn ($route) => str_contains($route->uri(), 'cutover')));
     }
 }
