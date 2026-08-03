@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\Club;
 use App\Models\ClubAccountingCutoverAuthorityConsumption;
+use App\Models\ClubAccountingCutoverDecisionEvent;
 use App\Models\ClubAccountingCutoverExecutionSuccess;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingPeriod;
@@ -25,12 +26,44 @@ use Tests\TestCase;
 
 class Milestone3iizgPostgresConcurrencyTest extends TestCase
 {
+    public function test_two_direct_postgresql_inserts_allow_only_one_current_decision_and_replacement_after_revocation(): void
+    {
+        $this->requireExplicitPostgres();
+        $this->seed(DefaultRolesAndPermissionsSeeder::class);
+        $fixture = $this->authorizedFixture('decision', 1, false);
+        $package = $fixture['package'];
+        $review = $package->reviews()->firstOrFail();
+        $approval = $package->approvals()->firstOrFail();
+        $appointment = $package->authorityAppointments()->where('authority_type', 'independent_ca')->firstOrFail();
+        $decisionPermission = $package->permissionAssignments()->where('user_id', $fixture['ca']->id)->whereHas('permission', fn ($query) => $query->where('slug', 'finance.cutover.package.dry-run-accept'))->firstOrFail();
+        $rollbackPermission = $package->permissionAssignments()->where('user_id', $fixture['ca']->id)->whereHas('permission', fn ($query) => $query->where('slug', 'finance.cutover.package.rollback-authorize'))->firstOrFail();
+        $decision = [
+            'public_id' => (string) Str::uuid(), 'club_id' => $package->club_id, 'cutover_package_id' => $package->id,
+            'decision_stage' => 'dry_run', 'actor_authority' => 'independent_ca', 'decision_result' => 'accepted',
+            'decision_reference' => 'PG-DIRECT-DECISION-ONE', 'package_version' => $package->package_version,
+            'canonical_checksum' => $package->canonical_checksum, 'chart_version' => $package->chart_version,
+            'lions_year' => $package->lions_year, 'cutover_date' => $package->cutover_date->format('Y-m-d'),
+            'dr033_classification' => $package->dr033_classification, 'accounting_review_id' => $review->id,
+            'president_approval_id' => $approval->id, 'authority_appointment_id' => $appointment->id,
+            'permission_assignment_id' => $decisionPermission->id, 'recorded_by_user_id' => $fixture['ca']->id,
+            'reason' => 'Direct PostgreSQL concurrency boundary verification.', 'recorded_at' => now()->toDateTimeString(),
+            'created_at' => now()->toDateTimeString(), 'updated_at' => now()->toDateTimeString(),
+        ];
+        $second = [...$decision, 'public_id' => (string) Str::uuid(), 'decision_reference' => 'PG-DIRECT-DECISION-TWO'];
+        $results = $this->raceDirectDecisionInserts($package->id, $decision, $second);
+
+        $this->assertSame(['inserted', 'rejected'], collect($results)->pluck('outcome')->sort()->values()->all());
+        $this->assertSame(1, DB::table('club_accounting_cutover_decisions')->where('cutover_package_id', $package->id)->where('decision_stage', 'dry_run')->where('actor_authority', 'independent_ca')->count());
+        $winner = DB::table('club_accounting_cutover_decisions')->where('cutover_package_id', $package->id)->where('decision_stage', 'dry_run')->where('actor_authority', 'independent_ca')->first();
+        ClubAccountingCutoverDecisionEvent::create(['club_id' => $package->club_id, 'cutover_package_id' => $package->id, 'cutover_decision_id' => $winner->id, 'event_type' => 'revoked', 'event_reference' => 'PG-DIRECT-DECISION-REVOKED', 'reason' => 'Permit a legitimate append-only replacement.', 'recorded_by_user_id' => $fixture['ca']->id, 'permission_assignment_id' => $rollbackPermission->id, 'recorded_at' => now()]);
+        DB::table('club_accounting_cutover_decisions')->insert([...$decision, 'public_id' => (string) Str::uuid(), 'decision_reference' => 'PG-DIRECT-DECISION-REPLACEMENT']);
+        $this->assertSame(2, DB::table('club_accounting_cutover_decisions')->where('cutover_package_id', $package->id)->where('decision_stage', 'dry_run')->where('actor_authority', 'independent_ca')->count());
+        $this->assertSame(1, DB::table('club_accounting_cutover_decisions as d')->where('d.cutover_package_id', $package->id)->where('d.decision_stage', 'dry_run')->where('d.actor_authority', 'independent_ca')->whereNotExists(fn ($query) => $query->selectRaw('1')->from('club_accounting_cutover_decision_events as e')->whereColumn('e.cutover_decision_id', 'd.id')->whereIn('e.event_type', ['revoked', 'invalidated']))->count());
+    }
+
     public function test_two_process_postgresql_activation_concurrency_is_stable(): void
     {
-        if (env('RUN_3IIZG_POSTGRES_CONCURRENCY') !== '1') {
-            $this->markTestSkipped('Requires RUN_3IIZG_POSTGRES_CONCURRENCY=1 and an isolated PostgreSQL database.');
-        }
-        $this->assertSame('pgsql', DB::getDriverName(), 'This test never falls back to SQLite.');
+        $this->requireExplicitPostgres();
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $outcomes = ['identical' => [], 'changed' => []];
@@ -49,6 +82,53 @@ class Milestone3iizgPostgresConcurrencyTest extends TestCase
             $this->assertSame(['execution_conflict' => 1, 'execution_success' => 1], $result['terminal_events']);
             $this->assertSame(1, $result['not_posted_conflicts']);
         }
+    }
+
+    private function raceDirectDecisionInserts(int $packageId, array $first, array $second): array
+    {
+        $barrier = sys_get_temp_dir().DIRECTORY_SEPARATOR.'3iizg-pg-decision-'.Str::lower(Str::random(8));
+        mkdir($barrier, 0700, true);
+        file_put_contents($barrier.DIRECTORY_SEPARATOR.'one.request.json', json_encode($first, JSON_THROW_ON_ERROR));
+        file_put_contents($barrier.DIRECTORY_SEPARATOR.'two.request.json', json_encode($second, JSON_THROW_ON_ERROR));
+        $worker = base_path('tests/Support/Milestone3iizgPostgresDecisionWorker.php');
+        $one = new Process([PHP_BINARY, $worker, $barrier.DIRECTORY_SEPARATOR.'one.request.json', $barrier, 'one'], base_path(), timeout: 40);
+        $two = new Process([PHP_BINARY, $worker, $barrier.DIRECTORY_SEPARATOR.'two.request.json', $barrier, 'two'], base_path(), timeout: 40);
+
+        DB::beginTransaction();
+        DB::select('select id from club_accounting_cutover_packages where id = ? for no key update', [$packageId]);
+        try {
+            $one->start();
+            $two->start();
+            $this->awaitFiles([$barrier.DIRECTORY_SEPARATOR.'one.ready', $barrier.DIRECTORY_SEPARATOR.'two.ready']);
+            file_put_contents($barrier.DIRECTORY_SEPARATOR.'one.release', 'release');
+            file_put_contents($barrier.DIRECTORY_SEPARATOR.'two.release', 'release');
+            $this->awaitFiles([$barrier.DIRECTORY_SEPARATOR.'one.attempting', $barrier.DIRECTORY_SEPARATOR.'two.attempting']);
+            usleep(100_000);
+            $releasedAt = hrtime(true);
+            DB::commit();
+        } catch (\Throwable $exception) {
+            DB::rollBack();
+            throw $exception;
+        }
+
+        $one->wait();
+        $two->wait();
+        $results = [
+            json_decode((string) file_get_contents($barrier.DIRECTORY_SEPARATOR.'one.result.json'), true, flags: JSON_THROW_ON_ERROR),
+            json_decode((string) file_get_contents($barrier.DIRECTORY_SEPARATOR.'two.result.json'), true, flags: JSON_THROW_ON_ERROR),
+        ];
+        $this->assertTrue(collect($results)->every(fn (array $result): bool => $result['started_at_ns'] < $releasedAt));
+        $this->assertTrue(max(array_column($results, 'started_at_ns')) < min(array_column($results, 'finished_at_ns')), 'Direct insert worker intervals must genuinely overlap.');
+
+        return $results;
+    }
+
+    private function requireExplicitPostgres(): void
+    {
+        if (env('RUN_3IIZG_POSTGRES_CONCURRENCY') !== '1') {
+            $this->markTestSkipped('Requires RUN_3IIZG_POSTGRES_CONCURRENCY=1 and an isolated PostgreSQL database.');
+        }
+        $this->assertSame('pgsql', DB::getDriverName(), 'This test never falls back to SQLite.');
     }
 
     private function runIteration(string $scenario, int $iteration): array
@@ -130,7 +210,7 @@ class Milestone3iizgPostgresConcurrencyTest extends TestCase
         }
     }
 
-    private function authorizedFixture(string $scenario, int $iteration): array
+    private function authorizedFixture(string $scenario, int $iteration, bool $authorize = true): array
     {
         foreach (['grantor', 'preparer', 'verifier', 'ca', 'president', 'operator'] as $key) {
             $$key = User::factory()->create();
@@ -161,7 +241,7 @@ class Milestone3iizgPostgresConcurrencyTest extends TestCase
         $package = $service->replaceEvidenceReferences($club->id, $package->id, $grantor->id, $package->lock_version, $evidence);
         $package = $service->refreshValidation($club->id, $package->id, $grantor->id, $package->lock_version);
         $admin = app(ClubCutoverAuthorityAdministrationService::class);
-        foreach ([[$preparer, 'prepare'], [$verifier, 'verify'], [$ca, 'accounting-review'], [$ca, 'dry-run-accept'], [$ca, 'activate-authorize'], [$president, 'business-approve'], [$president, 'dry-run-accept'], [$president, 'activate-authorize'], [$operator, 'execute']] as $index => [$user, $permission]) {
+        foreach ([[$preparer, 'prepare'], [$verifier, 'verify'], [$ca, 'accounting-review'], [$ca, 'dry-run-accept'], [$ca, 'activate-authorize'], [$ca, 'rollback-authorize'], [$president, 'business-approve'], [$president, 'dry-run-accept'], [$president, 'activate-authorize'], [$operator, 'execute']] as $index => [$user, $permission]) {
             $admin->assignPermission($package, $user, "finance.cutover.package.{$permission}", "{$scenario}-{$iteration}-{$index}", $grantor);
         }
         $admin->appoint($package, $ca, 'independent_ca', "CA-{$scenario}-{$iteration}", $grantor);
@@ -172,12 +252,14 @@ class Milestone3iizgPostgresConcurrencyTest extends TestCase
         $life->review($package, $ca, $package->lock_version, 'OPENING-BALANCE-EQUITY', "CA-REVIEW-{$scenario}-{$iteration}", '2027-07-02', 'Reconciled evidence substantiates opening balance equity.');
         $package = $package->fresh();
         $life->approve($package, $president, $package->lock_version, '2027-07-03', "APPROVAL-{$scenario}-{$iteration}");
-        foreach ([['dry_run', 'president', $president], ['dry_run', 'independent_ca', $ca], ['activation', 'president', $president], ['activation', 'independent_ca', $ca]] as $index => [$stage, $authority, $actor]) {
-            $package = $package->fresh();
-            $life->decide($package, $actor, $package->lock_version, $stage, $authority, "DECISION-{$scenario}-{$iteration}-{$index}", 'Exact package decision accepted for concurrency verification.');
+        if ($authorize) {
+            foreach ([['dry_run', 'president', $president], ['dry_run', 'independent_ca', $ca], ['activation', 'president', $president], ['activation', 'independent_ca', $ca]] as $index => [$stage, $authority, $actor]) {
+                $package = $package->fresh();
+                $life->decide($package, $actor, $package->lock_version, $stage, $authority, "DECISION-{$scenario}-{$iteration}-{$index}", 'Exact package decision accepted for concurrency verification.');
+            }
         }
         $package = $package->fresh();
 
-        return compact('club', 'package', 'operator');
+        return compact('club', 'package', 'operator', 'ca');
     }
 }
