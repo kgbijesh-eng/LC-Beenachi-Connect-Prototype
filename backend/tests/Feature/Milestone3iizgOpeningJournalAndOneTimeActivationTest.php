@@ -28,6 +28,7 @@ use App\Services\Finance\CutoverExecutionRequest;
 use App\Services\Finance\Exceptions\CutoverAuthorizationException;
 use App\Services\Finance\Exceptions\CutoverExecutionConflictException;
 use App\Services\Finance\Exceptions\CutoverExecutionException;
+use App\Services\Finance\Exceptions\CutoverPackageException;
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -290,10 +291,90 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
             'cutover_success_boundary_unique', "execution_reference', 120)->unique()",
             'cutover_success_package_club_fk', 'cutover_success_journal_club_fk',
             'cutover_consumption_pair_unique', 'cutover_consumption_success_unique',
-            'cutover_one_active_appointment_guard',
+            'cutover_one_active_appointment_guard', 'cutover_one_current_decision_guard',
         ] as $constraint) {
             $this->assertStringContainsString($constraint, $migration);
         }
+    }
+
+    public function test_president_cannot_make_independent_ca_dry_run_decision_even_with_ca_authority(): void
+    {
+        $fixture = $this->businessApprovedFixture();
+        $admin = app(ClubCutoverAuthorityAdministrationService::class);
+        $caAppointment = ClubAccountingCutoverAuthorityAppointment::query()->where('cutover_package_id', $fixture['package']->id)->where('authority_type', 'independent_ca')->firstOrFail();
+        $admin->revokeAppointment($caAppointment, $fixture['grantor'], 'REVOKE-CA-FOR-PRESIDENT-DRY', 'Simulate an incorrect replacement appointment.');
+        $admin->appoint($fixture['package'], $fixture['president'], 'independent_ca', 'APPOINT-PRESIDENT-AS-CA-DRY', $fixture['grantor']);
+
+        try {
+            app(ClubCutoverLifecycleService::class)->decide($fixture['package']->fresh(), $fixture['president'], $fixture['package']->fresh()->lock_version, 'dry_run', 'independent_ca', 'INVALID-PRESIDENT-CA-DRY', 'President must not act as the trusted reviewer.');
+            $this->fail('The President approver must not submit the independent-CA dry-run decision.');
+        } catch (CutoverPackageException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $this->assertSame(ClubAccountingCutoverPackage::STATUS_BUSINESS_APPROVED, $fixture['package']->fresh()->status);
+        $this->assertSame(0, $fixture['package']->decisions()->count());
+    }
+
+    public function test_president_cannot_make_independent_ca_activation_decision_even_with_ca_authority(): void
+    {
+        $fixture = $this->businessApprovedFixture();
+        $life = app(ClubCutoverLifecycleService::class);
+        $package = $fixture['package']->fresh();
+        $life->decide($package, $fixture['president'], $package->lock_version, 'dry_run', 'president', 'VALID-PRESIDENT-DRY', 'President accepts dry run.');
+        $package = $package->fresh();
+        $life->decide($package, $fixture['ca'], $package->lock_version, 'dry_run', 'independent_ca', 'VALID-CA-DRY', 'Reviewer accepts dry run.');
+        $package = $package->fresh();
+        $life->decide($package, $fixture['president'], $package->lock_version, 'activation', 'president', 'VALID-PRESIDENT-ACTIVATION', 'President authorizes activation.');
+
+        $admin = app(ClubCutoverAuthorityAdministrationService::class);
+        $caAppointment = ClubAccountingCutoverAuthorityAppointment::query()->where('cutover_package_id', $package->id)->where('authority_type', 'independent_ca')->firstOrFail();
+        $admin->revokeAppointment($caAppointment, $fixture['grantor'], 'REVOKE-CA-FOR-PRESIDENT-ACT', 'Simulate an incorrect replacement appointment.');
+        $admin->appoint($package, $fixture['president'], 'independent_ca', 'APPOINT-PRESIDENT-AS-CA-ACT', $fixture['grantor']);
+
+        try {
+            $life->decide($package->fresh(), $fixture['president'], $package->fresh()->lock_version, 'activation', 'independent_ca', 'INVALID-PRESIDENT-CA-ACT', 'President must not act as the trusted reviewer.');
+            $this->fail('The President approver must not submit the independent-CA activation decision.');
+        } catch (CutoverPackageException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $this->assertSame(ClubAccountingCutoverPackage::STATUS_DRY_RUN_ACCEPTED, $package->fresh()->status);
+        $this->assertSame(1, $package->decisions()->where('decision_stage', 'activation')->count());
+    }
+
+    public function test_accounting_reviewer_cannot_make_president_decision(): void
+    {
+        $fixture = $this->businessApprovedFixture();
+
+        try {
+            app(ClubCutoverLifecycleService::class)->decide($fixture['package'], $fixture['ca'], $fixture['package']->lock_version, 'dry_run', 'president', 'INVALID-CA-PRESIDENT-DRY', 'CA must not act as President.');
+            $this->fail('The accounting reviewer must not submit a President decision.');
+        } catch (CutoverAuthorizationException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $this->assertSame(ClubAccountingCutoverPackage::STATUS_BUSINESS_APPROVED, $fixture['package']->fresh()->status);
+    }
+
+    public function test_duplicate_current_president_decision_is_rejected_but_revoked_decision_can_be_replaced(): void
+    {
+        $this->assertDuplicateDecisionRejectedAndReplacementAllowed('president', 'president');
+    }
+
+    public function test_duplicate_current_ca_decision_is_rejected_but_revoked_decision_can_be_replaced(): void
+    {
+        $this->assertDuplicateDecisionRejectedAndReplacementAllowed('independent_ca', 'ca');
+    }
+
+    public function test_database_rejects_duplicate_current_decision(): void
+    {
+        $fixture = $this->businessApprovedFixture();
+        $life = app(ClubCutoverLifecycleService::class);
+        $decision = $life->decide($fixture['package'], $fixture['president'], $fixture['package']->lock_version, 'dry_run', 'president', 'DB-GUARD-FIRST', 'Current President decision.');
+
+        $this->expectException(QueryException::class);
+        $decision->replicate()->fill(['public_id' => (string) Str::uuid(), 'decision_reference' => 'DB-GUARD-DUPLICATE'])->save();
     }
 
     public function test_scope_has_no_cutover_delivery_surface_or_source_integration(): void
@@ -307,20 +388,9 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
 
     private function authorizedFixture(): array
     {
-        $f = $this->baseFixture();
-        $admin = app(ClubCutoverAuthorityAdministrationService::class);
+        $f = $this->businessApprovedFixture();
         $life = app(ClubCutoverLifecycleService::class);
-        foreach ([[$f['preparer'], 'prepare'], [$f['verifier'], 'verify'], [$f['ca'], 'accounting-review'], [$f['ca'], 'dry-run-accept'], [$f['ca'], 'activate-authorize'], [$f['ca'], 'rollback-authorize'], [$f['president'], 'business-approve'], [$f['president'], 'dry-run-accept'], [$f['president'], 'activate-authorize'], [$f['president'], 'rollback-authorize'], [$f['operator'], 'execute']] as $index => [$user, $permission]) {
-            $admin->assignPermission($f['package'], $user, "finance.cutover.package.{$permission}", "ASSIGN-{$index}-{$permission}", $f['grantor']);
-        }
-        $admin->appoint($f['package'], $f['ca'], 'independent_ca', 'APPOINT-CA-001', $f['grantor']);
-        $admin->appoint($f['package'], $f['operator'], 'technical_operator', 'APPOINT-OPERATOR-001', $f['grantor']);
-        $p = $life->prepare($f['package'], $f['preparer'], $f['package']->lock_version);
-        $p = $life->verify($p, $f['verifier'], $p->lock_version);
-        $life->review($p, $f['ca'], $p->lock_version, 'OPENING-BALANCE-EQUITY', 'CA-REVIEW-001', '2027-07-02', 'Reconciled historical evidence substantiates opening balance equity.');
-        $p = $p->fresh();
-        $life->approve($p, $f['president'], $p->lock_version, '2027-07-03', 'PRESIDENT-APPROVAL-001');
-        $p = $p->fresh();
+        $p = $f['package']->fresh();
         $life->decide($p, $f['president'], $p->lock_version, 'dry_run', 'president', 'DRY-PRESIDENT-001', 'President accepts exact dry run.');
         $p = $p->fresh();
         $life->decide($p, $f['ca'], $p->lock_version, 'dry_run', 'independent_ca', 'DRY-CA-001', 'Independent CA accepts exact dry run.');
@@ -330,6 +400,46 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
         $life->decide($p, $f['ca'], $p->lock_version, 'activation', 'independent_ca', 'ACT-CA-001', 'Independent CA authorizes exact activation.');
 
         return [...$f, 'package' => $p->fresh()];
+    }
+
+    private function businessApprovedFixture(): array
+    {
+        $f = $this->baseFixture();
+        $admin = app(ClubCutoverAuthorityAdministrationService::class);
+        $life = app(ClubCutoverLifecycleService::class);
+        foreach ([[$f['preparer'], 'prepare'], [$f['verifier'], 'verify'], [$f['ca'], 'accounting-review'], [$f['ca'], 'dry-run-accept'], [$f['ca'], 'activate-authorize'], [$f['ca'], 'rollback-authorize'], [$f['president'], 'business-approve'], [$f['president'], 'dry-run-accept'], [$f['president'], 'activate-authorize'], [$f['president'], 'rollback-authorize'], [$f['operator'], 'execute']] as $index => [$user, $permission]) {
+            $admin->assignPermission($f['package'], $user, "finance.cutover.package.{$permission}", "ASSIGN-{$index}-{$permission}", $f['grantor']);
+        }
+        $admin->appoint($f['package'], $f['ca'], 'independent_ca', 'APPOINT-CA-001', $f['grantor']);
+        $admin->appoint($f['package'], $f['operator'], 'technical_operator', 'APPOINT-OPERATOR-001', $f['grantor']);
+        $package = $life->prepare($f['package'], $f['preparer'], $f['package']->lock_version);
+        $package = $life->verify($package, $f['verifier'], $package->lock_version);
+        $life->review($package, $f['ca'], $package->lock_version, 'OPENING-BALANCE-EQUITY', 'CA-REVIEW-001', '2027-07-02', 'Reconciled historical evidence substantiates opening balance equity.');
+        $package = $package->fresh();
+        $life->approve($package, $f['president'], $package->lock_version, '2027-07-03', 'PRESIDENT-APPROVAL-001');
+
+        return [...$f, 'package' => $package->fresh()];
+    }
+
+    private function assertDuplicateDecisionRejectedAndReplacementAllowed(string $authority, string $actorKey): void
+    {
+        $fixture = $this->businessApprovedFixture();
+        $life = app(ClubCutoverLifecycleService::class);
+        $package = $fixture['package']->fresh();
+        $decision = $life->decide($package, $fixture[$actorKey], $package->lock_version, 'dry_run', $authority, "FIRST-{$authority}", 'First current decision.');
+        $package = $package->fresh();
+        try {
+            $life->decide($package, $fixture[$actorKey], $package->lock_version, 'dry_run', $authority, "DUPLICATE-{$authority}", 'Duplicate current decision.');
+            $this->fail("A duplicate current {$authority} decision must fail.");
+        } catch (CutoverPackageException) {
+            $this->addToAssertionCount(1);
+        }
+        $this->assertSame(1, $package->decisions()->where('decision_stage', 'dry_run')->where('actor_authority', $authority)->count());
+
+        $life->revoke($decision, $fixture[$actorKey], "REVOKE-{$authority}", 'Withdraw current decision before replacement.');
+        $package = $package->fresh();
+        $life->decide($package, $fixture[$actorKey], $package->lock_version, 'dry_run', $authority, "REPLACEMENT-{$authority}", 'Legitimate replacement decision.');
+        $this->assertSame(2, $package->decisions()->where('decision_stage', 'dry_run')->where('actor_authority', $authority)->count());
     }
 
     private function baseFixture(): array

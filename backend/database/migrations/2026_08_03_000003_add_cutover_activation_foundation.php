@@ -380,6 +380,7 @@ return new class extends Migration
                 DB::unprepared("CREATE TRIGGER {$table}_immutable_delete BEFORE DELETE ON {$table} BEGIN SELECT RAISE(ABORT, '{$table}_immutable'); END");
             }
             DB::unprepared("CREATE TRIGGER cutover_one_active_appointment_guard BEFORE INSERT ON club_accounting_cutover_authority_appointments FOR EACH ROW WHEN EXISTS (SELECT 1 FROM club_accounting_cutover_authority_appointments a WHERE a.cutover_package_id = NEW.cutover_package_id AND a.authority_type = NEW.authority_type AND (a.expires_at IS NULL OR a.expires_at > CURRENT_TIMESTAMP) AND NOT EXISTS (SELECT 1 FROM club_accounting_cutover_authority_events e WHERE e.authority_appointment_id = a.id AND e.event_type IN ('revoked','invalidated'))) BEGIN SELECT RAISE(ABORT, 'cutover_one_active_appointment_guard'); END");
+            DB::unprepared("CREATE TRIGGER cutover_one_current_decision_guard BEFORE INSERT ON club_accounting_cutover_decisions FOR EACH ROW WHEN EXISTS (SELECT 1 FROM club_accounting_cutover_decisions d WHERE d.cutover_package_id = NEW.cutover_package_id AND d.decision_stage = NEW.decision_stage AND d.actor_authority = NEW.actor_authority AND NOT EXISTS (SELECT 1 FROM club_accounting_cutover_decision_events e WHERE e.cutover_decision_id = d.id AND e.event_type IN ('revoked','invalidated'))) BEGIN SELECT RAISE(ABORT, 'cutover_one_current_decision_guard'); END");
 
             return;
         }
@@ -402,6 +403,8 @@ return new class extends Migration
             }
             DB::unprepared("CREATE OR REPLACE FUNCTION cutover_guard_active_appointment() RETURNS trigger LANGUAGE plpgsql AS \$\$ BEGIN IF EXISTS (SELECT 1 FROM club_accounting_cutover_authority_appointments a WHERE a.cutover_package_id = NEW.cutover_package_id AND a.authority_type = NEW.authority_type AND (a.expires_at IS NULL OR a.expires_at > CURRENT_TIMESTAMP) AND NOT EXISTS (SELECT 1 FROM club_accounting_cutover_authority_events e WHERE e.authority_appointment_id = a.id AND e.event_type IN ('revoked','invalidated'))) THEN RAISE EXCEPTION 'one current package appointment is permitted per authority type'; END IF; RETURN NEW; END; \$\$");
             DB::unprepared('CREATE TRIGGER cutover_one_active_appointment_guard BEFORE INSERT ON club_accounting_cutover_authority_appointments FOR EACH ROW EXECUTE FUNCTION cutover_guard_active_appointment()');
+            DB::unprepared("CREATE OR REPLACE FUNCTION cutover_guard_current_decision() RETURNS trigger LANGUAGE plpgsql AS \$\$ BEGIN IF EXISTS (SELECT 1 FROM club_accounting_cutover_decisions d WHERE d.cutover_package_id = NEW.cutover_package_id AND d.decision_stage = NEW.decision_stage AND d.actor_authority = NEW.actor_authority AND NOT EXISTS (SELECT 1 FROM club_accounting_cutover_decision_events e WHERE e.cutover_decision_id = d.id AND e.event_type IN ('revoked','invalidated'))) THEN RAISE EXCEPTION 'one current decision is permitted per package, stage and authority'; END IF; RETURN NEW; END; \$\$");
+            DB::unprepared('CREATE TRIGGER cutover_one_current_decision_guard BEFORE INSERT ON club_accounting_cutover_decisions FOR EACH ROW EXECUTE FUNCTION cutover_guard_current_decision()');
         }
     }
 

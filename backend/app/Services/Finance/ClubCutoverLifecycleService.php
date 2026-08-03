@@ -100,23 +100,29 @@ final class ClubCutoverLifecycleService
             $requiredState = $stage === ClubAccountingCutoverDecision::STAGE_DRY_RUN ? ClubAccountingCutoverPackage::STATUS_BUSINESS_APPROVED : ClubAccountingCutoverPackage::STATUS_DRY_RUN_ACCEPTED;
             $locked = $this->lock($package, $expectedLockVersion, $requiredState);
             $permissionSlug = $stage === ClubAccountingCutoverDecision::STAGE_DRY_RUN ? 'finance.cutover.package.dry-run-accept' : 'finance.cutover.package.activate-authorize';
+            $review = $this->trustedReview($locked);
+            $approval = $this->trustedApproval($locked);
             $appointment = null;
             if ($authorityType === ClubAccountingCutoverDecision::ACTOR_PRESIDENT) {
                 $permission = $this->authority->president($locked, $actor, $permissionSlug);
+                if ($actor->id !== $approval->recorded_by_user_id) {
+                    throw new CutoverPackageException('The trusted President approver must make the President decision.');
+                }
             } elseif ($authorityType === ClubAccountingCutoverDecision::ACTOR_INDEPENDENT_CA) {
                 $appointment = $this->authority->appointment($locked, $actor, ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA);
                 $permission = $this->authority->permission($locked, $actor, $permissionSlug);
+                if ($actor->id !== $review->recorded_by_user_id || $actor->id === $approval->recorded_by_user_id) {
+                    throw new CutoverPackageException('The trusted accounting reviewer must make the independent-CA decision.');
+                }
             } else {
                 throw new CutoverPackageException('The decision authority is invalid.');
             }
-            $review = $this->trustedReview($locked);
-            $approval = $this->trustedApproval($locked);
-            if (in_array($actor->id, [$review->recorded_by_user_id, $approval->recorded_by_user_id], true) === false && $authorityType === ClubAccountingCutoverDecision::ACTOR_INDEPENDENT_CA) {
-                throw new CutoverPackageException('The appointed accounting reviewer must make the CA decision.');
+            if ($this->currentDecisions($locked, $stage)->where('actor_authority', $authorityType)->isNotEmpty()) {
+                throw new CutoverPackageException('A current decision already exists for this stage and authority.');
             }
             $decision = ClubAccountingCutoverDecision::create(['club_id' => $locked->club_id, 'cutover_package_id' => $locked->id, 'decision_stage' => $stage, 'actor_authority' => $authorityType, 'decision_result' => 'accepted', 'decision_reference' => $reference, 'package_version' => $locked->package_version, 'canonical_checksum' => $locked->canonical_checksum, 'chart_version' => $locked->chart_version, 'lions_year' => $locked->lions_year, 'cutover_date' => $locked->cutover_date, 'dr033_classification' => $locked->dr033_classification, 'accounting_review_id' => $review->id, 'president_approval_id' => $approval->id, 'authority_appointment_id' => $appointment?->id, 'permission_assignment_id' => $permission->id, 'recorded_by_user_id' => $actor->id, 'reason' => $reason, 'recorded_at' => now()]);
             $current = $this->currentDecisions($locked, $stage);
-            if ($current->where('actor_authority', ClubAccountingCutoverDecision::ACTOR_PRESIDENT)->count() === 1 && $current->where('actor_authority', ClubAccountingCutoverDecision::ACTOR_INDEPENDENT_CA)->count() === 1) {
+            if ($this->dualControlSatisfied($locked, $stage, $review, $approval, $current)) {
                 $locked->update(['status' => $stage === ClubAccountingCutoverDecision::STAGE_DRY_RUN ? ClubAccountingCutoverPackage::STATUS_DRY_RUN_ACCEPTED : ClubAccountingCutoverPackage::STATUS_ACTIVATION_AUTHORIZED, 'lock_version' => $locked->lock_version + 1, 'updated_by_user_id' => $actor->id]);
             } else {
                 $locked->update(['lock_version' => $locked->lock_version + 1, 'updated_by_user_id' => $actor->id]);
@@ -173,5 +179,29 @@ final class ClubCutoverLifecycleService
     private function currentDecisions(ClubAccountingCutoverPackage $package, string $stage)
     {
         return ClubAccountingCutoverDecision::query()->with('events')->where('cutover_package_id', $package->id)->where('decision_stage', $stage)->get()->reject(fn ($decision) => $decision->events->isNotEmpty());
+    }
+
+    private function dualControlSatisfied(ClubAccountingCutoverPackage $package, string $stage, ClubAccountingCutoverReview $review, ClubAccountingCutoverApproval $approval, $current): bool
+    {
+        $presidents = $current->where('actor_authority', ClubAccountingCutoverDecision::ACTOR_PRESIDENT)->values();
+        $accountants = $current->where('actor_authority', ClubAccountingCutoverDecision::ACTOR_INDEPENDENT_CA)->values();
+        if ($presidents->count() !== 1 || $accountants->count() !== 1) {
+            return false;
+        }
+
+        $president = $presidents->first();
+        $accountant = $accountants->first();
+
+        return $president->recorded_by_user_id === $approval->recorded_by_user_id
+            && $accountant->recorded_by_user_id === $review->recorded_by_user_id
+            && $president->recorded_by_user_id !== $accountant->recorded_by_user_id
+            && $president->accounting_review_id === $review->id
+            && $accountant->accounting_review_id === $review->id
+            && $president->president_approval_id === $approval->id
+            && $accountant->president_approval_id === $approval->id
+            && $president->package_version === $package->package_version
+            && $accountant->package_version === $package->package_version
+            && hash_equals($president->canonical_checksum, (string) $package->canonical_checksum)
+            && hash_equals($accountant->canonical_checksum, (string) $package->canonical_checksum);
     }
 }
