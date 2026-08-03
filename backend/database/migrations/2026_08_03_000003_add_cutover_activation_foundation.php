@@ -294,6 +294,7 @@ return new class extends Migration
             DB::unprepared('DROP FUNCTION IF EXISTS cutover_guard_posting_metadata()');
             DB::unprepared('DROP FUNCTION IF EXISTS cutover_reject_mutation() CASCADE');
             DB::unprepared('DROP FUNCTION IF EXISTS cutover_guard_active_appointment() CASCADE');
+            DB::unprepared('DROP FUNCTION IF EXISTS cutover_guard_current_decision() CASCADE');
             DB::unprepared('DROP FUNCTION IF EXISTS cutover_guard_accounting_content() CASCADE');
             DB::unprepared('DROP FUNCTION IF EXISTS cutover_guard_child_accounting_content() CASCADE');
         }
