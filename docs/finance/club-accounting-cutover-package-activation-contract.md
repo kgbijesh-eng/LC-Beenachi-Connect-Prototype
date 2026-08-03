@@ -2,7 +2,7 @@
 
 **Contract version:** `CUTOVER-AUTHORIZATION-CONTRACT-2026-01`
 
-**Status:** Proposed documentation contract only. This version is not a package version, Lions Year, evidence verification, accounting approval, activation authorization, schema authorization, or posting permission. It appoints no reviewer and accesses no operational data.
+**Status:** Approved authorization and lifecycle contract. This version approves permission semantics and package-specific separation rules only. It is not a package version, Lions Year, evidence verification, accounting approval, activation authorization, route or command authorization, schema authorization, or posting permission. It appoints no reviewer and accesses no operational data.
 
 ## 1. Boundary and prerequisites
 
@@ -118,13 +118,12 @@ Future controls must enforce:
 
 Reusable role labels do not appoint real people. Actual assignments remain governed by the decision register and future authenticated club membership and permission records.
 
-## 6. Future permission boundary
+## 6. Approved permission contract
 
-Security review must define distinct permissions for preparation, internal verification, accounting review, business approval, dry-run acceptance, activation authorization, technical execution, rollback authorization, and restricted-manifest viewing.
-
-Candidate concepts include:
+The following permission names and meanings are approved for a later implementation. They are deliberately distinct; possession of one never implies another:
 
 - `finance.cutover.package.prepare`
+- `finance.cutover.package.validate`
 - `finance.cutover.package.verify`
 - `finance.cutover.package.accounting-review`
 - `finance.cutover.package.business-approve`
@@ -134,7 +133,50 @@ Candidate concepts include:
 - `finance.cutover.package.rollback-authorize`
 - `finance.cutover.package.view-restricted-manifest`
 
-These names are not approved permissions and must not be seeded by this milestone. Existing `finance.manage`, `finance.void`, and `finance.club.statement.view` are insufficient for cutover authority. Role names alone confer no authority.
+`prepare` covers creation and accounting-content edits while a version remains editable. `validate` runs structural, schedule, evidence-reference, checksum, reconciliation, and preview checks but records no independent decision. `verify` records the Secretary/internal-verifier decision. The remaining names each authorize only the action stated in their name. `view-restricted-manifest` permits least-privilege manifest access, never unrestricted evidence-content access.
+
+This milestone does not seed or grant these permissions. Before any route, command, queue, or executable transition is introduced, a later implementation milestone must add the exact permissions, policies, package-scoped conflict checks, active club membership checks, tenant isolation, and tests. Existing `finance.manage`, `finance.void`, and `finance.club.statement.view` are insufficient. Role names alone confer no authority.
+
+### Role and decision matrix
+
+| Actor | Package responsibility | Permission required later | Same-package prohibition |
+|---|---|---|---|
+| Treasurer / appointed preparer | Create, edit while editable, submit as prepared, and run non-decisional validation | `prepare`; `validate` | Cannot internally verify, independently accounting-review, business-approve, dry-run accept, or activation-authorize that version |
+| Secretary / appointed internal verifier | Reproduce schedules, confirm evidence references and reconciliation, and record internal verification | `validate`; `verify`; time-limited manifest access where needed | Cannot have prepared that version; cannot substitute for CA review, business approval, or activation authorization |
+| President | Record the President's package-bound business approval; later jointly accept the dry run and authorize activation with the independent CA | `business-approve`; later `dry-run-accept`, `activate-authorize`, and `rollback-authorize` | Cannot have prepared, internally verified, or accounting-reviewed that version; cannot be the other joint authorizer; no club body, delegate, or other officer substitutes for the President |
+| Independent Chartered Accountant / accounting reviewer | Record the written DR-033 classification and accounting review; later accept the dry run, jointly authorize activation, and participate in rollback control | `accounting-review`; later `dry-run-accept`, `activate-authorize`, and `rollback-authorize`; time-limited manifest access | Cannot have prepared or internally verified that version; cannot execute it technically |
+| Technical operator | Later execute only the exact jointly authorized package | `execute` | Cannot prepare, verify, accounting-review, business-approve, dry-run accept, or activation-authorize it |
+| Normal Member | No cutover-package creation, edit, validation, manifest, decision, approval, authorization, execution, or rollback access | None | Explicitly denied every cutover permission |
+
+A person holding multiple club roles may exercise only non-conflicting authority. Conflicts are evaluated by authenticated actor identity for the exact package version, not merely by displayed role name. No self-review, shared credential, delegated assertion, emergency override, or generic administrator permission satisfies dual control.
+
+### Transition authority
+
+| From | To | Required actor and later permission |
+|---|---|---|
+| none / `DRAFT` | `DRAFT` or updated `DRAFT` | Treasurer/appointed preparer with `prepare` |
+| `DRAFT` | `PREPARED` | Same appointed preparer with `prepare`, after successful `validate` result |
+| `PREPARED` | `INTERNALLY_VERIFIED` | Secretary/appointed internal verifier with `verify` |
+| `INTERNALLY_VERIFIED` | `ACCOUNTING_REVIEWED` | Independent CA with `accounting-review`, written DR-033 decision, and exact binding |
+| `ACCOUNTING_REVIEWED` | `BUSINESS_APPROVED` | President with `business-approve`; no substitute actor is permitted. The prior independent-CA review and this President decision together constitute DR-043 joint final package approval |
+| `BUSINESS_APPROVED` | `DRY_RUN_ACCEPTED` | President and independent CA, separately authenticated, each with `dry-run-accept` |
+| `DRY_RUN_ACCEPTED` | `ACTIVATION_AUTHORIZED` | President and independent CA, separately authenticated, each with `activate-authorize` |
+| `ACTIVATION_AUTHORIZED` | `POSTED` | Technical operator with `execute`, only in a later posting milestone |
+
+The appropriate stage decision-maker may reject a package. Supersession and rollback follow these exact controls:
+
+- the appointed preparer may supersede only a `DRAFT` or `PREPARED` package using `prepare`;
+- once a package is `INTERNALLY_VERIFIED`, the preparer has no supersession authority;
+- superseding an `INTERNALLY_VERIFIED`, `ACCOUNTING_REVIEWED`, `BUSINESS_APPROVED`, `DRY_RUN_ACCEPTED`, or `ACTIVATION_AUTHORIZED` package requires separate package-bound decisions from the President and independent CA, each holding `rollback-authorize`;
+- Either the President or independent CA may revoke their own unconsumed dry-run or activation decision with `rollback-authorize`; one withdrawal immediately invalidates the joint acceptance or authorization and prevents execution;
+- after `POSTED`, supersession is prohibited. A linked full reversal requires separate President and independent-CA decisions, each with `rollback-authorize`, followed by execution by a technical operator with `execute`; a replacement is a new package with the complete lifecycle;
+- The Treasurer/preparer, Secretary/internal verifier, Normal Member, and technical operator have no rollback-authorize or approval-revocation authority for that package.
+
+All supersession, revocation, invalidation, reversal, and replacement decisions are append-only and never edit approved history. Their executable implementation remains a later milestone. No transition in this table creates an API or command in this milestone.
+
+### Required audit events
+
+Every later implementation must atomically retain append-only events for package creation, accounting-content change, validation result, preparation, internal-verification acceptance or rejection, accounting-review acceptance or rejection, club-approval acceptance or rejection, dry-run decisions, each activation-authorization decision, revocation or invalidation, rejection, supersession, execution attempt/result/replay, authorization consumption, posting linkage, rollback authorization, reversal, and replacement linkage. Each event binds club, tenant, package ID/version, checksum/fingerprint, actor identity, authenticated permission basis, prior/resulting state and lock version, timestamp, and opaque reason/reference. Sensitive evidence content is prohibited in audit payloads.
 
 ## 7. Activation authorization
 
@@ -146,7 +188,7 @@ It must be:
 - unconsumed before execution;
 - consumed atomically only when the opening journal is successfully created or an exact authorized idempotent replay is confirmed;
 - unable to authorize another package, version, fingerprint, checksum, club, coverage, source identity, or changed retry;
-- revocable before posting only through an append-only revocation record;
+- revocable before posting by either the President withdrawing the President decision or the independent CA withdrawing the CA decision, using `rollback-authorize` and an append-only package-bound revocation record;
 - automatically invalidated by package change, checksum change, supersession, rejection, expiry, role loss, failed prerequisite, new blocker, or authorization conflict;
 - permanently retained after consumption, revocation, expiry, or invalidation.
 
@@ -171,7 +213,9 @@ Any later package version must independently prove that the decision still appli
 
 ## 9. Rollback and reversal authority
 
-Before posting, rollback means preventing activation or append-only revocation/invalidation. After posting, correction means one linked full reversal and a separately approved replacement package. Posted journal headers and lines are never edited or deleted. Database restoration is not an ordinary correction method.
+Before posting, rollback means preventing activation or append-only revocation/invalidation. Either the President or independent CA can stop execution by withdrawing that actor's own unconsumed decision with `rollback-authorize`; neither can withdraw the other actor's decision. Resuming requires fresh decisions from both.
+
+After posting, correction means one linked full reversal jointly authorized through two separately authenticated package-bound `rollback-authorize` decisions: one by the President and one by the independent CA. The technical operator may execute that exact authorized reversal with `execute` but cannot authorize it. The preparer, Secretary, Normal Member, and technical operator cannot authorize rollback. A separately approved replacement package must complete the lifecycle from `DRAFT`. Posted journal headers and lines are never edited or deleted. Database restoration is not an ordinary correction method.
 
 Original package, authorization, journal, reversal, replacement, and every decision remain linked and retained. Source integrations and authoritative statements remain stopped until correction and revalidation are complete.
 
