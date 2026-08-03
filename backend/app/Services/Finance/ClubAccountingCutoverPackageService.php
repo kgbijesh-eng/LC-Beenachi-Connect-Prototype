@@ -1,0 +1,497 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\Finance;
+
+use App\Models\AuditLog;
+use App\Models\Club;
+use App\Models\ClubAccountingCutoverApproval;
+use App\Models\ClubAccountingCutoverPackage;
+use App\Models\ClubAccountingCutoverReview;
+use App\Models\ClubAccountingCutoverScheduleRow;
+use App\Models\ClubJournalEntry;
+use App\Models\LedgerAccount;
+use App\Models\User;
+use App\Services\Finance\Exceptions\CutoverPackageException;
+use DateTimeImmutable;
+use Illuminate\Support\Facades\DB;
+use JsonException;
+
+final class ClubAccountingCutoverPackageService
+{
+    public const PREVIEW_CONTRACT = 'OPENING-JOURNAL-PREVIEW-2026-01';
+
+    private const REQUIRED_SCHEDULES = [
+        'cash_on_hand', 'bank_account', 'member_receivables', 'liability', 'external_restriction',
+        'other_asset', 'general_club_fund', 'service_activity_fund', 'fellowship_member_activity_fund',
+        'equity_preview',
+    ];
+
+    private const POSTING_TYPES = [
+        'cash_on_hand', 'bank_account', 'member_receivables', 'liability', 'external_restriction',
+        'other_asset', 'equity_preview',
+    ];
+
+    private const PRESENTATION_GROUPS = [
+        'general_club_fund' => 'GENERAL-CLUB-FUND',
+        'service_activity_fund' => 'SERVICE-ACTIVITY-FUND',
+        'fellowship_member_activity_fund' => 'FELLOWSHIP-MEMBER-ACTIVITY-FUND',
+    ];
+
+    private const REQUIRED_EVIDENCE = ['cash_count', 'bank_reconciliation', 'member_receivables', 'liabilities_restrictions', 'reconciliation'];
+
+    public function createDraft(int $clubId, int $actorUserId, int $packageVersion = 1): ClubAccountingCutoverPackage
+    {
+        if ($packageVersion < 1 || ! Club::query()->whereKey($clubId)->exists() || ! User::query()->whereKey($actorUserId)->exists()) {
+            throw new CutoverPackageException('The cutover package request is invalid.');
+        }
+
+        return DB::transaction(function () use ($clubId, $actorUserId, $packageVersion): ClubAccountingCutoverPackage {
+            $package = ClubAccountingCutoverPackage::create([
+                'club_id' => $clubId,
+                'lions_year' => ClubAccountingCutoverPackage::LIONS_YEAR,
+                'cutover_date' => ClubAccountingCutoverPackage::CUTOVER_DATE,
+                'chart_version' => ClubAccountingCutoverPackage::CHART_VERSION,
+                'package_version' => $packageVersion,
+                'status' => ClubAccountingCutoverPackage::STATUS_DRAFT,
+                'currency' => ClubAccountingCutoverPackage::CURRENCY_INR,
+                'reconciliation_difference_paise' => 0,
+                'activation_ready' => false,
+                'lock_version' => 1,
+                'created_by_user_id' => $actorUserId,
+                'updated_by_user_id' => $actorUserId,
+            ]);
+            $this->audit($package, $actorUserId, 'finance.cutover_package.created', ['package_version' => $packageVersion]);
+
+            return $package->fresh();
+        });
+    }
+
+    public function replaceSchedules(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, array $rows): ClubAccountingCutoverPackage
+    {
+        $normalized = $this->normalizeScheduleRows($clubId, $rows);
+
+        return $this->mutate($clubId, $packageId, $actorUserId, $expectedLockVersion, 'schedules changed', function (ClubAccountingCutoverPackage $package) use ($normalized): void {
+            $package->scheduleRows()->delete();
+            foreach ($normalized as $row) {
+                $package->scheduleRows()->create(['club_id' => $package->club_id, ...$row]);
+            }
+        });
+    }
+
+    public function replaceEvidenceReferences(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, array $references): ClubAccountingCutoverPackage
+    {
+        $normalized = $this->normalizeEvidence($references);
+
+        return $this->mutate($clubId, $packageId, $actorUserId, $expectedLockVersion, 'evidence references changed', function (ClubAccountingCutoverPackage $package) use ($normalized): void {
+            $package->evidenceReferences()->delete();
+            foreach ($normalized as $reference) {
+                $package->evidenceReferences()->create(['club_id' => $package->club_id, ...$reference]);
+            }
+        });
+    }
+
+    public function validate(ClubAccountingCutoverPackage $package): array
+    {
+        $package = $this->loadCanonical($package);
+        $checks = [];
+        $checks['cutover_date'] = $package->cutover_date->format('Y-m-d') === ClubAccountingCutoverPackage::CUTOVER_DATE;
+        $checks['lions_year'] = $package->lions_year === ClubAccountingCutoverPackage::LIONS_YEAR;
+        $checks['chart_version'] = $package->chart_version === ClubAccountingCutoverPackage::CHART_VERSION;
+        $checks['currency'] = $package->currency === ClubAccountingCutoverPackage::CURRENCY_INR;
+        $checks['package_version'] = $package->package_version > 0;
+
+        $types = $package->scheduleRows->pluck('schedule_type');
+        foreach (self::REQUIRED_SCHEDULES as $type) {
+            $checks["schedule:{$type}"] = $types->contains($type);
+        }
+        $checks['unique_row_keys'] = $package->scheduleRows->pluck('row_key')->unique()->count() === $package->scheduleRows->count();
+        $mapped = $package->scheduleRows->whereIn('schedule_type', self::POSTING_TYPES)->whereNotNull('ledger_account_id');
+        $checks['unique_account_mappings'] = $mapped->pluck('ledger_account_id')->unique()->count() === $mapped->count();
+        $checks['eligible_accounts'] = $package->scheduleRows->every(function (ClubAccountingCutoverScheduleRow $row) use ($package): bool {
+            if (! in_array($row->schedule_type, self::POSTING_TYPES, true)) {
+                return $row->ledger_account_id === null;
+            }
+            if ($row->schedule_type === 'equity_preview' && $package->dr033_classification === null) {
+                return $row->ledger_account_id === null;
+            }
+
+            if ($row->ledgerAccount === null || $row->ledgerAccount->club_id !== $package->club_id
+                || ! $row->ledgerAccount->is_active || $row->ledgerAccount->currency !== $package->currency) {
+                return false;
+            }
+            if ($row->schedule_type === 'equity_preview') {
+                return $row->ledgerAccount->account_type === LedgerAccount::TYPE_EQUITY
+                    && $row->ledgerAccount->code === $package->dr033_classification;
+            }
+
+            return true;
+        });
+        $checks['directions'] = $package->scheduleRows->every(fn (ClubAccountingCutoverScheduleRow $row): bool => $this->validDirection($row));
+        $checks['presentation_groups'] = collect(self::PRESENTATION_GROUPS)->every(function (string $group, string $type) use ($package): bool {
+            $rows = $package->scheduleRows->where('schedule_type', $type);
+
+            return $rows->isNotEmpty() && $rows->every(fn ($row): bool => $row->presentation_group === $group && $row->ledger_account_id === null);
+        });
+
+        $evidenceTypes = $package->evidenceReferences->where('verification_status', 'verified')->pluck('evidence_type');
+        foreach (self::REQUIRED_EVIDENCE as $type) {
+            $checks["evidence:{$type}"] = $evidenceTypes->contains($type);
+        }
+        $difference = $this->reconciliationDifference($package);
+        $checks['reconciliation_zero'] = $difference === 0;
+
+        return ['valid' => ! in_array(false, $checks, true), 'checks' => $checks, 'failure_reasons' => array_keys(array_filter($checks, fn (bool $passed): bool => ! $passed)), 'reconciliation_difference_paise' => $difference];
+    }
+
+    public function refreshValidation(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion): ClubAccountingCutoverPackage
+    {
+        return DB::transaction(function () use ($clubId, $packageId, $actorUserId, $expectedLockVersion): ClubAccountingCutoverPackage {
+            $package = $this->lockPackage($clubId, $packageId, $expectedLockVersion);
+            $validation = $this->validate($package);
+            $checksum = $this->checksum($package);
+            $package->update([
+                'last_validated_at' => now(), 'canonical_checksum' => $checksum,
+                'reconciliation_difference_paise' => $validation['reconciliation_difference_paise'],
+                'activation_ready' => false, 'readiness_checked_at' => null,
+                'updated_by_user_id' => $actorUserId, 'lock_version' => $package->lock_version + 1,
+            ]);
+            $this->audit($package, $actorUserId, 'finance.cutover_package.validated', ['valid' => $validation['valid'], 'checksum' => $checksum]);
+
+            return $this->loadCanonical($package->fresh());
+        });
+    }
+
+    public function checksum(ClubAccountingCutoverPackage $package): string
+    {
+        $package = $this->loadCanonical($package);
+        $content = [
+            'club_id' => $package->club_id,
+            'cutover_date' => $package->cutover_date->format('Y-m-d'),
+            'lions_year' => $package->lions_year,
+            'chart_version' => $package->chart_version,
+            'package_version' => $package->package_version,
+            'currency' => $package->currency,
+            'dr033_classification' => $package->dr033_classification,
+            'schedule_rows' => $package->scheduleRows->map(fn ($row): array => [
+                'schedule_type' => $row->schedule_type, 'row_key' => $row->row_key,
+                'label' => $row->non_sensitive_label, 'account_code' => $row->ledgerAccount?->code,
+                'presentation_group' => $row->presentation_group, 'direction' => $row->direction,
+                'amount_paise' => $row->amount_paise,
+            ])->sortBy(fn (array $row): string => $row['schedule_type'].'|'.$row['row_key'])->values()->all(),
+            'evidence_references' => $package->evidenceReferences->map(fn ($evidence): array => [
+                'evidence_type' => $evidence->evidence_type, 'opaque_reference' => $evidence->opaque_reference,
+                'evidence_date' => $evidence->evidence_date->format('Y-m-d'), 'evidence_version' => $evidence->evidence_version,
+                'digest_sha256' => $evidence->digest_sha256, 'verification_status' => $evidence->verification_status,
+            ])->sortBy(fn (array $row): string => $row['evidence_type'].'|'.$row['opaque_reference'])->values()->all(),
+        ];
+
+        try {
+            return hash('sha256', json_encode($content, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+        } catch (JsonException $exception) {
+            throw new CutoverPackageException('The cutover package checksum cannot be calculated.', previous: $exception);
+        }
+    }
+
+    public function recordAccountingReview(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, string $reviewerIdentifier, string $reviewDate, string $classification, string $rationale): ClubAccountingCutoverReview
+    {
+        if (! in_array($classification, [ClubAccountingCutoverPackage::CLASSIFICATION_OPENING_EQUITY, ClubAccountingCutoverPackage::CLASSIFICATION_ACCUMULATED_SURPLUS], true)
+            || trim($reviewerIdentifier) === '' || $this->containsSensitiveValue($reviewerIdentifier)
+            || strlen(trim($rationale)) < 20 || $this->containsSensitiveValue($rationale) || ! $this->validDate($reviewDate)) {
+            throw new CutoverPackageException('The accounting review is invalid.');
+        }
+
+        return DB::transaction(function () use ($clubId, $packageId, $actorUserId, $expectedLockVersion, $reviewerIdentifier, $reviewDate, $classification, $rationale): ClubAccountingCutoverReview {
+            $package = $this->lockPackage($clubId, $packageId, $expectedLockVersion);
+            $package->update(['dr033_classification' => $classification]);
+            $package = $this->loadCanonical($package->fresh());
+            $validation = $this->validate($package);
+            if (! $validation['valid']) {
+                throw new CutoverPackageException('The package must pass structural reconciliation before accounting review.');
+            }
+            $checksum = $this->checksum($package);
+            $this->invalidateBindings($package, 'accounting review superseded');
+            $review = $package->reviews()->create([
+                'club_id' => $clubId, 'reviewer_identifier' => trim($reviewerIdentifier), 'review_date' => $reviewDate,
+                'selected_classification' => $classification, 'written_rationale' => trim($rationale),
+                'package_version' => $package->package_version, 'chart_version' => $package->chart_version,
+                'package_checksum' => $checksum, 'status' => 'current', 'recorded_by_user_id' => $actorUserId, 'recorded_at' => now(),
+            ]);
+            $package->update(['canonical_checksum' => $checksum, 'updated_by_user_id' => $actorUserId, 'lock_version' => $package->lock_version + 1, 'activation_ready' => false, 'readiness_checked_at' => null]);
+            $this->audit($package, $actorUserId, 'finance.cutover_package.accounting_review_recorded', ['review_public_id' => $review->public_id, 'checksum' => $checksum]);
+
+            return $review->fresh();
+        });
+    }
+
+    public function recordClubApproval(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, string $authority, string $approvalDate, string $reference): ClubAccountingCutoverApproval
+    {
+        if (trim($authority) === '' || $this->containsSensitiveValue($authority) || ! $this->validDate($approvalDate)) {
+            throw new CutoverPackageException('The club approval is invalid.');
+        }
+        $this->assertOpaque($reference, 'approval reference');
+
+        return DB::transaction(function () use ($clubId, $packageId, $actorUserId, $expectedLockVersion, $authority, $approvalDate, $reference): ClubAccountingCutoverApproval {
+            $package = $this->lockPackage($clubId, $packageId, $expectedLockVersion);
+            $checksum = $this->checksum($package);
+            $review = $package->reviews()->where('status', 'current')->latest('id')->first();
+            if (! $review || $review->package_checksum !== $checksum || $package->canonical_checksum !== $checksum) {
+                throw new CutoverPackageException('A current matching accounting review is required.');
+            }
+            $this->invalidateApprovals($package, 'club approval superseded');
+            $approval = $package->approvals()->create([
+                'club_id' => $clubId, 'approval_authority' => trim($authority), 'approval_date' => $approvalDate,
+                'approval_reference' => strtoupper(trim($reference)), 'package_version' => $package->package_version,
+                'chart_version' => $package->chart_version, 'package_checksum' => $checksum, 'status' => 'current',
+                'recorded_by_user_id' => $actorUserId, 'recorded_at' => now(),
+            ]);
+            $package->update(['updated_by_user_id' => $actorUserId, 'lock_version' => $package->lock_version + 1, 'activation_ready' => false, 'readiness_checked_at' => null]);
+            $this->audit($package, $actorUserId, 'finance.cutover_package.club_approval_recorded', ['approval_public_id' => $approval->public_id, 'checksum' => $checksum]);
+
+            return $approval->fresh();
+        });
+    }
+
+    public function preview(ClubAccountingCutoverPackage $package): array
+    {
+        $package = $this->loadCanonical($package);
+        $lines = $package->scheduleRows->whereIn('schedule_type', self::POSTING_TYPES)->filter(fn ($row): bool => $row->amount_paise > 0)->map(function ($row) use ($package): array {
+            $unresolved = $row->schedule_type === 'equity_preview' && $package->dr033_classification === null;
+
+            return [
+                'row_key' => $row->row_key, 'account_code' => $unresolved ? null : $row->ledgerAccount?->code,
+                'unresolved_classification' => $unresolved, 'direction' => $row->direction,
+                'debit_paise' => $row->direction === 'debit' ? $row->amount_paise : 0,
+                'credit_paise' => $row->direction === 'credit' ? $row->amount_paise : 0,
+            ];
+        })->sortBy(fn (array $line): string => $line['row_key'])->values();
+        $debits = $lines->sum('debit_paise');
+        $credits = $lines->sum('credit_paise');
+
+        return [
+            'contract_version' => self::PREVIEW_CONTRACT,
+            'status' => $package->dr033_classification === null ? 'BLOCKED_DR033' : ($debits === $credits ? 'BALANCED_PREVIEW' : 'UNBALANCED_PREVIEW'),
+            'writes_performed' => false,
+            'header' => ['club_id' => $package->club_id, 'effective_date' => $package->cutover_date->format('Y-m-d'), 'lions_year' => $package->lions_year, 'source_type' => 'accounting_opening_package_preview', 'package_version' => $package->package_version, 'package_checksum' => $this->checksum($package), 'dr033_classification' => $package->dr033_classification],
+            'lines' => $lines->all(), 'total_debit_paise' => $debits, 'total_credit_paise' => $credits, 'balanced' => $debits === $credits,
+        ];
+    }
+
+    public function readiness(ClubAccountingCutoverPackage $package): array
+    {
+        $package = $this->loadCanonical($package);
+        $validation = $this->validate($package);
+        $checksum = $this->checksum($package);
+        $review = $package->reviews->where('status', 'current')->sortByDesc('id')->first();
+        $approval = $package->approvals->where('status', 'current')->sortByDesc('id')->first();
+        $preview = $this->preview($package);
+        $checks = $validation['checks'] + [
+            'checksum_current' => $package->canonical_checksum !== null && hash_equals($package->canonical_checksum, $checksum),
+            'dr033_selected' => in_array($package->dr033_classification, [ClubAccountingCutoverPackage::CLASSIFICATION_OPENING_EQUITY, ClubAccountingCutoverPackage::CLASSIFICATION_ACCUMULATED_SURPLUS], true),
+            'accounting_review_current' => $this->bindingMatches($package, $review, $checksum),
+            'club_approval_current' => $this->bindingMatches($package, $approval, $checksum),
+            'no_previous_activation' => ! ClubJournalEntry::query()->where('club_id', $package->club_id)->where('source_type', 'accounting_opening_package')->exists(),
+            'opening_preview_balanced' => $preview['balanced'] && $preview['status'] === 'BALANCED_PREVIEW',
+        ];
+
+        return ['ready' => ! in_array(false, $checks, true), 'checks' => $checks, 'failure_reasons' => array_keys(array_filter($checks, fn (bool $passed): bool => ! $passed)), 'package_checksum' => $checksum, 'preview' => $preview];
+    }
+
+    private function mutate(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, string $reason, callable $mutation): ClubAccountingCutoverPackage
+    {
+        return DB::transaction(function () use ($clubId, $packageId, $actorUserId, $expectedLockVersion, $reason, $mutation): ClubAccountingCutoverPackage {
+            $package = $this->lockPackage($clubId, $packageId, $expectedLockVersion);
+            if ($package->status !== ClubAccountingCutoverPackage::STATUS_DRAFT) {
+                throw new CutoverPackageException('Only draft cutover packages may be edited.');
+            }
+            $mutation($package);
+            $this->invalidateBindings($package, $reason);
+            $package->update([
+                'canonical_checksum' => null, 'last_validated_at' => null, 'dr033_classification' => null,
+                'activation_ready' => false, 'readiness_checked_at' => null, 'invalidation_reason' => $reason,
+                'updated_by_user_id' => $actorUserId, 'lock_version' => $package->lock_version + 1,
+            ]);
+            $this->audit($package, $actorUserId, 'finance.cutover_package.accounting_content_changed', ['reason' => $reason, 'lock_version' => $package->lock_version]);
+
+            return $this->loadCanonical($package->fresh());
+        });
+    }
+
+    private function normalizeScheduleRows(int $clubId, array $rows): array
+    {
+        if (! array_is_list($rows) || $rows === []) {
+            throw new CutoverPackageException('Cutover schedules are required.');
+        }
+        $normalized = [];
+        $keys = [];
+        $accountIds = [];
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                throw new CutoverPackageException('A cutover schedule row is invalid.');
+            }
+            $type = strtolower(trim((string) ($row['schedule_type'] ?? '')));
+            $key = strtoupper(trim((string) ($row['row_key'] ?? '')));
+            $label = trim((string) ($row['non_sensitive_label'] ?? ''));
+            $direction = strtolower(trim((string) ($row['direction'] ?? '')));
+            $amount = $row['amount_paise'] ?? null;
+            $accountId = $row['ledger_account_id'] ?? null;
+            $group = isset($row['presentation_group']) ? strtoupper(trim((string) $row['presentation_group'])) : null;
+            if (! in_array($type, self::REQUIRED_SCHEDULES, true) || ! preg_match('/\A[A-Z][A-Z0-9-]{1,79}\z/', $key)
+                || $label === '' || $this->containsSensitiveValue($label) || ! in_array($direction, ['debit', 'credit'], true)
+                || ! is_int($amount) || $amount < 0 || ($accountId !== null && (! is_int($accountId) || $accountId < 1)) || isset($keys[$key])) {
+                throw new CutoverPackageException('A cutover schedule row is invalid.');
+            }
+            $keys[$key] = true;
+            if ($accountId !== null) {
+                if (isset($accountIds[$accountId])) {
+                    throw new CutoverPackageException('Duplicate account mappings are prohibited.');
+                }
+                $accountIds[$accountId] = true;
+                $account = LedgerAccount::query()->whereKey($accountId)->first();
+                if (! $account || $account->club_id !== $clubId || ! $account->is_active) {
+                    throw new CutoverPackageException('A cutover account mapping violates club scope or eligibility.');
+                }
+            }
+            $normalized[] = ['schedule_type' => $type, 'row_key' => $key, 'non_sensitive_label' => $label, 'ledger_account_id' => $accountId, 'presentation_group' => $group, 'direction' => $direction, 'amount_paise' => $amount];
+        }
+
+        return $normalized;
+    }
+
+    private function normalizeEvidence(array $references): array
+    {
+        if (! array_is_list($references)) {
+            throw new CutoverPackageException('Evidence references are invalid.');
+        }
+        $normalized = [];
+        $seen = [];
+        foreach ($references as $reference) {
+            if (! is_array($reference)) {
+                throw new CutoverPackageException('An evidence reference is invalid.');
+            }
+            $type = strtolower(trim((string) ($reference['evidence_type'] ?? '')));
+            $opaque = strtoupper(trim((string) ($reference['opaque_reference'] ?? '')));
+            $version = strtoupper(trim((string) ($reference['evidence_version'] ?? '')));
+            $status = strtolower(trim((string) ($reference['verification_status'] ?? '')));
+            $date = (string) ($reference['evidence_date'] ?? '');
+            $digest = isset($reference['digest_sha256']) ? strtolower(trim((string) $reference['digest_sha256'])) : null;
+            $note = isset($reference['reviewer_note']) ? trim((string) $reference['reviewer_note']) : null;
+            $this->assertOpaque($opaque, 'evidence reference');
+            if (! preg_match('/\A[a-z][a-z0-9_]{2,39}\z/', $type) || ! preg_match('/\A[A-Z0-9][A-Z0-9._:-]{0,39}\z/', $version)
+                || ! in_array($status, ['unverified', 'verified', 'rejected'], true) || ! $this->validDate($date)
+                || ($digest !== null && ! preg_match('/\A[a-f0-9]{64}\z/', $digest)) || ($note !== null && ($this->containsSensitiveValue($note) || strlen($note) > 500)) || isset($seen[$opaque])) {
+                throw new CutoverPackageException('An evidence reference is invalid.');
+            }
+            $seen[$opaque] = true;
+            $normalized[] = ['evidence_type' => $type, 'opaque_reference' => $opaque, 'evidence_date' => $date, 'evidence_version' => $version, 'digest_sha256' => $digest, 'verification_status' => $status, 'reviewer_note' => $note];
+        }
+
+        return $normalized;
+    }
+
+    private function lockPackage(int $clubId, int $packageId, int $expectedLockVersion): ClubAccountingCutoverPackage
+    {
+        $package = ClubAccountingCutoverPackage::query()->whereKey($packageId)->lockForUpdate()->first();
+        if (! $package || $package->club_id !== $clubId) {
+            throw new CutoverPackageException('The cutover package violates club scope.');
+        }
+        if ($package->lock_version !== $expectedLockVersion) {
+            throw new CutoverPackageException('The cutover package lock version is stale.');
+        }
+
+        return $package;
+    }
+
+    private function loadCanonical(ClubAccountingCutoverPackage $package): ClubAccountingCutoverPackage
+    {
+        return $package->load([
+            'scheduleRows' => fn ($query) => $query->with('ledgerAccount')->orderBy('schedule_type')->orderBy('row_key'),
+            'evidenceReferences' => fn ($query) => $query->orderBy('evidence_type')->orderBy('opaque_reference'),
+            'reviews' => fn ($query) => $query->orderBy('id'), 'approvals' => fn ($query) => $query->orderBy('id'),
+        ]);
+    }
+
+    private function invalidateBindings(ClubAccountingCutoverPackage $package, string $reason): void
+    {
+        $attributes = ['status' => 'invalidated', 'invalidated_at' => now(), 'invalidation_reason' => $reason];
+        $package->reviews()->where('status', 'current')->update($attributes);
+        $package->approvals()->where('status', 'current')->update($attributes);
+    }
+
+    private function invalidateApprovals(ClubAccountingCutoverPackage $package, string $reason): void
+    {
+        $package->approvals()->where('status', 'current')->update([
+            'status' => 'invalidated', 'invalidated_at' => now(), 'invalidation_reason' => $reason,
+        ]);
+    }
+
+    private function reconciliationDifference(ClubAccountingCutoverPackage $package): int
+    {
+        $debits = 0;
+        $credits = 0;
+        foreach ($package->scheduleRows->whereIn('schedule_type', self::POSTING_TYPES) as $row) {
+            if ($row->direction === 'debit') {
+                $debits = $this->checkedAdd($debits, $row->amount_paise);
+            } else {
+                $credits = $this->checkedAdd($credits, $row->amount_paise);
+            }
+        }
+
+        return $debits - $credits;
+    }
+
+    private function checkedAdd(int $total, int $amount): int
+    {
+        if ($amount > PHP_INT_MAX - $total) {
+            throw new CutoverPackageException('A cutover monetary total exceeds the supported range.');
+        }
+
+        return $total + $amount;
+    }
+
+    private function validDirection(ClubAccountingCutoverScheduleRow $row): bool
+    {
+        if (in_array($row->schedule_type, ['cash_on_hand', 'bank_account', 'member_receivables', 'other_asset'], true)) {
+            return $row->direction === 'debit';
+        }
+        if (in_array($row->schedule_type, ['liability', 'external_restriction'], true)) {
+            return $row->direction === 'credit';
+        }
+
+        return in_array($row->direction, ['debit', 'credit'], true);
+    }
+
+    private function bindingMatches(ClubAccountingCutoverPackage $package, mixed $binding, string $checksum): bool
+    {
+        return $binding !== null && $binding->package_version === $package->package_version
+            && $binding->chart_version === $package->chart_version && hash_equals($binding->package_checksum, $checksum);
+    }
+
+    private function assertOpaque(string $value, string $field): void
+    {
+        if (! preg_match('/\A[A-Z0-9][A-Z0-9._:-]{5,119}\z/', strtoupper(trim($value))) || $this->containsSensitiveValue($value)) {
+            throw new CutoverPackageException("The {$field} must be a non-sensitive opaque identifier.");
+        }
+    }
+
+    private function containsSensitiveValue(string $value): bool
+    {
+        return (bool) preg_match('~(?:https?://|file:/{2}|[A-Za-z]:[\\\\/]|/(?:home|users|var|private)/|BEGIN [A-Z ]+KEY|password|secret|bearer|auth(?:entication)?[_ -]?token|account\s*(?:number|no\.?|#)?\s*\d{6,})~i', $value);
+    }
+
+    private function validDate(string $date): bool
+    {
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+
+        return $parsed !== false && $parsed->format('Y-m-d') === $date;
+    }
+
+    private function audit(ClubAccountingCutoverPackage $package, int $actorUserId, string $action, array $metadata): void
+    {
+        if (! User::query()->whereKey($actorUserId)->exists()) {
+            throw new CutoverPackageException('The cutover actor is invalid.');
+        }
+        AuditLog::create(['club_id' => $package->club_id, 'user_id' => $actorUserId, 'action' => $action, 'auditable_type' => ClubAccountingCutoverPackage::class, 'auditable_id' => $package->id, 'metadata' => $metadata]);
+    }
+}
