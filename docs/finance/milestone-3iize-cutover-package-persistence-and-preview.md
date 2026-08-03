@@ -31,6 +31,8 @@ A corrective integrity migration applies the repository's PostgreSQL `CHECK`/SQL
 
 The checksum is SHA-256 over canonical JSON containing club, cutover date, Lions Year, chart and package versions, currency, DR-033 selection, every schedule amount/mapping/presentation group, and every contractually relevant evidence reference. Schedule rows and evidence references are sorted by stable semantic keys. Database IDs, public IDs, timestamps, lock version, and incidental insertion order are excluded. Ledger mappings enter the checksum as immutable canonical account codes.
 
+Every validation, checksum, preview, and readiness call refetches the parent package by primary key before loading canonical relations. Transient, deleted, or otherwise unavailable package models fail closed, and unsaved in-memory attributes never influence an accounting result.
+
 Any accounting-content change clears the checksum and readiness snapshot, clears DR-033, and invalidates every current review and approval while retaining their records and invalidation reason.
 
 Recording a replacement accounting review invalidates the prior current review and every current approval before inserting the new binding. Recording a replacement club approval invalidates the prior current approval. Both operations lock the parent package row, and partial unique indexes provide a second concurrency barrier at the database level.
@@ -40,6 +42,8 @@ Recording a replacement accounting review invalidates the prior current review a
 DR-033 has no database or application default. Only `OPENING-BALANCE-EQUITY` and `ACCUMULATED-SURPLUS` are accepted. Selection occurs only inside the accounting-review operation after structural and zero-difference validation. The selected code must map to an active, same-club INR equity account with that exact canonical code. No value, sign, or net-asset calculation selects a classification.
 
 The review binds the exact package version, chart version, checksum, reviewer identifier, date, and written rationale. Club approval is permitted only after a current matching review and binds the same identity triple. Neither record stores a signature or professional file.
+
+Readiness additionally requires the current review's selected classification to equal the persisted package's DR-033 classification; matching versions and checksums alone are insufficient.
 
 ## Schedule and preview semantics
 

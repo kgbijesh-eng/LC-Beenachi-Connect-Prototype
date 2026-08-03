@@ -74,29 +74,49 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
     public function test_checksum_is_order_independent_and_changes_for_one_paise_mapping_group_or_evidence(): void
     {
         $fixture = $this->fixture();
-        $first = $this->populatedPackage($fixture);
-        $second = $this->service()->createDraft($fixture['club']->id, $fixture['actor']->id, 2);
-        $second = $this->service()->replaceSchedules($fixture['club']->id, $second->id, $fixture['actor']->id, 1, array_reverse($this->rows($fixture)));
-        $second = $this->service()->replaceEvidenceReferences($fixture['club']->id, $second->id, $fixture['actor']->id, 2, array_reverse($this->evidence()));
-
-        // Package version is semantically relevant, so normalize it only for this equality assertion.
-        $second->package_version = 1;
-        $this->assertSame($this->service()->checksum($first), $this->service()->checksum($second));
+        $package = $this->populatedPackage($fixture);
+        $baseline = $this->service()->checksum($package);
+        $package = $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, array_reverse($this->rows($fixture)));
+        $package = $this->service()->replaceEvidenceReferences($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, array_reverse($this->evidence()));
+        $this->assertSame($baseline, $this->service()->checksum($package));
 
         $changed = $this->rows($fixture);
         $changed[0]['amount_paise']++;
-        $first = $this->service()->replaceSchedules($fixture['club']->id, $first->id, $fixture['actor']->id, $first->lock_version, $changed);
-        $this->assertNotSame($this->service()->checksum($second), $this->service()->checksum($first));
+        $package = $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, $changed);
+        $this->assertNotSame($baseline, $this->service()->checksum($package));
 
         $changed = $this->rows($fixture);
         $changed[6]['presentation_group'] = 'SERVICE-ACTIVITY-FUND';
-        $first = $this->service()->replaceSchedules($fixture['club']->id, $first->id, $fixture['actor']->id, $first->lock_version, $changed);
-        $this->assertNotSame($this->service()->checksum($second), $this->service()->checksum($first));
+        $package = $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, $changed);
+        $this->assertNotSame($baseline, $this->service()->checksum($package));
+
+        $package = $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, $this->rows($fixture));
 
         $changedEvidence = $this->evidence();
         $changedEvidence[0]['opaque_reference'] = 'EVIDENCE-CASH-002';
-        $first = $this->service()->replaceEvidenceReferences($fixture['club']->id, $first->id, $fixture['actor']->id, $first->lock_version, $changedEvidence);
-        $this->assertNotSame($this->service()->checksum($second), $this->service()->checksum($first));
+        $package = $this->service()->replaceEvidenceReferences($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, $changedEvidence);
+        $this->assertNotSame($baseline, $this->service()->checksum($package));
+    }
+
+    public function test_canonical_reads_ignore_unsaved_attributes_and_reject_non_persisted_or_missing_packages(): void
+    {
+        $fixture = $this->fixture();
+        $package = $this->populatedPackage($fixture);
+        $persistedChecksum = $this->service()->checksum($package);
+        $package->package_version = 999;
+        $package->lions_year = '2099-00';
+
+        $this->assertSame($persistedChecksum, $this->service()->checksum($package));
+        $this->assertSame(1, $this->service()->preview($package)['header']['package_version']);
+
+        $transient = new ClubAccountingCutoverPackage(['package_version' => 1]);
+        foreach (['checksum', 'validate', 'preview', 'readiness'] as $method) {
+            $this->assertCutoverFailure(fn () => $this->service()->{$method}($transient));
+        }
+
+        $missing = $this->service()->createDraft($fixture['club']->id, $fixture['actor']->id, 2);
+        DB::table('club_accounting_cutover_packages')->where('id', $missing->id)->delete();
+        $this->assertCutoverFailure(fn () => $this->service()->checksum($missing));
     }
 
     public function test_pending_dr033_preview_is_balanced_but_blocked_and_performs_no_financial_write(): void
@@ -166,6 +186,30 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
             'idempotency_key' => (string) Str::uuid(), 'created_by_user_id' => $fixture['actor']->id,
         ]);
         $this->assertFalse($this->service()->readiness($package)['checks']['no_previous_activation']);
+    }
+
+    public function test_readiness_rejects_review_classification_that_differs_from_persisted_package(): void
+    {
+        $fixture = $this->fixture();
+        $package = $this->approvedPackage($fixture);
+        DB::table('club_accounting_cutover_packages')->where('id', $package->id)->update([
+            'dr033_classification' => 'ACCUMULATED-SURPLUS',
+        ]);
+        DB::table('club_accounting_cutover_schedule_rows')
+            ->where('cutover_package_id', $package->id)->where('schedule_type', 'equity_preview')
+            ->update(['ledger_account_id' => $fixture['accounts']['surplus']->id]);
+        $package = $package->fresh();
+        $changedChecksum = $this->service()->checksum($package);
+        DB::table('club_accounting_cutover_packages')->where('id', $package->id)->update(['canonical_checksum' => $changedChecksum]);
+        DB::table('club_accounting_cutover_reviews')->where('cutover_package_id', $package->id)->where('status', 'current')->update(['package_checksum' => $changedChecksum]);
+        DB::table('club_accounting_cutover_approvals')->where('cutover_package_id', $package->id)->where('status', 'current')->update(['package_checksum' => $changedChecksum]);
+
+        $readiness = $this->service()->readiness($package->fresh());
+        $this->assertTrue($readiness['checks']['checksum_current']);
+        $this->assertTrue($readiness['checks']['eligible_accounts']);
+        $this->assertFalse($readiness['checks']['accounting_review_current']);
+        $this->assertContains('accounting_review_current', $readiness['failure_reasons']);
+        $this->assertFalse($readiness['ready']);
     }
 
     public function test_stale_lock_and_wrong_club_are_rejected_without_mutation(): void

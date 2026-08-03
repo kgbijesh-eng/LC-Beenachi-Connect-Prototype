@@ -405,7 +405,16 @@ final class ClubAccountingCutoverPackageService
 
     private function loadCanonical(ClubAccountingCutoverPackage $package): ClubAccountingCutoverPackage
     {
-        return $package->load([
+        if (! $package->exists || $package->getKey() === null) {
+            throw new CutoverPackageException('The persisted cutover package is unavailable.');
+        }
+
+        $persisted = ClubAccountingCutoverPackage::query()->whereKey($package->getKey())->first();
+        if (! $persisted) {
+            throw new CutoverPackageException('The persisted cutover package is unavailable.');
+        }
+
+        return $persisted->load([
             'scheduleRows' => fn ($query) => $query->with('ledgerAccount')->orderBy('schedule_type')->orderBy('row_key'),
             'evidenceReferences' => fn ($query) => $query->orderBy('evidence_type')->orderBy('opaque_reference'),
             'reviews' => fn ($query) => $query->orderBy('id'), 'approvals' => fn ($query) => $query->orderBy('id'),
@@ -465,7 +474,10 @@ final class ClubAccountingCutoverPackageService
     private function bindingMatches(ClubAccountingCutoverPackage $package, mixed $binding, string $checksum): bool
     {
         return $binding !== null && $binding->package_version === $package->package_version
-            && $binding->chart_version === $package->chart_version && hash_equals($binding->package_checksum, $checksum);
+            && $binding->chart_version === $package->chart_version
+            && hash_equals($binding->package_checksum, $checksum)
+            && (! ($binding instanceof ClubAccountingCutoverReview)
+                || $binding->selected_classification === $package->dr033_classification);
     }
 
     private function assertOpaque(string $value, string $field): void
