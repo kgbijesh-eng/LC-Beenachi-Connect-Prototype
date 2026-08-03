@@ -7,8 +7,10 @@ namespace App\Services\Finance;
 use App\Models\AuditLog;
 use App\Models\Club;
 use App\Models\ClubAccountingCutoverApproval;
+use App\Models\ClubAccountingCutoverApprovalEvent;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingCutoverReview;
+use App\Models\ClubAccountingCutoverReviewEvent;
 use App\Models\ClubAccountingCutoverScheduleRow;
 use App\Models\ClubJournalEntry;
 use App\Models\LedgerAccount;
@@ -16,6 +18,7 @@ use App\Models\User;
 use App\Services\Finance\Exceptions\CutoverPackageException;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use JsonException;
 
 final class ClubAccountingCutoverPackageService
@@ -116,6 +119,10 @@ final class ClubAccountingCutoverPackageService
             if ($row->schedule_type === 'equity_preview' && $package->dr033_classification === null) {
                 return $row->ledger_account_id === null;
             }
+            if ($row->schedule_type === 'equity_preview' && $row->ledger_account_id === null) {
+                return LedgerAccount::query()->where('club_id', $package->club_id)->where('code', $package->dr033_classification)
+                    ->where('account_type', LedgerAccount::TYPE_EQUITY)->where('currency', $package->currency)->where('is_active', true)->exists();
+            }
 
             if ($row->ledgerAccount === null || $row->ledgerAccount->club_id !== $package->club_id
                 || ! $row->ledgerAccount->is_active || $row->ledgerAccount->currency !== $package->currency) {
@@ -176,7 +183,7 @@ final class ClubAccountingCutoverPackageService
             'dr033_classification' => $package->dr033_classification,
             'schedule_rows' => $package->scheduleRows->map(fn ($row): array => [
                 'schedule_type' => $row->schedule_type, 'row_key' => $row->row_key,
-                'label' => $row->non_sensitive_label, 'account_code' => $row->ledgerAccount?->code,
+                'label' => $row->non_sensitive_label, 'account_code' => $row->schedule_type === 'equity_preview' && $row->ledgerAccount === null ? $package->dr033_classification : $row->ledgerAccount?->code,
                 'presentation_group' => $row->presentation_group, 'direction' => $row->direction,
                 'amount_paise' => $row->amount_paise,
             ])->sortBy(fn (array $row): string => $row['schedule_type'].'|'.$row['row_key'])->values()->all(),
@@ -201,28 +208,13 @@ final class ClubAccountingCutoverPackageService
             || strlen(trim($rationale)) < 20 || $this->containsSensitiveValue($rationale) || ! $this->validDate($reviewDate)) {
             throw new CutoverPackageException('The accounting review is invalid.');
         }
+        $package = ClubAccountingCutoverPackage::query()->whereKey($packageId)->where('club_id', $clubId)->first();
+        $actor = User::query()->find($actorUserId);
+        if (! $package || ! $actor) {
+            throw new CutoverPackageException('The accounting review request violates club scope.');
+        }
 
-        return DB::transaction(function () use ($clubId, $packageId, $actorUserId, $expectedLockVersion, $reviewerIdentifier, $reviewDate, $classification, $rationale): ClubAccountingCutoverReview {
-            $package = $this->lockPackage($clubId, $packageId, $expectedLockVersion);
-            $package->update(['dr033_classification' => $classification]);
-            $package = $this->loadCanonical($package->fresh());
-            $validation = $this->validate($package);
-            if (! $validation['valid']) {
-                throw new CutoverPackageException('The package must pass structural reconciliation before accounting review.');
-            }
-            $checksum = $this->checksum($package);
-            $this->invalidateBindings($package, 'accounting review superseded');
-            $review = $package->reviews()->create([
-                'club_id' => $clubId, 'reviewer_identifier' => trim($reviewerIdentifier), 'review_date' => $reviewDate,
-                'selected_classification' => $classification, 'written_rationale' => trim($rationale),
-                'package_version' => $package->package_version, 'chart_version' => $package->chart_version,
-                'package_checksum' => $checksum, 'status' => 'current', 'recorded_by_user_id' => $actorUserId, 'recorded_at' => now(),
-            ]);
-            $package->update(['canonical_checksum' => $checksum, 'updated_by_user_id' => $actorUserId, 'lock_version' => $package->lock_version + 1, 'activation_ready' => false, 'readiness_checked_at' => null]);
-            $this->audit($package, $actorUserId, 'finance.cutover_package.accounting_review_recorded', ['review_public_id' => $review->public_id, 'checksum' => $checksum]);
-
-            return $review->fresh();
-        });
+        return app(ClubCutoverLifecycleService::class)->review($package, $actor, $expectedLockVersion, $classification, trim($reviewerIdentifier), $reviewDate, trim($rationale));
     }
 
     public function recordClubApproval(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, string $authority, string $approvalDate, string $reference): ClubAccountingCutoverApproval
@@ -232,25 +224,16 @@ final class ClubAccountingCutoverPackageService
         }
         $this->assertOpaque($reference, 'approval reference');
 
-        return DB::transaction(function () use ($clubId, $packageId, $actorUserId, $expectedLockVersion, $authority, $approvalDate, $reference): ClubAccountingCutoverApproval {
-            $package = $this->lockPackage($clubId, $packageId, $expectedLockVersion);
-            $checksum = $this->checksum($package);
-            $review = $package->reviews()->where('status', 'current')->latest('id')->first();
-            if (! $review || $review->package_checksum !== $checksum || $package->canonical_checksum !== $checksum) {
-                throw new CutoverPackageException('A current matching accounting review is required.');
-            }
-            $this->invalidateApprovals($package, 'club approval superseded');
-            $approval = $package->approvals()->create([
-                'club_id' => $clubId, 'approval_authority' => trim($authority), 'approval_date' => $approvalDate,
-                'approval_reference' => strtoupper(trim($reference)), 'package_version' => $package->package_version,
-                'chart_version' => $package->chart_version, 'package_checksum' => $checksum, 'status' => 'current',
-                'recorded_by_user_id' => $actorUserId, 'recorded_at' => now(),
-            ]);
-            $package->update(['updated_by_user_id' => $actorUserId, 'lock_version' => $package->lock_version + 1, 'activation_ready' => false, 'readiness_checked_at' => null]);
-            $this->audit($package, $actorUserId, 'finance.cutover_package.club_approval_recorded', ['approval_public_id' => $approval->public_id, 'checksum' => $checksum]);
+        if (trim($authority) !== 'President') {
+            throw new CutoverPackageException('Only the authenticated President may approve the package.');
+        }
+        $package = ClubAccountingCutoverPackage::query()->whereKey($packageId)->where('club_id', $clubId)->first();
+        $actor = User::query()->find($actorUserId);
+        if (! $package || ! $actor) {
+            throw new CutoverPackageException('The President approval request violates club scope.');
+        }
 
-            return $approval->fresh();
-        });
+        return app(ClubCutoverLifecycleService::class)->approve($package, $actor, $expectedLockVersion, $approvalDate, strtoupper(trim($reference)));
     }
 
     public function preview(ClubAccountingCutoverPackage $package): array
@@ -260,7 +243,7 @@ final class ClubAccountingCutoverPackageService
             $unresolved = $row->schedule_type === 'equity_preview' && $package->dr033_classification === null;
 
             return [
-                'row_key' => $row->row_key, 'account_code' => $unresolved ? null : $row->ledgerAccount?->code,
+                'row_key' => $row->row_key, 'account_code' => $unresolved ? null : ($row->ledgerAccount?->code ?? ($row->schedule_type === 'equity_preview' ? $package->dr033_classification : null)),
                 'unresolved_classification' => $unresolved, 'direction' => $row->direction,
                 'debit_paise' => $row->direction === 'debit' ? $row->amount_paise : 0,
                 'credit_paise' => $row->direction === 'credit' ? $row->amount_paise : 0,
@@ -306,7 +289,7 @@ final class ClubAccountingCutoverPackageService
                 throw new CutoverPackageException('Only draft cutover packages may be edited.');
             }
             $mutation($package);
-            $this->invalidateBindings($package, $reason);
+            $this->invalidateBindings($package, $actorUserId, $reason);
             $package->update([
                 'canonical_checksum' => null, 'last_validated_at' => null, 'dr033_classification' => null,
                 'activation_ready' => false, 'readiness_checked_at' => null, 'invalidation_reason' => $reason,
@@ -417,22 +400,22 @@ final class ClubAccountingCutoverPackageService
         return $persisted->load([
             'scheduleRows' => fn ($query) => $query->with('ledgerAccount')->orderBy('schedule_type')->orderBy('row_key'),
             'evidenceReferences' => fn ($query) => $query->orderBy('evidence_type')->orderBy('opaque_reference'),
-            'reviews' => fn ($query) => $query->orderBy('id'), 'approvals' => fn ($query) => $query->orderBy('id'),
+            'reviews' => fn ($query) => $query->with('events')->orderBy('id'), 'approvals' => fn ($query) => $query->with('events')->orderBy('id'),
         ]);
     }
 
-    private function invalidateBindings(ClubAccountingCutoverPackage $package, string $reason): void
+    private function invalidateBindings(ClubAccountingCutoverPackage $package, int $actorUserId, string $reason): void
     {
-        $attributes = ['status' => 'invalidated', 'invalidated_at' => now(), 'invalidation_reason' => $reason];
-        $package->reviews()->where('status', 'current')->update($attributes);
-        $package->approvals()->where('status', 'current')->update($attributes);
-    }
-
-    private function invalidateApprovals(ClubAccountingCutoverPackage $package, string $reason): void
-    {
-        $package->approvals()->where('status', 'current')->update([
-            'status' => 'invalidated', 'invalidated_at' => now(), 'invalidation_reason' => $reason,
-        ]);
+        ClubAccountingCutoverReview::query()->where('cutover_package_id', $package->id)->where('status', 'current')->each(function (ClubAccountingCutoverReview $review) use ($package, $actorUserId, $reason): void {
+            if (! $review->events()->whereIn('event_type', ['revoked', 'invalidated'])->exists()) {
+                ClubAccountingCutoverReviewEvent::create(['club_id' => $package->club_id, 'cutover_package_id' => $package->id, 'cutover_review_id' => $review->id, 'event_type' => 'invalidated', 'event_reference' => (string) Str::orderedUuid(), 'reason' => $reason, 'recorded_by_user_id' => $actorUserId, 'recorded_at' => now()]);
+            }
+        });
+        ClubAccountingCutoverApproval::query()->where('cutover_package_id', $package->id)->where('status', 'current')->each(function (ClubAccountingCutoverApproval $approval) use ($package, $actorUserId, $reason): void {
+            if (! $approval->events()->whereIn('event_type', ['revoked', 'invalidated'])->exists()) {
+                ClubAccountingCutoverApprovalEvent::create(['club_id' => $package->club_id, 'cutover_package_id' => $package->id, 'cutover_approval_id' => $approval->id, 'event_type' => 'invalidated', 'event_reference' => (string) Str::orderedUuid(), 'reason' => $reason, 'recorded_by_user_id' => $actorUserId, 'recorded_at' => now()]);
+            }
+        });
     }
 
     private function reconciliationDifference(ClubAccountingCutoverPackage $package): int
@@ -473,7 +456,8 @@ final class ClubAccountingCutoverPackageService
 
     private function bindingMatches(ClubAccountingCutoverPackage $package, mixed $binding, string $checksum): bool
     {
-        return $binding !== null && $binding->package_version === $package->package_version
+        return $binding !== null && ! $binding->events->whereIn('event_type', ['revoked', 'invalidated'])->isNotEmpty()
+            && $binding->package_version === $package->package_version
             && $binding->chart_version === $package->chart_version
             && hash_equals($binding->package_checksum, $checksum)
             && (! ($binding instanceof ClubAccountingCutoverReview)
