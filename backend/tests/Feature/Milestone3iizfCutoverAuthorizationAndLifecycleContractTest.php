@@ -33,11 +33,19 @@ class Milestone3iizfCutoverAuthorizationAndLifecycleContractTest extends TestCas
             'Treasurer / appointed preparer',
             'Secretary / appointed internal verifier',
             'Independent Chartered Accountant / accounting reviewer',
-            'President / authorised club body',
+            '| President |',
+            'no club body, delegate, or other officer substitutes for the President',
             'Technical operator',
             'Normal Member',
             'Explicitly denied every cutover permission',
             'Conflicts are evaluated by authenticated actor identity',
+            'the appointed preparer may supersede only a `DRAFT` or `PREPARED` package',
+            'once a package is `INTERNALLY_VERIFIED`, the preparer has no supersession authority',
+            'each holding `rollback-authorize`',
+            'Either the President or independent CA may revoke their own unconsumed',
+            'one withdrawal immediately invalidates',
+            'after `POSTED`, supersession is prohibited',
+            'The Treasurer/preparer, Secretary/internal verifier, Normal Member, and technical operator have no rollback-authorize',
         ] as $required) {
             $this->assertStringContainsString($required, $content);
         }
