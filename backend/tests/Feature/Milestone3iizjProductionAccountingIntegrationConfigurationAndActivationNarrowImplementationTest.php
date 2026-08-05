@@ -187,11 +187,26 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         $duplicate=$activation->replicate(); $duplicate->public_id=(string)Str::uuid(); $duplicate->activation_reference='SLOT-DUP-HISTORY'; $duplicate->save();
         try { DB::table('club_accounting_integration_current_activations')->insert(['club_id'=>$this->club->id,'source_type'=>'member_charge','integration_activation_id'=>$duplicate->id,'created_at'=>now(),'updated_at'=>now()]); $this->fail('Duplicate current slot should fail.'); }
         catch (QueryException) { $this->assertTrue(true); }
+        $slot=DB::table('club_accounting_integration_current_activations')->where('integration_activation_id',$activation->id)->first();
+        foreach ([
+            ['integration_activation_id'=>$duplicate->id],
+            ['club_id'=>Club::create(['name'=>'Other Club','code'=>'OTH'])->id],
+            ['source_type'=>'member_payment'],
+        ] as $mutation) {
+            try { DB::table('club_accounting_integration_current_activations')->where('id',$slot->id)->update($mutation); $this->fail('Current activation slot update should fail.'); }
+            catch (QueryException $exception) { $this->assertStringContainsString('accounting_current_activation_immutable',$exception->getMessage()); }
+            $this->assertEquals($slot,DB::table('club_accounting_integration_current_activations')->where('id',$slot->id)->first());
+        }
         $configuration->revokeActivation($activation,$actor,'SLOT-REVOKE','Controlled revocation.');
+        $this->assertDatabaseHas('club_accounting_integration_activation_events',['integration_activation_id'=>$activation->id,'event_type'=>'revoked']);
         $this->assertDatabaseMissing('club_accounting_integration_current_activations',['integration_activation_id'=>$activation->id]);
         $reactivated=$configuration->activate($this->club->id,'member_charge','2027-07-01','v1','SLOT-B',$actor);
         $this->assertSame(1,DB::table('club_accounting_integration_current_activations')->where('club_id',$this->club->id)->where('source_type','member_charge')->count());
         $this->assertDatabaseHas('club_accounting_integration_current_activations',['integration_activation_id'=>$reactivated->id]);
+        $this->assertDatabaseCount('club_accounting_integration_activations',3);
+        $this->assertDatabaseHas('club_accounting_integration_activations',['id'=>$activation->id]);
+        $this->assertDatabaseHas('club_accounting_integration_activations',['id'=>$duplicate->id]);
+        $this->assertDatabaseHas('club_accounting_integration_activations',['id'=>$reactivated->id]);
     }
 
     public function test_readiness_reports_actual_missing_ready_invalid_active_and_revoked_states(): void

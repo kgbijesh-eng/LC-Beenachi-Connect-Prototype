@@ -40,6 +40,7 @@ return new class extends Migration
 
         if (DB::getDriverName() === 'sqlite') {
             DB::unprepared("CREATE TRIGGER accounting_current_activation_insert_guard BEFORE INSERT ON club_accounting_integration_current_activations FOR EACH ROW WHEN EXISTS (SELECT 1 FROM club_accounting_integration_activation_events e WHERE e.integration_activation_id = NEW.integration_activation_id AND e.event_type IN ('revoked','invalidated')) BEGIN SELECT RAISE(ABORT, 'terminal_activation_cannot_be_current'); END");
+            DB::unprepared("CREATE TRIGGER accounting_current_activation_update_guard BEFORE UPDATE ON club_accounting_integration_current_activations FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'accounting_current_activation_immutable'); END");
             DB::unprepared("CREATE TRIGGER accounting_current_activation_delete_guard BEFORE DELETE ON club_accounting_integration_current_activations FOR EACH ROW WHEN NOT EXISTS (SELECT 1 FROM club_accounting_integration_activation_events e WHERE e.integration_activation_id = OLD.integration_activation_id AND e.event_type IN ('revoked','invalidated')) BEGIN SELECT RAISE(ABORT, 'current_activation_requires_terminal_event'); END");
             DB::unprepared("CREATE TRIGGER accounting_activation_terminal_clears_current AFTER INSERT ON club_accounting_integration_activation_events FOR EACH ROW WHEN NEW.event_type IN ('revoked','invalidated') BEGIN DELETE FROM club_accounting_integration_current_activations WHERE integration_activation_id = NEW.integration_activation_id AND club_id = NEW.club_id; END");
         }
@@ -107,6 +108,8 @@ return new class extends Migration
         if (DB::getDriverName() === 'pgsql') {
             DB::unprepared("CREATE OR REPLACE FUNCTION accounting_current_activation_insert_guard() RETURNS trigger LANGUAGE plpgsql AS \$\$ BEGIN IF EXISTS (SELECT 1 FROM club_accounting_integration_activation_events e WHERE e.integration_activation_id = NEW.integration_activation_id AND e.event_type IN ('revoked','invalidated')) THEN RAISE EXCEPTION 'terminal_activation_cannot_be_current'; END IF; RETURN NEW; END; \$\$");
             DB::unprepared("CREATE TRIGGER accounting_current_activation_insert_guard BEFORE INSERT ON club_accounting_integration_current_activations FOR EACH ROW EXECUTE FUNCTION accounting_current_activation_insert_guard()");
+            DB::unprepared("CREATE OR REPLACE FUNCTION accounting_current_activation_update_guard() RETURNS trigger LANGUAGE plpgsql AS \$\$ BEGIN RAISE EXCEPTION 'accounting_current_activation_immutable'; END; \$\$");
+            DB::unprepared("CREATE TRIGGER accounting_current_activation_update_guard BEFORE UPDATE ON club_accounting_integration_current_activations FOR EACH ROW EXECUTE FUNCTION accounting_current_activation_update_guard()");
             DB::unprepared("CREATE OR REPLACE FUNCTION accounting_current_activation_delete_guard() RETURNS trigger LANGUAGE plpgsql AS \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM club_accounting_integration_activation_events e WHERE e.integration_activation_id = OLD.integration_activation_id AND e.event_type IN ('revoked','invalidated')) THEN RAISE EXCEPTION 'current_activation_requires_terminal_event'; END IF; RETURN OLD; END; \$\$");
             DB::unprepared("CREATE TRIGGER accounting_current_activation_delete_guard BEFORE DELETE ON club_accounting_integration_current_activations FOR EACH ROW EXECUTE FUNCTION accounting_current_activation_delete_guard()");
             DB::unprepared("CREATE OR REPLACE FUNCTION accounting_activation_terminal_clears_current() RETURNS trigger LANGUAGE plpgsql AS \$\$ BEGIN IF NEW.event_type IN ('revoked','invalidated') THEN DELETE FROM club_accounting_integration_current_activations WHERE integration_activation_id = NEW.integration_activation_id AND club_id = NEW.club_id; END IF; RETURN NEW; END; \$\$");
@@ -131,6 +134,7 @@ return new class extends Migration
         }
         if (DB::getDriverName() === 'pgsql') {
             DB::unprepared('DROP FUNCTION IF EXISTS accounting_current_activation_insert_guard() CASCADE');
+            DB::unprepared('DROP FUNCTION IF EXISTS accounting_current_activation_update_guard() CASCADE');
             DB::unprepared('DROP FUNCTION IF EXISTS accounting_activation_terminal_clears_current() CASCADE');
             DB::unprepared('DROP FUNCTION IF EXISTS accounting_current_activation_delete_guard() CASCADE');
         }
