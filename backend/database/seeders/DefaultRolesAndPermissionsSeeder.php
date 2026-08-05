@@ -183,6 +183,7 @@ class DefaultRolesAndPermissionsSeeder extends Seeder
             ['name' => 'View Club Account Statements', 'slug' => 'finance.club.statement.view', 'group' => 'finance', 'description' => 'View same-club cash and bank account statements.'],
             ['name' => 'Manage Club Finance', 'slug' => 'finance.manage', 'group' => 'finance', 'description' => 'Create charges and record allocated member payments.'],
             ['name' => 'Void Club Payments', 'slug' => 'finance.void', 'group' => 'finance', 'description' => 'Void incorrect member payments.'],
+            ['name' => 'Configure Accounting Integration', 'slug' => 'finance.accounting.integration.configure', 'group' => 'finance_accounting', 'description' => 'Propose or independently decide protected accounting integration configuration.'],
             ['name' => 'Prepare Cutover Package', 'slug' => 'finance.cutover.package.prepare', 'group' => 'finance_cutover', 'description' => 'Prepare one explicitly authorized cutover package.'],
             ['name' => 'Validate Cutover Package', 'slug' => 'finance.cutover.package.validate', 'group' => 'finance_cutover', 'description' => 'Validate one explicitly authorized cutover package.'],
             ['name' => 'Verify Cutover Package', 'slug' => 'finance.cutover.package.verify', 'group' => 'finance_cutover', 'description' => 'Internally verify one explicitly authorized cutover package.'],
