@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Club\ClubController;
 use App\Http\Controllers\Api\V1\Events\ClubEventController;
 use App\Http\Controllers\Api\V1\Finance\ClubFinanceReportController;
+use App\Http\Controllers\Api\V1\Finance\AccountingIntegrationController;
 use App\Http\Controllers\Api\V1\Finance\MemberFinanceSummaryController;
 use App\Http\Controllers\Api\V1\Finance\MemberLedgerBalanceController;
 use App\Http\Controllers\Api\V1\Finance\PaymentController;
@@ -106,6 +107,16 @@ Route::prefix('v1')->group(function (): void {
         });
         Route::middleware('club.permission:finance.void,club')->group(function (): void {
             Route::post('/clubs/{club}/finance/payments/{payment}/void', [FinanceWriteController::class, 'void']);
+        });
+        Route::middleware('club.permission:finance.accounting.integration.configure,club')->prefix('/clubs/{club}/finance/accounting/integration')->group(function (): void {
+            Route::get('/readiness', [AccountingIntegrationController::class, 'readiness']);
+            Route::get('/configuration', [AccountingIntegrationController::class, 'configuration']);
+            Route::post('/mapping-proposals', [AccountingIntegrationController::class, 'mapping']);
+            Route::post('/activation-proposals', [AccountingIntegrationController::class, 'activation']);
+            Route::post('/revocation-proposals', [AccountingIntegrationController::class, 'revocation']);
+            Route::post('/proposals/{proposal}/approve', [AccountingIntegrationController::class, 'approve']);
+            Route::post('/proposals/{proposal}/reject', [AccountingIntegrationController::class, 'reject']);
+            Route::post('/proposals/{proposal}/withdraw', [AccountingIntegrationController::class, 'withdraw']);
         });
 
         Route::middleware('club.permission:profile_updates.self.submit,club')->group(function (): void {

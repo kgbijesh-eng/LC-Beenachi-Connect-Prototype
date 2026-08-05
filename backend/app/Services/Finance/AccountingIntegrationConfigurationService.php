@@ -37,7 +37,8 @@ final class AccountingIntegrationConfigurationService
             if ($package->count() !== 1 || ! $package->first()->openingJournal()->where('status', 'posted')->exists()) {
                 throw new AccountingIntegrationException('One posted opening package with a valid opening journal is required.');
             }
-            if (ClubAccountingIntegrationActivation::query()->where('club_id', $clubId)->where('source_type', $sourceType)->exists()) {
+            $current = ClubAccountingIntegrationActivation::query()->with('events')->where('club_id', $clubId)->where('source_type', $sourceType)->lockForUpdate()->get()->reject(fn ($row) => $row->events->whereIn('event_type', ['revoked', 'invalidated'])->isNotEmpty());
+            if ($current->isNotEmpty()) {
                 throw new AccountingIntegrationException('The source integration activation already exists.');
             }
             $opening = $package->first();

@@ -176,6 +176,12 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCas
             'POST api/v1/clubs/{club}/finance/charges/{charge}/cancel',
             'POST api/v1/clubs/{club}/finance/members/{member}/payments',
             'POST api/v1/clubs/{club}/finance/payments/{payment}/void',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/mapping-proposals',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/activation-proposals',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/revocation-proposals',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/proposals/{proposal}/approve',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/proposals/{proposal}/reject',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/proposals/{proposal}/withdraw',
             'POST api/v1/clubs/{club}/members/{member}/payments',
             'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
         ], $mutationRoutes);

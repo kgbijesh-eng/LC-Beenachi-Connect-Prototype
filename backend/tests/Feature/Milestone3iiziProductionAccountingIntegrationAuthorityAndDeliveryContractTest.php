@@ -119,10 +119,26 @@ class Milestone3iiziProductionAccountingIntegrationAuthorityAndDeliveryContractT
             $this->assertStringContainsString($required, $content);
         }
 
-        $routes = collect(Route::getRoutes()->getRoutes())->filter(
-            fn ($route) => str_contains($route->uri(), 'finance/accounting/integration')
-        );
-        $this->assertCount(0, $routes);
+        $repoRoot = dirname(base_path());
+        $changedIn3iizi = shell_exec('git -C '.escapeshellarg($repoRoot).' diff-tree --no-commit-id --name-only -r 3d64f1ab58c69a761bf55661e0d16b122a4e4d0a') ?? '';
+        $this->assertStringNotContainsString('backend/routes/api.php', $changedIn3iizi);
+
+        $routes = collect(Route::getRoutes()->getRoutes())
+            ->filter(fn ($route) => str_contains($route->uri(), 'finance/accounting/integration'))
+            ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+            ->sort()
+            ->values()
+            ->all();
+        $this->assertSame([
+            'GET|HEAD api/v1/clubs/{club}/finance/accounting/integration/configuration',
+            'GET|HEAD api/v1/clubs/{club}/finance/accounting/integration/readiness',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/activation-proposals',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/mapping-proposals',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/proposals/{proposal}/approve',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/proposals/{proposal}/reject',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/proposals/{proposal}/withdraw',
+            'POST api/v1/clubs/{club}/finance/accounting/integration/revocation-proposals',
+        ], $routes);
     }
 
     public function test_milestone_scope_allows_only_the_contract_and_focused_test(): void

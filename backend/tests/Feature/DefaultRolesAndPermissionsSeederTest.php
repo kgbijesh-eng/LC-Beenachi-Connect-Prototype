@@ -17,7 +17,7 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 47);
+        $this->assertDatabaseCount('permissions', 48);
         $this->assertDatabaseCount('role_permissions', 93);
 
         $president = Role::where('slug', 'president-admin')->firstOrFail();
@@ -117,6 +117,10 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertNotNull(Permission::where('slug', 'finance.club.statement.view')->first());
         $this->assertNotNull(Permission::where('slug', 'finance.manage')->first());
         $this->assertNotNull(Permission::where('slug', 'finance.void')->first());
+        $this->assertNotNull(Permission::where('slug', 'finance.accounting.integration.configure')->first());
+        foreach ([$president, $secretary, $treasurer, $member] as $role) {
+            $this->assertFalse($role->permissions->contains('slug', 'finance.accounting.integration.configure'));
+        }
         foreach (['prepare', 'validate', 'verify', 'accounting-review', 'business-approve', 'dry-run-accept', 'activate-authorize', 'execute', 'rollback-authorize', 'view-restricted-manifest'] as $permission) {
             $this->assertNotNull(Permission::where('slug', "finance.cutover.package.{$permission}")->first());
         }
@@ -137,7 +141,7 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 47);
+        $this->assertDatabaseCount('permissions', 48);
         $this->assertDatabaseCount('role_permissions', 93);
     }
 

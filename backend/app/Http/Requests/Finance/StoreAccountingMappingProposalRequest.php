@@ -1,0 +1,5 @@
+<?php
+namespace App\Http\Requests\Finance;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+class StoreAccountingMappingProposalRequest extends FormRequest { public function authorize(): bool { return true; } public function rules(): array { return ['client_request_id'=>['required','uuid'],'proposal_type'=>['required',Rule::in(['mapping_create','mapping_replace'])],'source_type'=>['required',Rule::in(['member_charge','member_payment'])],'source_key'=>['required','string','max:80'],'ledger_account_id'=>['required','integer'],'mapping_version'=>['required','string','max:40'],'effective_date'=>['required','date_format:Y-m-d'],'expires_at'=>['nullable','date_format:Y-m-d','after_or_equal:effective_date'],'coverage_start_date'=>['nullable','date_format:Y-m-d'],'mapping_id'=>['required_if:proposal_type,mapping_replace','nullable','integer'],'reference'=>['required','string','max:120'],'proposer_user_id'=>['prohibited'],'status'=>['prohibited'],'checksum'=>['prohibited'],'lock_version'=>['prohibited'],'audit'=>['prohibited']]; } }
