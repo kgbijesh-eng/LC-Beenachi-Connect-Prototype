@@ -38,12 +38,16 @@ final class AccountingIntegrationProposalService
         $this->authority($club, $actor);
         $package = ClubAccountingCutoverPackage::query()->where('club_id', $club->id)->where('status', ClubAccountingCutoverPackage::STATUS_POSTED)->whereNotNull('opening_journal_entry_id')->first();
         $defects = $this->reconciliation->defects($club->id);
+        $sources = collect([AccountingIntegrationConfigurationService::SOURCE_CHARGE, AccountingIntegrationConfigurationService::SOURCE_PAYMENT])
+            ->map(fn (string $source) => $this->sourceReadiness($club->id, $source, $package, $defects))->values();
+        $ready = $sources->every(fn (array $source): bool => $source['ready']);
 
         return [
             'club' => ['id' => $club->id, 'name' => $club->name],
+            'readiness_code' => $ready ? 'Ready' : 'Not ready',
+            'ready' => $ready,
             'readiness_codes' => ['Ready','Not ready','Already active','Revoked','Missing mappings','Invalid mappings','Unintegrated source inside coverage','Reconciliation defect','Closed or missing accounting period','Opening package not posted'],
-            'sources' => collect([AccountingIntegrationConfigurationService::SOURCE_CHARGE, AccountingIntegrationConfigurationService::SOURCE_PAYMENT])
-                ->map(fn (string $source) => $this->sourceReadiness($club->id, $source, $package, $defects))->values()->all(),
+            'sources' => $sources->all(),
         ];
     }
 
@@ -71,12 +75,11 @@ final class AccountingIntegrationProposalService
 
     public function propose(Club $club, User $actor, array $data): ClubAccountingIntegrationProposal
     {
-        $role = $this->authority($club, $actor);
-        $material = $this->normalizedMaterial($club, $data);
-        $checksum = $this->checksum(array_merge($material, ['club_id'=>$club->id,'proposer_user_id'=>$actor->id,'proposer_role_slug'=>$role]));
-
-        return DB::transaction(function () use ($club, $actor, $role, $data, $material, $checksum): ClubAccountingIntegrationProposal {
+        return DB::transaction(function () use ($club, $actor, $data): ClubAccountingIntegrationProposal {
             $this->configuration->configurationLock($club->id);
+            $role = $this->authority($club, $actor);
+            $material = $this->normalizedMaterial($club, $data);
+            $checksum = $this->checksum(array_merge($material, ['club_id'=>$club->id,'proposer_user_id'=>$actor->id,'proposer_role_slug'=>$role]));
             $replay = ClubAccountingIntegrationProposal::query()->where('club_id', $club->id)->where('client_request_id', strtolower($data['client_request_id']))->lockForUpdate()->first();
             if ($replay) {
                 if (! hash_equals($replay->canonical_checksum, $checksum)) {
@@ -113,14 +116,15 @@ final class AccountingIntegrationProposalService
 
     private function terminal(Club $club, User $actor, ClubAccountingIntegrationProposal $proposal, int $lockVersion, string $decision, ?string $reason): ClubAccountingIntegrationProposal
     {
-        $role = $this->authority($club, $actor);
-        return DB::transaction(function () use ($club, $actor, $proposal, $lockVersion, $decision, $reason, $role): ClubAccountingIntegrationProposal {
+        return DB::transaction(function () use ($club, $actor, $proposal, $lockVersion, $decision, $reason): ClubAccountingIntegrationProposal {
             $this->configuration->configurationLock($club->id);
             $locked = ClubAccountingIntegrationProposal::query()->whereKey($proposal->id)->where('club_id', $club->id)->lockForUpdate()->firstOrFail();
+            $role = $this->authority($club, $actor);
             if ($locked->status !== 'pending' || $locked->lock_version !== $lockVersion || $locked->decision()->exists()) throw new AccountingIntegrationConflictException('The proposal is terminal or its lock version is stale.');
             if ($decision === 'withdrawn' && $locked->proposer_user_id !== $actor->id) throw new AuthorizationException('Only the proposer may withdraw a proposal.');
             if ($decision !== 'withdrawn' && $locked->proposer_user_id === $actor->id) throw new AuthorizationException('The proposer cannot decide the same proposal.');
-            $this->assertFresh($locked);
+            $this->assertIntegrity($locked);
+            if ($decision === 'approved') $this->assertApprovalFresh($locked);
             $before = ['proposal'=>$this->proposalState($locked),'configuration'=>$this->configurationSnapshot($locked->club_id)];
             try { $result = $decision === 'approved' ? $this->apply($locked, $actor) : null; }
             catch (AccountingIntegrationConflictException $exception) { throw $exception; }
@@ -194,15 +198,23 @@ final class AccountingIntegrationProposalService
         if ($type === 'charge_activation' && $result['source_type'] !== AccountingIntegrationConfigurationService::SOURCE_CHARGE) throw new AccountingIntegrationException('Charge activation requires member_charge.');
         if ($type === 'payment_activation' && $result['source_type'] !== AccountingIntegrationConfigurationService::SOURCE_PAYMENT) throw new AccountingIntegrationException('Payment activation requires member_payment.');
         $result['terminal_event_id'] = $this->terminalIdentity($result);
+        $result['target_snapshot'] = $this->targetSnapshot($club->id, $result, true);
         return $result;
     }
 
-    private function assertFresh(ClubAccountingIntegrationProposal $proposal): void
+    private function assertIntegrity(ClubAccountingIntegrationProposal $proposal): void
     {
         $material = Arr::only($proposal->getAttributes(), ['proposal_type','source_type','source_key','ledger_account_id','mapping_version','effective_date','expires_at','coverage_start_date','activation_id','mapping_id','reference','reason','terminal_event_id']);
+        $material['target_snapshot'] = $proposal->target_snapshot;
         foreach (['effective_date','expires_at','coverage_start_date'] as $date) if ($proposal->{$date}) $material[$date] = $proposal->{$date}->format('Y-m-d');
         $checksumMaterial = array_merge($material, ['club_id'=>$proposal->club_id,'proposer_user_id'=>$proposal->proposer_user_id,'proposer_role_slug'=>$proposal->proposer_role_slug]);
-        if (! hash_equals($proposal->canonical_checksum, $this->checksum($checksumMaterial)) || $proposal->terminal_event_id !== $this->terminalIdentity($material)) throw new AccountingIntegrationConflictException('The proposal checksum or authoritative configuration snapshot is stale.');
+        if (! hash_equals($proposal->canonical_checksum, $this->checksum($checksumMaterial))) throw new AccountingIntegrationConflictException('The proposal integrity checksum is invalid.');
+    }
+
+    private function assertApprovalFresh(ClubAccountingIntegrationProposal $proposal): void
+    {
+        $material = Arr::only($proposal->getAttributes(), ['proposal_type','source_type','source_key','ledger_account_id','mapping_version','effective_date','expires_at','coverage_start_date','activation_id','mapping_id','reference','reason','terminal_event_id']);
+        if ($proposal->target_snapshot !== $this->targetSnapshot($proposal->club_id, $material, true)) throw new AccountingIntegrationConflictException('The authoritative proposal target is stale.');
         try { $currentRole = $this->authority(Club::findOrFail($proposal->club_id), $proposal->proposer); }
         catch (AuthorizationException) { throw new AccountingIntegrationConflictException('The proposer appointment context changed.'); }
         if ($proposal->proposer_role_slug !== $currentRole) throw new AccountingIntegrationConflictException('The proposer appointment context changed.');
@@ -212,6 +224,27 @@ final class AccountingIntegrationProposalService
     {
         if (! empty($data['mapping_id'])) return DB::table('club_accounting_source_mapping_events')->where('source_mapping_id', $data['mapping_id'])->value('id');
         if (! empty($data['activation_id'])) return DB::table('club_accounting_integration_activation_events')->where('integration_activation_id', $data['activation_id'])->value('id');
+        return null;
+    }
+
+    private function targetSnapshot(int $clubId, array $data, bool $lock): ?array
+    {
+        if (! empty($data['mapping_id'])) {
+            $query=ClubAccountingSourceMapping::query()->with('events')->whereKey($data['mapping_id'])->where('club_id',$clubId); if($lock)$query->lockForUpdate();
+            $mapping=$query->firstOrFail(); $terminal=$mapping->events->sortByDesc('id')->first(); $current=$terminal===null;
+            if ($mapping->source_type!==$data['source_type']) throw new AccountingIntegrationException('The mapping target source does not match the proposal.');
+            if ($data['proposal_type']==='mapping_replace' && $mapping->canonical_source_key!==$data['source_key']) throw new AccountingIntegrationException('The replacement target source key does not match the proposal.');
+            if ($data['proposal_type']==='mapping_revocation' && !$current) throw new AccountingIntegrationException('The mapping target must be current.');
+            return ['kind'=>'mapping','id'=>$mapping->id,'club_id'=>$mapping->club_id,'source_type'=>$mapping->source_type,'source_key'=>$mapping->canonical_source_key,'mapping_version'=>$mapping->mapping_version,'effective_date'=>$mapping->effective_date->format('Y-m-d'),'expires_at'=>$mapping->expires_at?->format('Y-m-d'),'ledger_account_id'=>$mapping->ledger_account_id,'terminal_event_id'=>$terminal?->id,'lifecycle'=>$current?'current':'terminal'];
+        }
+        if (! empty($data['activation_id'])) {
+            $query=ClubAccountingIntegrationActivation::query()->with('events')->whereKey($data['activation_id'])->where('club_id',$clubId); if($lock)$query->lockForUpdate();
+            $activation=$query->firstOrFail(); $terminal=$activation->events->sortByDesc('id')->first(); $current=$terminal===null;
+            if ($activation->source_type!==$data['source_type']) throw new AccountingIntegrationException('The activation target source does not match the proposal.');
+            if ($data['proposal_type']==='reactivation' && $current) throw new AccountingIntegrationException('Reactivation requires a terminal activation.');
+            if (in_array($data['proposal_type'],['coverage_start_date_change','mapping_version_change','activation_revocation'],true) && !$current) throw new AccountingIntegrationException('The activation target must be current.');
+            return ['kind'=>'activation','id'=>$activation->id,'club_id'=>$activation->club_id,'source_type'=>$activation->source_type,'mapping_version'=>$activation->mapping_version,'coverage_start_date'=>$activation->coverage_start_date->format('Y-m-d'),'opening_package_id'=>$activation->opening_package_id,'opening_journal_entry_id'=>$activation->opening_journal_entry_id,'terminal_event_id'=>$terminal?->id,'lifecycle'=>$current?'current':'terminal'];
+        }
         return null;
     }
 
@@ -233,19 +266,21 @@ final class AccountingIntegrationProposalService
 
     private function sourceReadiness(int $clubId, string $source, ?ClubAccountingCutoverPackage $package, array $defects): array
     {
-        $active = ClubAccountingIntegrationActivation::query()->with('events')->where('club_id',$clubId)->where('source_type',$source)->latest('id')->first();
+        $slot=DB::table('club_accounting_integration_current_activations')->where('club_id',$clubId)->where('source_type',$source)->first();
+        $active=$slot?ClubAccountingIntegrationActivation::query()->with('events')->find($slot->integration_activation_id):ClubAccountingIntegrationActivation::query()->with('events')->where('club_id',$clubId)->where('source_type',$source)->latest('id')->first();
         $reasons=[]; $code='Ready'; $version=$active?->mapping_version;
         if (! $package) { $code='Opening package not posted'; $reasons[]=$code; }
-        elseif ($active && $active->events->isEmpty()) $code='Already active';
-        elseif ($active) $code='Revoked';
+        elseif ($slot && $active) $code='Already active';
+        elseif ($active && $active->events->isNotEmpty()) $code='Revoked';
         else {
             $version ??= ClubAccountingSourceMapping::query()->where('club_id',$clubId)->where('source_type',$source)->latest('id')->value('mapping_version');
             $date=$package->cutover_date->format('Y-m-d');
             $expected=$source===AccountingIntegrationConfigurationService::SOURCE_CHARGE?ClubCharge::CATEGORIES:MemberPayment::MODES;
             $rows=ClubAccountingSourceMapping::query()->with(['events','ledgerAccount'])->where('club_id',$clubId)->where('source_type',$source)->where('mapping_version',$version)->get();
-            if (! $version || collect($expected)->contains(fn($key)=>$rows->where('canonical_source_key',$key)->filter(fn($m)=>$m->events->isEmpty())->count()!==1)) { $code='Missing mappings'; $reasons[]=$code; }
-            elseif ($rows->contains(fn($m)=>!$m->ledgerAccount || !$m->ledgerAccount->is_active || $m->ledgerAccount->currency!=='INR')) { $code='Invalid mappings'; $reasons[]=$code; }
-            elseif (ClubAccountingPeriod::query()->where('club_id',$clubId)->where('status','open')->where('start_date','<=',$date)->where('end_date','>=',$date)->count()!==1) { $code='Closed or missing accounting period'; $reasons[]=$code; }
+            $current=$rows->filter(fn($mapping)=>$mapping->events->isEmpty());
+            if (ClubAccountingPeriod::query()->where('club_id',$clubId)->where('status','open')->where('start_date','<=',$date)->where('end_date','>=',$date)->count()!==1) { $code='Closed or missing accounting period'; $reasons[]=$code; }
+            elseif (! $version || collect($expected)->contains(fn($key)=>$current->where('canonical_source_key',$key)->count()!==1)) { $code='Missing mappings'; $reasons[]=$code; }
+            elseif (LedgerAccount::query()->where('club_id',$clubId)->where('code','MEMBER-RECEIVABLES')->where('is_active',true)->where('currency','INR')->count()!==1 || $current->contains(fn($m)=>!$m->ledgerAccount || $m->ledgerAccount->club_id!==$clubId || !$m->ledgerAccount->is_active || $m->ledgerAccount->currency!=='INR' || ($source===AccountingIntegrationConfigurationService::SOURCE_CHARGE ? $m->ledgerAccount->account_type!==LedgerAccount::TYPE_INCOME : $m->ledgerAccount->account_type!==LedgerAccount::TYPE_ASSET || !preg_match('/\A(?:CASH|BANK)-/',$m->ledgerAccount->code)))) { $code='Invalid mappings'; $reasons[]=$code; }
             elseif ($this->hasUnintegratedSource($clubId,$source,$date)) { $code='Unintegrated source inside coverage'; $reasons[]=$code; }
             elseif ($defects!==[]) { $code='Reconciliation defect'; $reasons[]=$code; }
         }

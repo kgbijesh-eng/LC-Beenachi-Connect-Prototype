@@ -33,7 +33,7 @@ class ClubAccountingIntegrationProposal extends Model
 
     protected function casts(): array
     {
-        return ['effective_date' => 'date:Y-m-d', 'expires_at' => 'date:Y-m-d', 'coverage_start_date' => 'date:Y-m-d', 'decided_at' => 'datetime'];
+        return ['effective_date' => 'date:Y-m-d', 'expires_at' => 'date:Y-m-d', 'coverage_start_date' => 'date:Y-m-d', 'target_snapshot' => 'array', 'decided_at' => 'datetime'];
     }
 
     public function proposer(): BelongsTo { return $this->belongsTo(User::class, 'proposer_user_id'); }

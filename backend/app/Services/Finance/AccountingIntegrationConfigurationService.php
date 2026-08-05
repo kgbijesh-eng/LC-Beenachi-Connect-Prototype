@@ -37,8 +37,7 @@ final class AccountingIntegrationConfigurationService
             if ($package->count() !== 1 || ! $package->first()->openingJournal()->where('status', 'posted')->exists()) {
                 throw new AccountingIntegrationException('One posted opening package with a valid opening journal is required.');
             }
-            $current = ClubAccountingIntegrationActivation::query()->with('events')->where('club_id', $clubId)->where('source_type', $sourceType)->lockForUpdate()->get()->reject(fn ($row) => $row->events->whereIn('event_type', ['revoked', 'invalidated'])->isNotEmpty());
-            if ($current->isNotEmpty()) {
+            if (DB::table('club_accounting_integration_current_activations')->where('club_id', $clubId)->where('source_type', $sourceType)->lockForUpdate()->exists()) {
                 throw new AccountingIntegrationException('The source integration activation already exists.');
             }
             $opening = $package->first();
@@ -58,7 +57,10 @@ final class AccountingIntegrationConfigurationService
                 throw new AccountingIntegrationException('Activation cannot cover pre-existing unjournalled source records.');
             }
 
-            return ClubAccountingIntegrationActivation::create(['club_id' => $clubId, 'source_type' => $sourceType, 'coverage_start_date' => $coverageStartDate, 'mapping_version' => $mappingVersion, 'opening_package_id' => $opening->id, 'opening_journal_entry_id' => $opening->opening_journal_entry_id, 'activation_reference' => $reference, 'activated_by_user_id' => $actor->id, 'activated_at' => now()]);
+            $activation = ClubAccountingIntegrationActivation::create(['club_id' => $clubId, 'source_type' => $sourceType, 'coverage_start_date' => $coverageStartDate, 'mapping_version' => $mappingVersion, 'opening_package_id' => $opening->id, 'opening_journal_entry_id' => $opening->opening_journal_entry_id, 'activation_reference' => $reference, 'activated_by_user_id' => $actor->id, 'activated_at' => now()]);
+            DB::table('club_accounting_integration_current_activations')->insert(['club_id' => $clubId, 'source_type' => $sourceType, 'integration_activation_id' => $activation->id, 'created_at' => now(), 'updated_at' => now()]);
+
+            return $activation;
         });
     }
 
@@ -106,8 +108,12 @@ final class AccountingIntegrationConfigurationService
             if ($activation->events()->whereIn('event_type', ['revoked', 'invalidated'])->exists()) {
                 throw new AccountingIntegrationException('The integration activation is already terminal.');
             }
+            $event = ClubAccountingIntegrationActivationEvent::create(['club_id' => $activation->club_id, 'integration_activation_id' => $activation->id, 'event_type' => 'revoked', 'event_reference' => $reference, 'reason' => $reason, 'recorded_by_user_id' => $actor->id, 'recorded_at' => now()]);
+            if (DB::table('club_accounting_integration_current_activations')->where('integration_activation_id', $activation->id)->exists()) {
+                throw new AccountingIntegrationException('The current activation slot was not cleared by the terminal event.');
+            }
 
-            return ClubAccountingIntegrationActivationEvent::create(['club_id' => $activation->club_id, 'integration_activation_id' => $activation->id, 'event_type' => 'revoked', 'event_reference' => $reference, 'reason' => $reason, 'recorded_by_user_id' => $actor->id, 'recorded_at' => now()]);
+            return $event;
         });
     }
 
