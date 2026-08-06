@@ -72,7 +72,13 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
 
         foreach ([
             ['name' => 'Changed account name'],
-            ['accountType' => LedgerAccount::TYPE_LIABILITY, 'normalBalance' => LedgerAccount::NORMAL_CREDIT],
+            [
+                'accountType' => LedgerAccount::TYPE_LIABILITY,
+                'normalBalance' => LedgerAccount::NORMAL_CREDIT,
+                'originKind' => 'custom',
+                'originTemplateCode' => null,
+                'statementClassification' => 'LIABILITIES',
+            ],
             ['createdByUserId' => $otherActor->id],
         ] as $overrides) {
             try {
@@ -145,16 +151,19 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
         $fixture = $this->fixture('GA');
 
         foreach ([
-            [LedgerAccount::TYPE_ASSET, LedgerAccount::NORMAL_DEBIT],
-            [LedgerAccount::TYPE_EXPENSE, LedgerAccount::NORMAL_DEBIT],
-            [LedgerAccount::TYPE_LIABILITY, LedgerAccount::NORMAL_CREDIT],
-            [LedgerAccount::TYPE_EQUITY, LedgerAccount::NORMAL_CREDIT],
-            [LedgerAccount::TYPE_INCOME, LedgerAccount::NORMAL_CREDIT],
-        ] as [$type, $normalBalance]) {
+            [LedgerAccount::TYPE_ASSET, LedgerAccount::NORMAL_DEBIT, 'OTHER_CURRENT_ASSETS'],
+            [LedgerAccount::TYPE_EXPENSE, LedgerAccount::NORMAL_DEBIT, 'EXPENSES'],
+            [LedgerAccount::TYPE_LIABILITY, LedgerAccount::NORMAL_CREDIT, 'LIABILITIES'],
+            [LedgerAccount::TYPE_EQUITY, LedgerAccount::NORMAL_CREDIT, 'FUND_BALANCE_EQUITY'],
+            [LedgerAccount::TYPE_INCOME, LedgerAccount::NORMAL_CREDIT, 'INCOME'],
+        ] as [$type, $normalBalance, $statementClassification]) {
             $account = $this->accounts()->provision($this->accountRequest($fixture, [
                 'code' => strtoupper($type).'-ACCOUNT',
                 'accountType' => $type,
                 'normalBalance' => $normalBalance,
+                'originKind' => 'custom',
+                'originTemplateCode' => null,
+                'statementClassification' => $statementClassification,
             ]));
             $this->assertSame($type, $account->account_type);
             $this->assertSame($normalBalance, $account->normal_balance);
@@ -348,6 +357,11 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
             normalBalance: $overrides['normalBalance'] ?? LedgerAccount::NORMAL_DEBIT,
             currency: $overrides['currency'] ?? LedgerAccount::CURRENCY_INR,
             createdByUserId: $overrides['createdByUserId'] ?? $fixture['actor']->id,
+            originKind: $overrides['originKind'] ?? 'catalogue',
+            originTemplateCode: array_key_exists('originTemplateCode', $overrides)
+                ? $overrides['originTemplateCode']
+                : 'CASH-ON-HAND',
+            statementClassification: $overrides['statementClassification'] ?? 'CASH_AND_BANK',
         );
     }
 

@@ -13,6 +13,7 @@ use App\Models\ClubCharge;
 use App\Models\ClubJournalEntry;
 use App\Models\LedgerAccount;
 use App\Models\MemberPayment;
+use App\Models\PaymentAllocationJournalLine;
 use App\Models\User;
 use App\Services\Finance\Exceptions\AccountingIntegrationConflictException;
 use App\Services\Finance\Exceptions\AccountingIntegrationException;
@@ -58,7 +59,11 @@ final class SourceAccountingIntegrationService
         }
         $binding = $this->chargeBinding($charge);
 
-        return $this->post($charge->club_id, AccountingIntegrationConfigurationService::SOURCE_CHARGE, $charge->public_id, $charge->lock_version, $charge->issued_at->toDateString(), $charge->category, (int) collect($binding['member_charges'])->sum('original_amount_paise'), $actor, null, $binding, 'Charge issued', 'income');
+        if (! FundCode::tryFrom((string) $charge->fund_code)) {
+            throw new AccountingIntegrationException('The issued charge lacks a canonical frozen fund.');
+        }
+
+        return $this->post($charge->club_id, AccountingIntegrationConfigurationService::SOURCE_CHARGE, $charge->public_id, $charge->lock_version, $charge->issued_at->toDateString(), $charge->category, (int) collect($binding['member_charges'])->sum('original_amount_paise'), $actor, null, $binding, 'Charge issued', 'income', [$charge->fund_code => (int) collect($binding['member_charges'])->sum('original_amount_paise')]);
     }
 
     public function postPayment(MemberPayment $payment, User $actor): ClubAccountingSourceIntegration
@@ -75,7 +80,12 @@ final class SourceAccountingIntegrationService
             throw new AccountingIntegrationException('The payment must be fully allocated before accounting integration.');
         }
 
-        return $this->post($payment->club_id, AccountingIntegrationConfigurationService::SOURCE_PAYMENT, $payment->public_id, $payment->lock_version, $payment->payment_date->format('Y-m-d'), $payment->payment_mode, $allocated, $actor, strtolower((string) $payment->idempotency_key), $binding, 'Member payment recorded', 'asset');
+        $groups = $payment->allocations->groupBy('fund_code')->map(fn ($rows): int => (int) $rows->sum('amount_paise'))->all();
+        if ($groups === [] || collect(array_keys($groups))->contains(fn ($fund) => ! FundCode::tryFrom((string) $fund))) {
+            throw new AccountingIntegrationException('Every payment allocation requires a canonical frozen fund.');
+        }
+
+        return $this->post($payment->club_id, AccountingIntegrationConfigurationService::SOURCE_PAYMENT, $payment->public_id, $payment->lock_version, $payment->payment_date->format('Y-m-d'), $payment->payment_mode, $allocated, $actor, strtolower((string) $payment->idempotency_key), $binding, 'Member payment recorded', 'asset', $groups, $payment);
     }
 
     public function validateChargeReplay(ClubCharge $charge): ?ClubAccountingSourceIntegration
@@ -155,17 +165,17 @@ final class SourceAccountingIntegrationService
     {
         $charge->loadMissing(['memberCharges' => fn ($query) => $query->orderBy('id')]);
 
-        return ['charge_public_id' => strtolower($charge->public_id), 'category' => $charge->category, 'amount_per_member_paise' => (int) $charge->amount_paise, 'source_version' => $sourceVersion ?? (int) $charge->lock_version, 'member_charges' => $charge->memberCharges->map(fn ($row) => ['member_charge_id' => $row->id, 'member_id' => $row->member_id, 'original_amount_paise' => (int) $row->original_amount_paise])->values()->all()];
+        return ['charge_public_id' => strtolower($charge->public_id), 'category' => $charge->category, 'fund_code' => $charge->fund_code, 'amount_per_member_paise' => (int) $charge->amount_paise, 'source_version' => $sourceVersion ?? (int) $charge->lock_version, 'member_charges' => $charge->memberCharges->map(fn ($row) => ['member_charge_id' => $row->id, 'member_id' => $row->member_id, 'original_amount_paise' => (int) $row->original_amount_paise])->values()->all()];
     }
 
     public function paymentBinding(MemberPayment $payment, ?int $sourceVersion = null): array
     {
         $payment->loadMissing(['allocations' => fn ($query) => $query->orderBy('id')]);
 
-        return ['payment_public_id' => strtolower($payment->public_id), 'member_id' => $payment->member_id, 'payment_mode' => $payment->payment_mode, 'payment_amount_paise' => (int) $payment->amount_paise, 'source_request_idempotency_key' => strtolower((string) $payment->idempotency_key), 'source_version' => $sourceVersion ?? (int) $payment->lock_version, 'allocations' => $payment->allocations->map(fn ($row) => ['allocation_id' => $row->id, 'member_charge_id' => $row->member_charge_id, 'amount_paise' => (int) $row->amount_paise])->values()->all()];
+        return ['payment_public_id' => strtolower($payment->public_id), 'member_id' => $payment->member_id, 'payment_mode' => $payment->payment_mode, 'payment_amount_paise' => (int) $payment->amount_paise, 'source_request_idempotency_key' => strtolower((string) $payment->idempotency_key), 'source_version' => $sourceVersion ?? (int) $payment->lock_version, 'allocations' => $payment->allocations->map(fn ($row) => ['allocation_id' => $row->id, 'member_charge_id' => $row->member_charge_id, 'fund_code' => $row->fund_code, 'amount_paise' => (int) $row->amount_paise])->values()->all()];
     }
 
-    private function post(int $clubId, string $sourceType, string $sourceId, int $sourceVersion, string $date, string $sourceKey, int $amount, User $actor, ?string $sourceRequestKey, array $binding, string $description, string $mappedType): ClubAccountingSourceIntegration
+    private function post(int $clubId, string $sourceType, string $sourceId, int $sourceVersion, string $date, string $sourceKey, int $amount, User $actor, ?string $sourceRequestKey, array $binding, string $description, string $mappedType, array $fundGroups, ?MemberPayment $payment = null): ClubAccountingSourceIntegration
     {
         $existing = ClubAccountingSourceIntegration::query()->where('club_id', $clubId)->where('source_type', $sourceType)->where('source_identifier', $sourceId)->lockForUpdate()->first();
         if ($existing) {
@@ -192,9 +202,26 @@ final class SourceAccountingIntegrationService
         $checksum = $this->checksum(['club_id' => $clubId, 'source_type' => $sourceType, 'source_public_id' => $sourceId, 'accounting_date' => $date, 'source_binding' => $binding, 'activation_id' => $activation->id, 'mapping_id' => $mapping->id, 'mapping_version' => $activation->mapping_version, 'mapped_account_id' => $mapping->ledger_account_id, 'accounting_period_id' => $periods->first()->id, 'journal_idempotency_key' => $journalKey]);
         $debit = $sourceType === AccountingIntegrationConfigurationService::SOURCE_CHARGE ? $receivable->first()->id : $mapping->ledger_account_id;
         $credit = $sourceType === AccountingIntegrationConfigurationService::SOURCE_CHARGE ? $mapping->ledger_account_id : $receivable->first()->id;
-        $journal = $this->journals->post(new JournalPostingRequest($clubId, $periods->first()->id, $date, $description, 'INR', $sourceType, $sourceId, 'committed', $journalKey, $actor->id, [new JournalLineInput($debit, 'debit', $amount), new JournalLineInput($credit, 'credit', $amount)], metadata: ['mapping_version' => $activation->mapping_version, 'integration_checksum' => $checksum, 'source_binding' => $binding]));
+        ksort($fundGroups, SORT_STRING);
+        $lines = [];
+        foreach ($fundGroups as $fund => $groupAmount) {
+            $lines[] = new JournalLineInput($debit, 'debit', $groupAmount, fundCode: $fund);
+            $lines[] = new JournalLineInput($credit, 'credit', $groupAmount, fundCode: $fund);
+        }
+        $journal = $this->journals->post(new JournalPostingRequest($clubId, $periods->first()->id, $date, $description, 'INR', $sourceType, $sourceId, 'committed', $journalKey, $actor->id, $lines, metadata: ['mapping_version' => $activation->mapping_version, 'integration_checksum' => $checksum, 'source_binding' => $binding]));
         $integration = ClubAccountingSourceIntegration::create(['club_id' => $clubId, 'source_type' => $sourceType, 'source_identifier' => $sourceId, 'source_version' => $sourceVersion, 'accounting_date' => $date, 'integration_activation_id' => $activation->id, 'source_mapping_id' => $mapping->id, 'canonical_source_key' => $sourceKey, 'source_amount_paise' => $amount, 'source_binding' => $binding, 'mapping_version' => $activation->mapping_version, 'journal_entry_id' => $journal->id, 'journal_reference' => $journal->reference, 'source_request_idempotency_key' => $sourceRequestKey, 'journal_idempotency_key' => $journalKey, 'integration_checksum' => $checksum, 'committed_by_user_id' => $actor->id, 'committed_at' => now()]);
         ClubAccountingSourceIntegrationEvent::create(['club_id' => $clubId, 'source_integration_id' => $integration->id, 'event_type' => 'integration_success', 'payload' => ['journal_entry_id' => $journal->id, 'journal_public_id' => $journal->public_id, 'journal_reference' => $journal->reference, 'checksum' => $checksum], 'recorded_by_user_id' => $actor->id, 'recorded_at' => now()]);
+        if ($payment) {
+            $byFund = $journal->lines->groupBy('fund_code');
+            foreach ($payment->allocations as $allocation) {
+                $pair = $byFund->get($allocation->fund_code);
+                if (! $pair || $pair->count() !== 2) {
+                    throw new AccountingIntegrationException('Payment journal allocation traceability is incomplete.');
+                }
+                PaymentAllocationJournalLine::create(['club_id' => $clubId, 'payment_allocation_id' => $allocation->id, 'journal_line_id' => $pair->firstWhere('direction', 'debit')->id, 'line_role' => PaymentJournalLineRole::ASSET_DEBIT->value, 'amount_paise' => $allocation->amount_paise]);
+                PaymentAllocationJournalLine::create(['club_id' => $clubId, 'payment_allocation_id' => $allocation->id, 'journal_line_id' => $pair->firstWhere('direction', 'credit')->id, 'line_role' => PaymentJournalLineRole::RECEIVABLES_CREDIT->value, 'amount_paise' => $allocation->amount_paise]);
+            }
+        }
 
         return $integration->load('journalEntry');
     }
@@ -225,14 +252,24 @@ final class SourceAccountingIntegrationService
         $receivable = LedgerAccount::query()->where('club_id', $contract['club_id'])->where('code', 'MEMBER-RECEIVABLES')->value('id');
         $expectedDebit = $contract['source_type'] === AccountingIntegrationConfigurationService::SOURCE_CHARGE ? $receivable : $mapping?->ledger_account_id;
         $expectedCredit = $contract['source_type'] === AccountingIntegrationConfigurationService::SOURCE_CHARGE ? $mapping?->ledger_account_id : $receivable;
-        $lines = $journal?->lines?->sortBy('line_number')->values()->map(fn ($line) => [$line->line_number, $line->ledger_account_id, $line->direction, (int) $line->amount_paise])->all();
+        $lines = $journal?->lines?->sortBy('line_number')->values()->map(fn ($line) => [$line->line_number, $line->ledger_account_id, $line->direction, (int) $line->amount_paise, $line->fund_code])->all();
+        $fundGroups = $contract['source_type'] === AccountingIntegrationConfigurationService::SOURCE_CHARGE
+            ? [($contract['binding']['fund_code'] ?? '') => $contract['amount']]
+            : collect($contract['binding']['allocations'] ?? [])->groupBy('fund_code')->map(fn ($rows) => (int) collect($rows)->sum('amount_paise'))->all();
+        ksort($fundGroups, SORT_STRING);
+        $expectedLines = [];
+        $lineNumber = 1;
+        foreach ($fundGroups as $fund => $groupAmount) {
+            $expectedLines[] = [$lineNumber++, $expectedDebit, 'debit', $groupAmount, $fund];
+            $expectedLines[] = [$lineNumber++, $expectedCredit, 'credit', $groupAmount, $fund];
+        }
         $currentVersion = $contract['current_source_version'] ?? $contract['source_version'];
         $versionValid = $contract['terminal']
             ? $contract['source_version'] === $existing->source_version && $currentVersion === $existing->source_version + 1
             : $contract['source_version'] === $existing->source_version && $currentVersion === $existing->source_version;
         $terminalValid = ! $contract['terminal'] || $this->validTerminalReplay($existing, $journal);
         $valid = $existing->club_id === $contract['club_id'] && $existing->source_type === $contract['source_type'] && $existing->source_identifier === $contract['source_id'] && $versionValid && $existing->accounting_date->format('Y-m-d') === $contract['date'] && $existing->canonical_source_key === $contract['source_key'] && $existing->source_amount_paise === $contract['amount'] && $existing->source_binding === $contract['binding'] && strtolower((string) $existing->source_request_idempotency_key) === strtolower((string) $contract['request_key']) && strtolower($existing->journal_idempotency_key) === $journalKey && $coverage && (bool) $coverage->integration_required && $coverage->decision_reason === 'integration_required' && $coverage->integration_activation_id === $existing->integration_activation_id && $coverage->terminal_activation_event_id === null && $activation && $activation->club_id === $contract['club_id'] && $activation->source_type === $contract['source_type'] && $activation->mapping_version === $existing->mapping_version && $activation->coverage_start_date->format('Y-m-d') <= $contract['date'] && $mapping && $mapping->club_id === $contract['club_id'] && $mapping->source_type === $contract['source_type'] && $mapping->canonical_source_key === $contract['source_key'] && $mapping->mapping_version === $existing->mapping_version && $mapping->effective_date->format('Y-m-d') <= $contract['date'] && (! $mapping->expires_at || $mapping->expires_at->format('Y-m-d') >= $contract['date']) && $period && $checksum && hash_equals($checksum, $existing->integration_checksum)
-            && $journal->club_id === $contract['club_id'] && $journal->source_type === $contract['source_type'] && $journal->source_id === $contract['source_id'] && $journal->source_event === 'committed' && strtolower($journal->idempotency_key) === $journalKey && $journal->effective_date->format('Y-m-d') === $contract['date'] && $journal->reference === $existing->journal_reference && $journal->posted_by_user_id === $existing->committed_by_user_id && ($journal->status === ClubJournalEntry::STATUS_POSTED || ($contract['terminal'] && $journal->status === ClubJournalEntry::STATUS_REVERSED)) && ($journal->metadata['integration_checksum'] ?? null) === $existing->integration_checksum && ($journal->metadata['source_binding'] ?? null) === $existing->source_binding && $lines === [[1, $expectedDebit, 'debit', $contract['amount']], [2, $expectedCredit, 'credit', $contract['amount']]];
+            && $journal->club_id === $contract['club_id'] && $journal->source_type === $contract['source_type'] && $journal->source_id === $contract['source_id'] && $journal->source_event === 'committed' && strtolower($journal->idempotency_key) === $journalKey && $journal->effective_date->format('Y-m-d') === $contract['date'] && $journal->reference === $existing->journal_reference && $journal->posted_by_user_id === $existing->committed_by_user_id && ($journal->status === ClubJournalEntry::STATUS_POSTED || ($contract['terminal'] && $journal->status === ClubJournalEntry::STATUS_REVERSED)) && ($journal->metadata['integration_checksum'] ?? null) === $existing->integration_checksum && ($journal->metadata['source_binding'] ?? null) === $existing->source_binding && $lines === $expectedLines;
         $valid = $valid && $terminalValid;
         if (! $valid) {
             throw new AccountingIntegrationConflictException('The accounting integration replay bindings changed.');

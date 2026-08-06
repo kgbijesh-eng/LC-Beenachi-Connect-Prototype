@@ -683,7 +683,7 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
         $charge = $write->issue($f['actor'], $f['club'], $this->draftCharge($f), 1);
         $memberCharge = MemberCharge::where('club_charge_id', $charge->id)->firstOrFail();
         $payload = $this->paymentPayload($memberCharge);
-        app(ClubJournalPostingService::class)->post(new JournalPostingRequest($f['club']->id, $f['period']->id, '2027-07-05', 'Unrelated', 'INR', 'test', 'unrelated', 'committed', $payload['idempotency_key'], $f['actor']->id, [new JournalLineInput($f['receivable']->id, 'debit', 1), new JournalLineInput($f['equity']->id, 'credit', 1)]));
+        app(ClubJournalPostingService::class)->post(new JournalPostingRequest($f['club']->id, $f['period']->id, '2027-07-05', 'Unrelated', 'INR', 'test', 'unrelated', 'committed', $payload['idempotency_key'], $f['actor']->id, [new JournalLineInput($f['receivable']->id, 'debit', 1, fundCode: 'GENERAL_CLUB_FUND'), new JournalLineInput($f['equity']->id, 'credit', 1, fundCode: 'GENERAL_CLUB_FUND')]));
         $payment = $write->recordPayment($f['actor'], $f['club'], $f['member'], $payload)['payment'];
         $integration = ClubAccountingSourceIntegration::where('source_identifier', $payment->public_id)->firstOrFail();
         $this->assertSame(strtolower($payload['idempotency_key']), strtolower($integration->source_request_idempotency_key));
@@ -870,7 +870,7 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
             $accounts[$key] = LedgerAccount::create(['club_id' => $club->id, 'code' => $code, 'name' => $code, 'account_type' => $type, 'normal_balance' => $normal, 'currency' => 'INR', 'is_active' => true, 'created_by_user_id' => $actor->id]);
         }
         $period = ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $actor->id]);
-        $opening = app(ClubJournalPostingService::class)->post(new JournalPostingRequest($club->id, $period->id, '2027-07-01', 'Opening', 'INR', 'accounting_opening_package', 'opening-fixture', 'activated', '00000000-0000-4000-8000-000000000001', $actor->id, [new JournalLineInput($accounts['receivable']->id, 'debit', 1), new JournalLineInput($accounts['equity']->id, 'credit', 1)]));
+        $opening = app(ClubJournalPostingService::class)->post(new JournalPostingRequest($club->id, $period->id, '2027-07-01', 'Opening', 'INR', 'accounting_opening_package', 'opening-fixture', 'activated', '00000000-0000-4000-8000-000000000001', $actor->id, [new JournalLineInput($accounts['receivable']->id, 'debit', 1, fundCode: 'GENERAL_CLUB_FUND'), new JournalLineInput($accounts['equity']->id, 'credit', 1, fundCode: 'GENERAL_CLUB_FUND')]));
         ClubAccountingCutoverPackage::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'cutover_date' => '2027-07-01', 'chart_version' => 'CLUB-COA-2026-01', 'package_version' => 1, 'status' => 'posted', 'currency' => 'INR', 'canonical_checksum' => str_repeat('a', 64), 'reconciliation_difference_paise' => 0, 'dr033_classification' => 'OPENING-BALANCE-EQUITY', 'activation_ready' => true, 'opening_journal_entry_id' => $opening->id, 'posted_at' => now(), 'posted_by_user_id' => $actor->id, 'created_by_user_id' => $actor->id, 'updated_by_user_id' => $actor->id]);
 
         return ['actor' => $actor, 'club' => $club, 'member' => $member, 'period' => $period, ...$accounts];

@@ -62,6 +62,9 @@ final class LedgerAccountProvisioningService
                     'currency' => LedgerAccount::CURRENCY_INR,
                     'is_active' => true,
                     'created_by_user_id' => $request->createdByUserId,
+                    'origin_kind' => $normalized['origin_kind'],
+                    'origin_template_code' => $normalized['origin_template_code'],
+                    'statement_classification' => $normalized['statement_classification'],
                 ])->fresh();
             }, 3);
         } catch (QueryException $exception) {
@@ -105,6 +108,18 @@ final class LedgerAccountProvisioningService
         if ($request->currency !== LedgerAccount::CURRENCY_INR) {
             throw new InvalidProvisioningCurrencyException('The provisioning currency is unsupported.');
         }
+        $origin = AccountOriginKind::tryFrom($request->originKind);
+        $classification = StatementClassification::tryFrom($request->statementClassification);
+        if (! $origin || ! $classification || ($origin === AccountOriginKind::CATALOGUE && $request->originTemplateCode === null)
+            || ($origin === AccountOriginKind::CUSTOM && $request->originTemplateCode !== null)) {
+            throw new InvalidProvisioningRequestException('Canonical account origin and statement classification are required.');
+        }
+        if ($origin === AccountOriginKind::CATALOGUE) {
+            $template = collect(app(ApprovedLedgerAccountTemplateCatalog::class)->definitions())->firstWhere('templateCode', $request->originTemplateCode);
+            if (! $template || $template->accountType !== $request->accountType || $template->normalBalance !== $request->normalBalance || $template->statementClassification !== $classification->value) {
+                throw new InvalidProvisioningRequestException('Catalogue account metadata does not match its template.');
+            }
+        }
 
         return [
             'club_id' => $request->clubId,
@@ -115,6 +130,9 @@ final class LedgerAccountProvisioningService
             'currency' => LedgerAccount::CURRENCY_INR,
             'is_active' => true,
             'created_by_user_id' => $request->createdByUserId,
+            'origin_kind' => $origin->value,
+            'origin_template_code' => $request->originTemplateCode,
+            'statement_classification' => $classification->value,
         ];
     }
 
@@ -138,6 +156,9 @@ final class LedgerAccountProvisioningService
             'currency' => $account->currency,
             'is_active' => $account->is_active,
             'created_by_user_id' => $account->created_by_user_id,
+            'origin_kind' => $account->origin_kind,
+            'origin_template_code' => $account->origin_template_code,
+            'statement_classification' => $account->statement_classification,
         ];
     }
 }

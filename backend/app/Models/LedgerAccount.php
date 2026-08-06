@@ -29,7 +29,8 @@ class LedgerAccount extends Model
 
     protected $fillable = [
         'public_id', 'club_id', 'code', 'name', 'account_type', 'normal_balance',
-        'currency', 'is_active', 'created_by_user_id',
+        'currency', 'is_active', 'created_by_user_id', 'origin_kind',
+        'origin_template_code', 'statement_classification',
     ];
 
     protected static function booted(): void
@@ -38,6 +39,10 @@ class LedgerAccount extends Model
         static::updating(function (self $account): void {
             if ($account->isDirty('code')) {
                 throw new LogicException('Ledger account codes are immutable.');
+            }
+            if ($account->journalLines()->whereHas('journalEntry', fn ($query) => $query->whereIn('status', ['posted', 'reversed']))->exists()
+                && $account->isDirty(['origin_kind', 'origin_template_code', 'statement_classification', 'normal_balance'])) {
+                throw new LogicException('Used ledger account accounting metadata is immutable.');
             }
         });
     }

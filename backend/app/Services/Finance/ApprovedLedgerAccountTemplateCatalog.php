@@ -178,6 +178,8 @@ final class ApprovedLedgerAccountTemplateCatalog
             name: $name,
             accountType: $type,
             normalBalance: $normalBalance,
+            statementClassification: $this->metadataFor($code)[0],
+            fundUsageRule: $this->metadataFor($code)[1],
             currency: LedgerAccount::CURRENCY_INR,
             purpose: $purpose,
             initialActivation: $initialActivation,
@@ -197,6 +199,8 @@ final class ApprovedLedgerAccountTemplateCatalog
             name: 'Additional Bank Account',
             accountType: LedgerAccount::TYPE_ASSET,
             normalBalance: LedgerAccount::NORMAL_DEBIT,
+            statementClassification: StatementClassification::CASH_AND_BANK->value,
+            fundUsageRule: FundUsageRule::ANY_APPROVED_FUND->value,
             currency: LedgerAccount::CURRENCY_INR,
             purpose: 'One separate non-sensitive alias for each additional verified real bank holding.',
             initialActivation: 'conditional-on-private-bank-inventory',
@@ -207,5 +211,27 @@ final class ApprovedLedgerAccountTemplateCatalog
             selectedByTemplate: false,
             qualification: 'A future private inventory determines the instance, alias, purpose, and opening evidence.',
         );
+    }
+
+    /** @return array{string,string} */
+    private function metadataFor(string $code): array
+    {
+        $classification = match ($code) {
+            'CASH-ON-HAND', 'BANK-OPERATING' => StatementClassification::CASH_AND_BANK,
+            'MEMBER-RECEIVABLES', 'OTHER-RECEIVABLES' => StatementClassification::RECEIVABLES,
+            'ADVANCES-PAID' => StatementClassification::OTHER_CURRENT_ASSETS,
+            'LIABILITY-RESTRICTED-COLLECTION', 'LIABILITY-RESTRICTED-DONATION', 'ACCOUNTS-PAYABLE' => StatementClassification::LIABILITIES,
+            'OPENING-BALANCE-EQUITY', 'ACCUMULATED-SURPLUS' => StatementClassification::FUND_BALANCE_EQUITY,
+            'INCOME-MEMBER-DUES', 'INCOME-SPECIAL-COLLECTION', 'INCOME-VOLUNTARY-COLLECTION', 'INCOME-DONATION', 'INCOME-FELLOWSHIP' => StatementClassification::INCOME,
+            'EXPENSE-ADMINISTRATION', 'EXPENSE-SERVICE-ACTIVITY', 'EXPENSE-FELLOWSHIP', 'EXPENSE-DISTRICT-OBLIGATION', 'EXPENSE-MEETINGS-EVENTS', 'EXPENSE-BANK-CHARGES', 'EXPENSE-FUNDRAISING', 'EXPENSE-CLUB-PROPERTY-FACILITIES' => StatementClassification::EXPENSES,
+            default => throw new LogicException('A fixed template lacks canonical statement metadata.'),
+        };
+        $fundRule = match ($code) {
+            'INCOME-FELLOWSHIP', 'EXPENSE-FELLOWSHIP' => FundUsageRule::FELLOWSHIP_MEMBER_ONLY,
+            'EXPENSE-SERVICE-ACTIVITY' => FundUsageRule::SERVICE_ONLY,
+            default => FundUsageRule::ANY_APPROVED_FUND,
+        };
+
+        return [$classification->value, $fundRule->value];
     }
 }

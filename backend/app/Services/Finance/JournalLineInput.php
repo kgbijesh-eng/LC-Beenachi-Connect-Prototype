@@ -11,5 +11,8 @@ final readonly class JournalLineInput
         public string $direction,
         public int $amountPaise,
         public ?string $description = null,
+        public ?string $fundCode = null,
+        public ?int $openingScheduleRowId = null,
+        public ?int $reversalOfLineId = null,
     ) {}
 }

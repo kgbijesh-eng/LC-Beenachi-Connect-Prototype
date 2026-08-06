@@ -328,8 +328,8 @@ class Milestone3iieInternalJournalReversalServiceTest extends TestCase
             idempotencyKey: (string) Str::uuid(),
             postingActorUserId: $fixture['actor']->id,
             lines: [
-                new JournalLineInput($fixture['cash']->id, ClubJournalLine::DIRECTION_DEBIT, 12550, 'Cash'),
-                new JournalLineInput($fixture['income']->id, ClubJournalLine::DIRECTION_CREDIT, 12550, 'Income'),
+                new JournalLineInput($fixture['cash']->id, ClubJournalLine::DIRECTION_DEBIT, 12550, 'Cash', 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['income']->id, ClubJournalLine::DIRECTION_CREDIT, 12550, 'Income', 'GENERAL_CLUB_FUND'),
             ],
         ));
     }

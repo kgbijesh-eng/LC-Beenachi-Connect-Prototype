@@ -14,5 +14,8 @@ final readonly class LedgerAccountProvisioningRequest
         public string $normalBalance,
         public string $currency,
         public int $createdByUserId,
+        public string $originKind,
+        public ?string $originTemplateCode,
+        public string $statementClassification,
     ) {}
 }

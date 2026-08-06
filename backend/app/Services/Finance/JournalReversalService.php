@@ -109,6 +109,9 @@ final class JournalReversalService
                     $line->direction === ClubJournalLine::DIRECTION_DEBIT ? ClubJournalLine::DIRECTION_CREDIT : ClubJournalLine::DIRECTION_DEBIT,
                     $line->amount_paise,
                     $line->description,
+                    $line->fund_code,
+                    null,
+                    $line->id,
                 ))->all(),
                 reversalOfEntryId: $original->id,
                 metadata: [

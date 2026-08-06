@@ -2,6 +2,7 @@
 
 namespace App\Services\FinanceCollections;
 
+use App\Models\AccountingChargeCategory;
 use App\Models\AuditLog;
 use App\Models\Club;
 use App\Models\ClubCharge;
@@ -12,6 +13,7 @@ use App\Models\PaymentAllocation;
 use App\Models\PaymentReceipt;
 use App\Models\User;
 use App\Services\Finance\AccountingIntegrationConfigurationService;
+use App\Services\Finance\FundCode;
 use App\Services\Finance\SourceAccountingIntegrationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -23,6 +25,7 @@ class FinanceWriteService
 
     public function createCharge(User $u, Club $c, array $v): ClubCharge
     {
+        $this->enabledCategory($v['category']);
         $ids = $this->members($c, $v);
 
         return DB::transaction(function () use ($u, $c, $v, $ids) {
@@ -35,6 +38,8 @@ class FinanceWriteService
 
     public function updateCharge(User $u, Club $c, ClubCharge $r, array $v): ClubCharge
     {
+        $this->enabledCategory($v['category']);
+
         return DB::transaction(function () use ($u, $c, $r, $v) {
             $r = $this->lockCharge($c, $r, $v['lock_version']);
             if ($r->status !== 'draft') {
@@ -68,12 +73,13 @@ class FinanceWriteService
             }
             if ($r->status !== 'draft') {
                 throw new ConflictHttpException('Charge cannot be issued from its current state.');
-            }$members = Member::where('club_id', $c->id)->where('status', 'active')->whereIn('id', $r->assignment_member_ids)->get();
+            }$category = $this->enabledCategory($r->category);
+            $members = Member::where('club_id', $c->id)->where('status', 'active')->whereIn('id', $r->assignment_member_ids)->get();
             if ($members->count() !== count($r->assignment_member_ids)) {
                 throw ValidationException::withMessages(['member_ids' => 'All assigned members must remain active and same-club.']);
             }foreach ($members as $m) {
                 MemberCharge::create(['club_id' => $c->id, 'club_charge_id' => $r->id, 'member_id' => $m->id, 'original_amount_paise' => $r->amount_paise]);
-            }$r->update(['status' => 'issued', 'issued_at' => now(), 'issued_by_user_id' => $u->id, 'lock_version' => $r->lock_version + 1]);
+            }$r->update(['status' => 'issued', 'fund_code' => $category->fund_code, 'issued_at' => now(), 'issued_by_user_id' => $u->id, 'lock_version' => $r->lock_version + 1]);
             $requiresAccounting = $this->accounting->recordChargeCoverageDecision($r->fresh(), $u);
             if ($requiresAccounting) {
                 $this->accounting->postCharge($r->fresh(), $u);
@@ -161,7 +167,11 @@ class FinanceWriteService
             }
             $p = MemberPayment::create(['club_id' => $c->id, 'member_id' => $m->id, 'amount_paise' => $v['amount_paise'], 'payment_date' => $v['payment_date'], 'payment_mode' => $v['payment_mode'], 'external_reference' => $v['external_reference'] ?? null, 'internal_note' => $v['internal_note'] ?? null, 'idempotency_key' => $v['idempotency_key'], 'request_hash' => $hash, 'status' => 'recorded', 'recorded_by_user_id' => $u->id]);
             foreach ($v['allocations'] as $a) {
-                PaymentAllocation::create(['club_id' => $c->id, 'member_payment_id' => $p->id, 'member_charge_id' => $a['member_charge_id'], 'amount_paise' => $a['amount_paise']]);
+                $fund = $charges[$a['member_charge_id']]->charge()->value('fund_code');
+                if (! FundCode::tryFrom((string) $fund)) {
+                    throw ValidationException::withMessages(['allocations' => 'Every obligation must have a frozen canonical fund.']);
+                }
+                PaymentAllocation::create(['club_id' => $c->id, 'member_payment_id' => $p->id, 'member_charge_id' => $a['member_charge_id'], 'amount_paise' => $a['amount_paise'], 'fund_code' => $fund]);
             }
             $fy = $this->fy($v['payment_date']);
             $receipt = PaymentReceipt::create(['club_id' => $c->id, 'member_payment_id' => $p->id, 'receipt_number' => $this->receiptNumber($c, $fy), 'receipt_date' => $v['payment_date'], 'financial_year' => $fy, 'status' => 'issued', 'issued_by_user_id' => $u->id]);
@@ -173,6 +183,16 @@ class FinanceWriteService
 
             return ['payment' => $p->refresh()->load(['allocations', 'receipt']), 'replayed' => false];
         });
+    }
+
+    private function enabledCategory(string $code): AccountingChargeCategory
+    {
+        $category = AccountingChargeCategory::query()->whereKey($code)->first();
+        if (! $category || ! $category->is_accounting_enabled || ! FundCode::tryFrom((string) $category->fund_code)) {
+            throw ValidationException::withMessages(['category' => 'CHARGE_CATEGORY_NOT_ACCOUNTING_ENABLED']);
+        }
+
+        return $category;
     }
 
     public function void(User $u, Club $c, MemberPayment $p, int $version, string $reason, ?int $replacement = null): MemberPayment

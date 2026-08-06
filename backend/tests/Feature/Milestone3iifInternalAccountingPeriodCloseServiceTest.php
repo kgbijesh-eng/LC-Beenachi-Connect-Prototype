@@ -146,7 +146,7 @@ class Milestone3iifInternalAccountingPeriodCloseServiceTest extends TestCase
         ClubMembership::create(['club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => $role->id, 'status' => 'active', 'joined_at' => now()]);
         $period = (new ClubAccountingPeriodProvisioningService)->provision(new ClubAccountingPeriodProvisioningRequest($club->id, '2026-27', $actor->id));
         $provisioner = new LedgerAccountProvisioningService;
-        $accounts = [$provisioner->provision(new LedgerAccountProvisioningRequest($club->id, 'CASH', 'Cash', 'asset', 'debit', 'INR', $actor->id)), $provisioner->provision(new LedgerAccountProvisioningRequest($club->id, 'INC', 'Income', 'income', 'credit', 'INR', $actor->id))];
+        $accounts = [$provisioner->provision(new LedgerAccountProvisioningRequest($club->id, 'CASH', 'Cash', 'asset', 'debit', 'INR', $actor->id, 'custom', null, 'CASH_AND_BANK')), $provisioner->provision(new LedgerAccountProvisioningRequest($club->id, 'INC', 'Income', 'income', 'credit', 'INR', $actor->id, 'custom', null, 'INCOME'))];
 
         return compact('actor', 'club', 'period', 'accounts');
     }
@@ -158,7 +158,7 @@ class Milestone3iifInternalAccountingPeriodCloseServiceTest extends TestCase
 
     private function postJournal(array $f): ClubJournalEntry
     {
-        return (new ClubJournalPostingService)->post(new JournalPostingRequest($f['club']->id, $f['period']->id, '2026-07-02', 'Entry', 'INR', 'test', '1', 'posted', (string) Str::uuid(), $f['actor']->id, [new JournalLineInput($f['accounts'][0]->id, 'debit', 100), new JournalLineInput($f['accounts'][1]->id, 'credit', 100)]));
+        return (new ClubJournalPostingService)->post(new JournalPostingRequest($f['club']->id, $f['period']->id, '2026-07-02', 'Entry', 'INR', 'test', '1', 'posted', (string) Str::uuid(), $f['actor']->id, [new JournalLineInput($f['accounts'][0]->id, 'debit', 100, fundCode: 'GENERAL_CLUB_FUND'), new JournalLineInput($f['accounts'][1]->id, 'credit', 100, fundCode: 'GENERAL_CLUB_FUND')]));
     }
 
     private function service(): ClubAccountingPeriodCloseService
