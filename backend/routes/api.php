@@ -5,8 +5,9 @@ use App\Http\Controllers\Api\V1\Auth\AccountActivationController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Club\ClubController;
 use App\Http\Controllers\Api\V1\Events\ClubEventController;
-use App\Http\Controllers\Api\V1\Finance\ClubFinanceReportController;
 use App\Http\Controllers\Api\V1\Finance\AccountingIntegrationController;
+use App\Http\Controllers\Api\V1\Finance\ClubAccountStatementController;
+use App\Http\Controllers\Api\V1\Finance\ClubFinanceReportController;
 use App\Http\Controllers\Api\V1\Finance\MemberFinanceSummaryController;
 use App\Http\Controllers\Api\V1\Finance\MemberLedgerBalanceController;
 use App\Http\Controllers\Api\V1\Finance\PaymentController;
@@ -92,6 +93,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/finance/payments/{payment}', [FinanceReadController::class, 'payment']);
             Route::get('/clubs/{club}/finance/receipts/{receipt}', [FinanceReadController::class, 'receipt']);
         });
+        Route::get('/clubs/{club}/finance/account-statement', [ClubAccountStatementController::class, 'show'])
+            ->middleware('club.permission:finance.club.statement.view,club');
         Route::middleware('club.permission:finance.self.view,club')->group(function (): void {
             Route::get('/clubs/{club}/finance/me/summary', [FinanceReadController::class, 'ownSummary']);
             Route::get('/clubs/{club}/finance/me/charges', [FinanceReadController::class, 'ownCharges']);
