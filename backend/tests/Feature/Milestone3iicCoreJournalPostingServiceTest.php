@@ -39,6 +39,8 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const VERIFIED_3IIC_COMMIT = 'b72848c';
+
     public function test_valid_request_posts_one_balanced_canonical_entry_in_integer_paise(): void
     {
         $fixture = $this->fixture();
@@ -417,17 +419,36 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
         $entry->lines->first()->delete();
     }
 
-    public function test_service_adds_no_route_and_invokes_no_existing_finance_workflow(): void
+    public function test_service_added_no_historical_route_and_invokes_no_existing_finance_workflow(): void
     {
-        $financeUris = collect(app('router')->getRoutes())
-            ->map(fn ($route) => $route->uri())
-            ->filter(fn (string $uri) => str_contains($uri, 'account-statement') || str_contains($uri, 'journal'));
-
-        $this->assertSame([], $financeUris->values()->all());
+        $historicalRoutes = $this->gitOutput(['show', self::VERIFIED_3IIC_COMMIT.':backend/routes/api.php']);
+        $this->assertStringNotContainsString('account-statement', $historicalRoutes);
+        $this->assertStringNotContainsString('/journal', $historicalRoutes);
+        $this->assertTrue($this->historicalPathExists('backend/app/Services/Finance/ClubJournalPostingService.php'));
+        $this->assertFalse($this->historicalPathExists('backend/app/Http/Controllers/Api/V1/Finance/ClubAccountStatementController.php'));
         $this->assertSame(0, MemberPayment::count());
         $this->assertSame(0, Payment::count());
         $this->assertSame(0, Receipt::count());
         $this->assertSame(0, AuditLog::count());
+    }
+
+    private function historicalPathExists(string $path): bool
+    {
+        $repoRoot = realpath(__DIR__.'/../../..') ?: __DIR__.'/../../..';
+        $command = ['git', '-C', $repoRoot, 'cat-file', '-e', self::VERIFIED_3IIC_COMMIT.':'.$path];
+        exec(implode(' ', array_map('escapeshellarg', $command)).' 2>&1', $output, $exitCode);
+
+        return $exitCode === 0;
+    }
+
+    private function gitOutput(array $arguments): string
+    {
+        $repoRoot = realpath(__DIR__.'/../../..') ?: __DIR__.'/../../..';
+        $command = ['git', '-C', $repoRoot, ...$arguments];
+        exec(implode(' ', array_map('escapeshellarg', $command)).' 2>&1', $output, $exitCode);
+        $this->assertSame(0, $exitCode, 'Expected local Git command to succeed: '.implode(' ', $command)."\n".implode("\n", $output));
+
+        return implode("\n", $output);
     }
 
     private function service(): ClubJournalPostingService

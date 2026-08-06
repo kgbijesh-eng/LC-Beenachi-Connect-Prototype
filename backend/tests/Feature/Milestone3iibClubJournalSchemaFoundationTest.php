@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Http\Controllers\Api\V1\Finance\ClubAccountStatementController;
 use App\Models\Club;
 use App\Models\ClubAccountingPeriod;
 use App\Models\ClubJournalEntry;
@@ -10,7 +9,6 @@ use App\Models\ClubJournalLine;
 use App\Models\LedgerAccount;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\Finance\ClubJournalPostingService;
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -23,6 +21,10 @@ use Tests\TestCase;
 class Milestone3iibClubJournalSchemaFoundationTest extends TestCase
 {
     use RefreshDatabase;
+
+    private const VERIFIED_3IIB_COMMIT = '74c307d';
+
+    private const VERIFIED_POSTING_SERVICE_COMMIT = 'b72848c';
 
     public function test_journal_foundation_tables_and_columns_exist_without_soft_deletes(): void
     {
@@ -238,7 +240,7 @@ class Milestone3iibClubJournalSchemaFoundationTest extends TestCase
         $line->delete();
     }
 
-    public function test_statement_permission_is_officer_only_and_runtime_remains_inert(): void
+    public function test_statement_permission_is_officer_only_and_3iib_history_remains_inert(): void
     {
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
@@ -249,12 +251,33 @@ class Milestone3iibClubJournalSchemaFoundationTest extends TestCase
         $this->assertFalse(Role::where('slug', 'member')->firstOrFail()
             ->permissions->contains('slug', 'finance.club.statement.view'));
 
-        $financeUris = collect(app('router')->getRoutes())
-            ->map(fn ($route) => $route->uri())
-            ->filter(fn (string $uri) => str_contains($uri, 'account-statement') || str_contains($uri, 'journal'));
-        $this->assertSame([], $financeUris->values()->all());
-        $this->assertTrue(class_exists(ClubJournalPostingService::class));
-        $this->assertFalse(class_exists(ClubAccountStatementController::class));
+        $historicalRoutes = $this->gitOutput(['show', self::VERIFIED_3IIB_COMMIT.':backend/routes/api.php']);
+        $this->assertStringNotContainsString('account-statement', $historicalRoutes);
+        $this->assertStringNotContainsString('/journal', $historicalRoutes);
+        $this->assertTrue($this->historicalPathExists(
+            'backend/app/Services/Finance/ClubJournalPostingService.php',
+            self::VERIFIED_POSTING_SERVICE_COMMIT,
+        ));
+        $this->assertFalse($this->historicalPathExists('backend/app/Http/Controllers/Api/V1/Finance/ClubAccountStatementController.php'));
+    }
+
+    private function historicalPathExists(string $path, string $commit = self::VERIFIED_3IIB_COMMIT): bool
+    {
+        $repoRoot = realpath(__DIR__.'/../../..') ?: __DIR__.'/../../..';
+        $command = ['git', '-C', $repoRoot, 'cat-file', '-e', $commit.':'.$path];
+        exec(implode(' ', array_map('escapeshellarg', $command)).' 2>&1', $output, $exitCode);
+
+        return $exitCode === 0;
+    }
+
+    private function gitOutput(array $arguments): string
+    {
+        $repoRoot = realpath(__DIR__.'/../../..') ?: __DIR__.'/../../..';
+        $command = ['git', '-C', $repoRoot, ...$arguments];
+        exec(implode(' ', array_map('escapeshellarg', $command)).' 2>&1', $output, $exitCode);
+        $this->assertSame(0, $exitCode, 'Expected local Git command to succeed: '.implode(' ', $command)."\n".implode("\n", $output));
+
+        return implode("\n", $output);
     }
 
     private function clubAndUser(string $suffix): array
