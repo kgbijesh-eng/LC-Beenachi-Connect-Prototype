@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 use LogicException;
 
@@ -58,6 +59,16 @@ class ClubJournalLine extends Model
     public function club(): BelongsTo
     {
         return $this->belongsTo(Club::class);
+    }
+
+    public function openingScheduleRow(): BelongsTo
+    {
+        return $this->belongsTo(ClubAccountingCutoverScheduleRow::class, 'opening_schedule_row_id');
+    }
+
+    public function allocationJournalLines(): HasMany
+    {
+        return $this->hasMany(PaymentAllocationJournalLine::class, 'journal_line_id');
     }
 
     private function guardParentIsEditable(): void
