@@ -16,7 +16,8 @@ class ClubJournalLine extends Model
 
     protected $fillable = [
         'public_id', 'club_id', 'journal_entry_id', 'ledger_account_id',
-        'line_number', 'direction', 'amount_paise', 'description',
+        'line_number', 'direction', 'amount_paise', 'description', 'fund_code',
+        'opening_schedule_row_id', 'reversal_of_line_id',
     ];
 
     protected static function booted(): void

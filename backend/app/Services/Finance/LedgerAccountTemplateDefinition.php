@@ -11,6 +11,8 @@ final readonly class LedgerAccountTemplateDefinition
         public string $name,
         public string $accountType,
         public string $normalBalance,
+        public string $statementClassification,
+        public string $fundUsageRule,
         public string $currency,
         public string $purpose,
         public string $initialActivation,

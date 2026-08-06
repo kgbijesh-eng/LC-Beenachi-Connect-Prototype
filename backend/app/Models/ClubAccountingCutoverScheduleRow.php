@@ -8,7 +8,7 @@ use Illuminate\Support\Str;
 
 class ClubAccountingCutoverScheduleRow extends Model
 {
-    protected $fillable = ['public_id', 'club_id', 'cutover_package_id', 'schedule_type', 'row_key', 'non_sensitive_label', 'ledger_account_id', 'presentation_group', 'direction', 'amount_paise'];
+    protected $fillable = ['public_id', 'club_id', 'cutover_package_id', 'schedule_type', 'row_key', 'non_sensitive_label', 'ledger_account_id', 'presentation_group', 'direction', 'amount_paise', 'fund_code'];
 
     protected static function booted(): void
     {

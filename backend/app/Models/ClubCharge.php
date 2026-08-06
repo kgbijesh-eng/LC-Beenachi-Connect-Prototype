@@ -10,7 +10,11 @@ use LogicException;
 
 class ClubCharge extends Model
 {
-    public const CATEGORIES = ['membership_dues', 'installation_contribution', 'event_contribution', 'service_project_contribution', 'other_contribution'];
+    public const CATEGORIES = [
+        'membership_dues', 'installation_contribution', 'service_project_contribution',
+        'general_club_event_contribution', 'fellowship_member_activity_contribution',
+        'event_contribution', 'other_contribution',
+    ];
 
     public const STATUSES = ['draft', 'issued', 'closed', 'cancelled'];
 
@@ -27,6 +31,9 @@ class ClubCharge extends Model
         static::updating(function (self $m): void {
             if ($m->isDirty('public_id')) {
                 throw new LogicException('Charge public identity is immutable.');
+            }
+            if ($m->getOriginal('issued_at') !== null && ($m->isDirty('category') || $m->isDirty('fund_code'))) {
+                throw new LogicException('Issued charge category and fund are immutable.');
             }
         });
     }

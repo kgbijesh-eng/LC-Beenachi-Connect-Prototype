@@ -92,8 +92,8 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
         $changed = $this->request($fixture, [
             'idempotencyKey' => $request->idempotencyKey,
             'lines' => [
-                new JournalLineInput($fixture['cash']->id, 'debit', 20000),
-                new JournalLineInput($fixture['income']->id, 'credit', 20000),
+                new JournalLineInput($fixture['cash']->id, 'debit', 20000, fundCode: 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['income']->id, 'credit', 20000, fundCode: 'GENERAL_CLUB_FUND'),
             ],
         ]);
 
@@ -125,12 +125,12 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
             ['sourceEvent' => 'changed-event'],
             ['postingActorUserId' => $otherActor->id],
             ['lines' => [
-                new JournalLineInput($fixture['income']->id, 'credit', 12550, 'Income recognized'),
-                new JournalLineInput($fixture['cash']->id, 'debit', 12550, 'Cash received'),
+                new JournalLineInput($fixture['income']->id, 'credit', 12550, 'Income recognized', 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['cash']->id, 'debit', 12550, 'Cash received', 'GENERAL_CLUB_FUND'),
             ]],
             ['lines' => [
-                new JournalLineInput($fixture['cash']->id, 'debit', 12550, 'Changed line narration'),
-                new JournalLineInput($fixture['income']->id, 'credit', 12550, 'Income recognized'),
+                new JournalLineInput($fixture['cash']->id, 'debit', 12550, 'Changed line narration', 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['income']->id, 'credit', 12550, 'Income recognized', 'GENERAL_CLUB_FUND'),
             ]],
         ];
 
@@ -185,18 +185,18 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
     {
         $fixture = $this->fixture();
         $invalidLines = [
-            [new JournalLineInput($fixture['cash']->id, 'debit', 100)],
+            [new JournalLineInput($fixture['cash']->id, 'debit', 100, fundCode: 'GENERAL_CLUB_FUND')],
             [
-                new JournalLineInput($fixture['cash']->id, 'debit', 100),
-                new JournalLineInput($fixture['income']->id, 'debit', 100),
+                new JournalLineInput($fixture['cash']->id, 'debit', 100, fundCode: 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['income']->id, 'debit', 100, fundCode: 'GENERAL_CLUB_FUND'),
             ],
             [
-                new JournalLineInput($fixture['cash']->id, 'credit', 100),
-                new JournalLineInput($fixture['income']->id, 'credit', 100),
+                new JournalLineInput($fixture['cash']->id, 'credit', 100, fundCode: 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['income']->id, 'credit', 100, fundCode: 'GENERAL_CLUB_FUND'),
             ],
             [
-                new JournalLineInput($fixture['cash']->id, 'debit', 100),
-                new JournalLineInput($fixture['income']->id, 'credit', 99),
+                new JournalLineInput($fixture['cash']->id, 'debit', 100, fundCode: 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['income']->id, 'credit', 99, fundCode: 'GENERAL_CLUB_FUND'),
             ],
         ];
 
@@ -230,8 +230,8 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
             try {
                 $this->service()->post($this->request($fixture, [
                     'lines' => [
-                        new JournalLineInput($fixture['cash']->id, 'debit', $amount),
-                        new JournalLineInput($fixture['income']->id, 'credit', $amount),
+                        new JournalLineInput($fixture['cash']->id, 'debit', $amount, fundCode: 'GENERAL_CLUB_FUND'),
+                        new JournalLineInput($fixture['income']->id, 'credit', $amount, fundCode: 'GENERAL_CLUB_FUND'),
                     ],
                     'idempotencyKey' => (string) Str::uuid(),
                 ]));
@@ -251,9 +251,9 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
         $this->expectException(InvalidMonetaryValueException::class);
         $this->service()->post($this->request($fixture, [
             'lines' => [
-                new JournalLineInput($fixture['cash']->id, 'debit', PHP_INT_MAX),
-                new JournalLineInput($fixture['cash']->id, 'debit', 1),
-                new JournalLineInput($fixture['income']->id, 'credit', PHP_INT_MAX),
+                new JournalLineInput($fixture['cash']->id, 'debit', PHP_INT_MAX, fundCode: 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['cash']->id, 'debit', 1, fundCode: 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['income']->id, 'credit', PHP_INT_MAX, fundCode: 'GENERAL_CLUB_FUND'),
             ],
         ]));
     }
@@ -273,8 +273,8 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
         foreach ([
             ['accountingPeriodId' => $fixtureB['period']->id],
             ['lines' => [
-                new JournalLineInput($fixtureA['cash']->id, 'debit', 12550),
-                new JournalLineInput($fixtureB['income']->id, 'credit', 12550),
+                new JournalLineInput($fixtureA['cash']->id, 'debit', 12550, fundCode: 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixtureB['income']->id, 'credit', 12550, fundCode: 'GENERAL_CLUB_FUND'),
             ]],
         ] as $overrides) {
             try {
@@ -305,8 +305,8 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
         $this->expectException(InvalidJournalRequestException::class);
         $this->service()->post($this->request($fixture, [
             'lines' => [
-                new JournalLineInput(PHP_INT_MAX, 'debit', 12550),
-                new JournalLineInput($fixture['income']->id, 'credit', 12550),
+                new JournalLineInput(PHP_INT_MAX, 'debit', 12550, fundCode: 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['income']->id, 'credit', 12550, fundCode: 'GENERAL_CLUB_FUND'),
             ],
         ]));
     }
@@ -364,8 +364,8 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
             ['idempotencyKey' => 'not-a-uuid'],
             ['description' => '   '],
             ['lines' => [
-                new JournalLineInput($fixture['cash']->id, 'increase', 12550),
-                new JournalLineInput($fixture['income']->id, 'credit', 12550),
+                new JournalLineInput($fixture['cash']->id, 'increase', 12550, fundCode: 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['income']->id, 'credit', 12550, fundCode: 'GENERAL_CLUB_FUND'),
             ]],
         ];
 
@@ -487,8 +487,8 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
             idempotencyKey: $overrides['idempotencyKey'] ?? (string) Str::uuid(),
             postingActorUserId: $overrides['postingActorUserId'] ?? $fixture['actor']->id,
             lines: $overrides['lines'] ?? [
-                new JournalLineInput($fixture['cash']->id, 'debit', 12550, 'Cash received'),
-                new JournalLineInput($fixture['income']->id, 'credit', 12550, 'Income recognized'),
+                new JournalLineInput($fixture['cash']->id, 'debit', 12550, 'Cash received', 'GENERAL_CLUB_FUND'),
+                new JournalLineInput($fixture['income']->id, 'credit', 12550, 'Income recognized', 'GENERAL_CLUB_FUND'),
             ],
         );
     }

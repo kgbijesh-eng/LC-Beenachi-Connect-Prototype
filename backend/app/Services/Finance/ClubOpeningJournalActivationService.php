@@ -72,12 +72,19 @@ final class ClubOpeningJournalActivationService
                     throw new CutoverExecutionException('The cutover accounting period is unavailable.');
                 }
                 $lines = collect($preview['lines'])->filter(fn ($line) => $line['debit_paise'] > 0 || $line['credit_paise'] > 0)->map(function ($line) use ($package): JournalLineInput {
-                    $account = LedgerAccount::query()->where('club_id', $package->club_id)->where('code', $line['account_code'])->where('is_active', true)->first();
+                    $row = $package->scheduleRows()->whereKey($line['schedule_row_id'])->first();
+                    $account = $row?->ledger_account_id
+                        ? LedgerAccount::query()->whereKey($row->ledger_account_id)->where('club_id', $package->club_id)->where('is_active', true)->first()
+                        : LedgerAccount::query()->where('club_id', $package->club_id)->where('code', $line['account_code'])->where('is_active', true)->first();
                     if (! $account) {
                         throw new CutoverExecutionException('An opening journal account is unavailable.');
                     }
 
-                    return new JournalLineInput($account->id, $line['direction'], max($line['debit_paise'], $line['credit_paise']), 'Opening balance: '.$line['row_key']);
+                    if (! $row || $row->fund_code !== $line['fund_code']) {
+                        throw new CutoverExecutionException('Opening row traceability is invalid.');
+                    }
+
+                    return new JournalLineInput($account->id, $line['direction'], max($line['debit_paise'], $line['credit_paise']), 'Opening balance: '.$line['row_key'], $row->fund_code, $row->id);
                 })->values()->all();
                 $journal = $this->journals->post(new JournalPostingRequest($package->club_id, $period->id, $package->cutover_date->format('Y-m-d'), 'Approved opening balances for '.$package->lions_year, 'INR', self::SOURCE_TYPE, $package->public_id, 'activated', $request->idempotencyKey, $actor->id, $lines, metadata: ['package_version' => $package->package_version, 'canonical_checksum' => $checksum, 'chart_version' => $package->chart_version, 'president_activation_decision' => $activation['president']->public_id, 'ca_activation_decision' => $activation['ca']->public_id]));
                 $success = ClubAccountingCutoverExecutionSuccess::create(['club_id' => $package->club_id, 'cutover_package_id' => $package->id, 'package_version' => $package->package_version, 'canonical_checksum' => $checksum, 'lions_year' => $package->lions_year, 'cutover_date' => $package->cutover_date, 'opening_source_type' => self::SOURCE_TYPE, 'execution_reference' => $request->executionReference, 'idempotency_key' => $request->idempotencyKey, 'president_activation_decision_id' => $activation['president']->id, 'ca_activation_decision_id' => $activation['ca']->id, 'journal_entry_id' => $journal->id, 'executed_by_user_id' => $actor->id, 'technical_appointment_id' => $appointment->id, 'permission_assignment_id' => $permission->id, 'committed_at' => now()]);

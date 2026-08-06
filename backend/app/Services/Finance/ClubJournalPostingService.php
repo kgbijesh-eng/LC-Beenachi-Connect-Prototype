@@ -76,6 +76,7 @@ final class ClubJournalPostingService
             }
 
             $accounts = $this->lockAndValidateAccounts($request, $club);
+            $this->validateFundUsage($normalized['lines'], $accounts);
             $existing = $this->resolveReplay($club, $normalized);
             if ($existing) {
                 return $existing;
@@ -123,6 +124,9 @@ final class ClubJournalPostingService
                     'direction' => $line['direction'],
                     'amount_paise' => $line['amount_paise'],
                     'description' => $line['description'],
+                    'fund_code' => $line['fund_code'],
+                    'opening_schedule_row_id' => $line['opening_schedule_row_id'],
+                    'reversal_of_line_id' => $line['reversal_of_line_id'],
                 ]);
             }
 
@@ -167,6 +171,7 @@ final class ClubJournalPostingService
 
         $debits = 0;
         $credits = 0;
+        $fundTotals = [];
         $lines = [];
         foreach ($request->lines as $line) {
             if (! $line instanceof JournalLineInput || $line->accountId < 1
@@ -176,11 +181,17 @@ final class ClubJournalPostingService
             if ($line->amountPaise < 1) {
                 throw new InvalidMonetaryValueException('A journal amount is invalid.');
             }
+            $fund = $line->fundCode === null ? null : FundCode::tryFrom($line->fundCode);
+            if (! $fund) {
+                throw new InvalidJournalRequestException('A journal line fund is invalid.');
+            }
 
             if ($line->direction === ClubJournalLine::DIRECTION_DEBIT) {
                 $debits = $this->checkedAdd($debits, $line->amountPaise);
+                $fundTotals[$fund->value]['debit'] = $this->checkedAdd($fundTotals[$fund->value]['debit'] ?? 0, $line->amountPaise);
             } else {
                 $credits = $this->checkedAdd($credits, $line->amountPaise);
+                $fundTotals[$fund->value]['credit'] = $this->checkedAdd($fundTotals[$fund->value]['credit'] ?? 0, $line->amountPaise);
             }
             $lineDescription = $line->description === null ? null : trim($line->description);
             $lines[] = [
@@ -188,6 +199,9 @@ final class ClubJournalPostingService
                 'direction' => $line->direction,
                 'amount_paise' => $line->amountPaise,
                 'description' => $lineDescription === '' ? null : $lineDescription,
+                'fund_code' => $fund->value,
+                'opening_schedule_row_id' => $line->openingScheduleRowId,
+                'reversal_of_line_id' => $line->reversalOfLineId,
             ];
         }
 
@@ -196,6 +210,11 @@ final class ClubJournalPostingService
         }
         if ($debits !== $credits) {
             throw new UnbalancedJournalException('The journal is not balanced.');
+        }
+        foreach ($fundTotals as $totals) {
+            if (($totals['debit'] ?? 0) !== ($totals['credit'] ?? 0)) {
+                throw new UnbalancedJournalException('The journal is not balanced within each fund.');
+            }
         }
 
         return [
@@ -283,6 +302,31 @@ final class ClubJournalPostingService
         return $existing;
     }
 
+    private function validateFundUsage(array $lines, Collection $accounts): void
+    {
+        $templates = collect(app(ApprovedLedgerAccountTemplateCatalog::class)->definitions())->keyBy('templateCode');
+        foreach ($lines as $line) {
+            $account = $accounts->get($line['account_id']);
+            if ($account->origin_kind !== AccountOriginKind::CATALOGUE->value) {
+                continue;
+            }
+            $template = $templates->get($account->origin_template_code);
+            if (! $template) {
+                throw new InvalidJournalRequestException('A catalogue account template identity is invalid.');
+            }
+            $allowed = match ($template->fundUsageRule) {
+                FundUsageRule::ANY_APPROVED_FUND->value => true,
+                FundUsageRule::GENERAL_ONLY->value => $line['fund_code'] === FundCode::GENERAL_CLUB_FUND->value,
+                FundUsageRule::SERVICE_ONLY->value => $line['fund_code'] === FundCode::SERVICE_ACTIVITY_FUND->value,
+                FundUsageRule::FELLOWSHIP_MEMBER_ONLY->value => $line['fund_code'] === FundCode::FELLOWSHIP_MEMBER_ACTIVITY_FUND->value,
+                default => false,
+            };
+            if (! $allowed) {
+                throw new InvalidJournalRequestException('The journal fund is not permitted for an account.');
+            }
+        }
+    }
+
     private function semanticEntry(ClubJournalEntry $entry): array
     {
         return [
@@ -303,6 +347,9 @@ final class ClubJournalPostingService
                 'direction' => $line->direction,
                 'amount_paise' => $line->amount_paise,
                 'description' => $line->description,
+                'fund_code' => $line->fund_code,
+                'opening_schedule_row_id' => $line->opening_schedule_row_id,
+                'reversal_of_line_id' => $line->reversal_of_line_id,
             ])->all(),
         ];
     }

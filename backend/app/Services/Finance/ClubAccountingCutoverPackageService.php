@@ -111,7 +111,8 @@ final class ClubAccountingCutoverPackageService
         }
         $checks['unique_row_keys'] = $package->scheduleRows->pluck('row_key')->unique()->count() === $package->scheduleRows->count();
         $mapped = $package->scheduleRows->whereIn('schedule_type', self::POSTING_TYPES)->whereNotNull('ledger_account_id');
-        $checks['unique_account_mappings'] = $mapped->pluck('ledger_account_id')->unique()->count() === $mapped->count();
+        $checks['unique_account_fund_mappings'] = $mapped->map(fn ($row) => $row->ledger_account_id.'|'.$row->fund_code)->unique()->count() === $mapped->count();
+        $checks['posting_funds'] = $package->scheduleRows->whereIn('schedule_type', self::POSTING_TYPES)->every(fn ($row) => FundCode::tryFrom((string) $row->fund_code) !== null);
         $checks['eligible_accounts'] = $package->scheduleRows->every(function (ClubAccountingCutoverScheduleRow $row) use ($package): bool {
             if (! in_array($row->schedule_type, self::POSTING_TYPES, true)) {
                 return $row->ledger_account_id === null;
@@ -148,6 +149,7 @@ final class ClubAccountingCutoverPackageService
         }
         $difference = $this->reconciliationDifference($package);
         $checks['reconciliation_zero'] = $difference === 0;
+        $checks['fund_balanced'] = collect($this->preview($package)['fund_totals'])->every(fn ($totals) => $totals['debit_paise'] === $totals['credit_paise']);
 
         return ['valid' => ! in_array(false, $checks, true), 'checks' => $checks, 'failure_reasons' => array_keys(array_filter($checks, fn (bool $passed): bool => ! $passed)), 'reconciliation_difference_paise' => $difference];
     }
@@ -184,7 +186,7 @@ final class ClubAccountingCutoverPackageService
             'schedule_rows' => $package->scheduleRows->map(fn ($row): array => [
                 'schedule_type' => $row->schedule_type, 'row_key' => $row->row_key,
                 'label' => $row->non_sensitive_label, 'account_code' => $row->schedule_type === 'equity_preview' && $row->ledgerAccount === null ? $package->dr033_classification : $row->ledgerAccount?->code,
-                'presentation_group' => $row->presentation_group, 'direction' => $row->direction,
+                'presentation_group' => $row->presentation_group, 'fund_code' => $row->fund_code, 'direction' => $row->direction,
                 'amount_paise' => $row->amount_paise,
             ])->sortBy(fn (array $row): string => $row['schedule_type'].'|'.$row['row_key'])->values()->all(),
             'evidence_references' => $package->evidenceReferences->map(fn ($evidence): array => [
@@ -243,7 +245,9 @@ final class ClubAccountingCutoverPackageService
             $unresolved = $row->schedule_type === 'equity_preview' && $package->dr033_classification === null;
 
             return [
-                'row_key' => $row->row_key, 'account_code' => $unresolved ? null : ($row->ledgerAccount?->code ?? ($row->schedule_type === 'equity_preview' ? $package->dr033_classification : null)),
+                'schedule_row_id' => $row->id, 'fund_code' => $row->fund_code,
+                'row_key' => $row->row_key, 'account_id' => $row->ledger_account_id,
+                'account_code' => $unresolved ? null : ($row->ledgerAccount?->code ?? ($row->schedule_type === 'equity_preview' ? $package->dr033_classification : null)),
                 'unresolved_classification' => $unresolved, 'direction' => $row->direction,
                 'debit_paise' => $row->direction === 'debit' ? $row->amount_paise : 0,
                 'credit_paise' => $row->direction === 'credit' ? $row->amount_paise : 0,
@@ -251,13 +255,15 @@ final class ClubAccountingCutoverPackageService
         })->sortBy(fn (array $line): string => $line['row_key'])->values();
         $debits = $lines->sum('debit_paise');
         $credits = $lines->sum('credit_paise');
+        $fundTotals = $lines->groupBy('fund_code')->map(fn ($rows) => ['debit_paise' => (int) $rows->sum('debit_paise'), 'credit_paise' => (int) $rows->sum('credit_paise')])->all();
 
         return [
             'contract_version' => self::PREVIEW_CONTRACT,
             'status' => $package->dr033_classification === null ? 'BLOCKED_DR033' : ($debits === $credits ? 'BALANCED_PREVIEW' : 'UNBALANCED_PREVIEW'),
             'writes_performed' => false,
             'header' => ['club_id' => $package->club_id, 'effective_date' => $package->cutover_date->format('Y-m-d'), 'lions_year' => $package->lions_year, 'source_type' => 'accounting_opening_package_preview', 'package_version' => $package->package_version, 'package_checksum' => $this->checksum($package), 'dr033_classification' => $package->dr033_classification],
-            'lines' => $lines->all(), 'total_debit_paise' => $debits, 'total_credit_paise' => $credits, 'balanced' => $debits === $credits,
+            'lines' => $lines->all(), 'fund_totals' => $fundTotals, 'total_debit_paise' => $debits, 'total_credit_paise' => $credits,
+            'balanced' => $debits === $credits && collect($fundTotals)->every(fn ($totals) => $totals['debit_paise'] === $totals['credit_paise']),
         ];
     }
 
@@ -308,7 +314,7 @@ final class ClubAccountingCutoverPackageService
         }
         $normalized = [];
         $keys = [];
-        $accountIds = [];
+        $accountFunds = [];
         foreach ($rows as $row) {
             if (! is_array($row)) {
                 throw new CutoverPackageException('A cutover schedule row is invalid.');
@@ -320,6 +326,7 @@ final class ClubAccountingCutoverPackageService
             $amount = $row['amount_paise'] ?? null;
             $accountId = $row['ledger_account_id'] ?? null;
             $group = isset($row['presentation_group']) ? strtoupper(trim((string) $row['presentation_group'])) : null;
+            $fund = isset($row['fund_code']) ? strtoupper(trim((string) $row['fund_code'])) : null;
             if (! in_array($type, self::REQUIRED_SCHEDULES, true) || ! preg_match('/\A[A-Z][A-Z0-9-]{1,79}\z/', $key)
                 || $label === '' || $this->containsSensitiveValue($label) || ! in_array($direction, ['debit', 'credit'], true)
                 || ! is_int($amount) || $amount < 0 || ($accountId !== null && (! is_int($accountId) || $accountId < 1)) || isset($keys[$key])) {
@@ -327,16 +334,19 @@ final class ClubAccountingCutoverPackageService
             }
             $keys[$key] = true;
             if ($accountId !== null) {
-                if (isset($accountIds[$accountId])) {
-                    throw new CutoverPackageException('Duplicate account mappings are prohibited.');
+                if (! FundCode::tryFrom((string) $fund) || isset($accountFunds[$accountId.'|'.$fund])) {
+                    throw new CutoverPackageException('A posting row requires a unique canonical account and fund mapping.');
                 }
-                $accountIds[$accountId] = true;
+                $accountFunds[$accountId.'|'.$fund] = true;
                 $account = LedgerAccount::query()->whereKey($accountId)->first();
                 if (! $account || $account->club_id !== $clubId || ! $account->is_active) {
                     throw new CutoverPackageException('A cutover account mapping violates club scope or eligibility.');
                 }
             }
-            $normalized[] = ['schedule_type' => $type, 'row_key' => $key, 'non_sensitive_label' => $label, 'ledger_account_id' => $accountId, 'presentation_group' => $group, 'direction' => $direction, 'amount_paise' => $amount];
+            if (in_array($type, self::POSTING_TYPES, true) && ! FundCode::tryFrom((string) $fund)) {
+                throw new CutoverPackageException('Every opening posting row requires a canonical fund.');
+            }
+            $normalized[] = ['schedule_type' => $type, 'row_key' => $key, 'non_sensitive_label' => $label, 'ledger_account_id' => $accountId, 'presentation_group' => $group, 'fund_code' => $fund, 'direction' => $direction, 'amount_paise' => $amount];
         }
 
         return $normalized;
