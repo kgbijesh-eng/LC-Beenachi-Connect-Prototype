@@ -54,6 +54,12 @@ vi.mock("../FinanceBackend", () => ({
   }
 }));
 
+vi.mock("../ClubAccountStatementBackend", () => ({
+  default: function MockClubAccountStatementBackend({ role }: { role: string }) {
+    return <section data-testid="club-account-statement"><h2>Club Account Statement</h2>Canonical Club Account Statement for {role}</section>;
+  }
+}));
+
 vi.mock("../ProfileUpdatesBackend", () => ({
   default: () => <section data-testid="profile-updates-backend" />
 }));
@@ -574,7 +580,7 @@ describe("MemberProfile document loading boundary", () => {
     ["president", "bijesh-president", "president-admin"],
     ["secretary", "rajeesh-secretary", "secretary"],
     ["treasurer", "ranjith-treasurer", "treasurer"]
-  ] as const)("shows a truthful disconnected Club Account Statement for %s", async (role, identity, roleSlug) => {
+  ] as const)("opens the canonical Club Account Statement integration for %s", async (role, identity, roleSlug) => {
     authState.role = role;
     authState.identity = identity;
     authState.session.role = role;
@@ -587,10 +593,8 @@ describe("MemberProfile document loading boundary", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Club Account Statement/ }));
     fireEvent.click(screen.getByRole("button", { name: "Account Overview" }));
 
-    expect(await screen.findByText("Club account statements are not connected to a verified backend source. No balances or transactions are shown.")).toBeInTheDocument();
-    expect(screen.queryByText("Opening Balance")).not.toBeInTheDocument();
-    expect(screen.queryByText("RCP-021")).not.toBeInTheDocument();
-    expect(screen.queryByText("₹25,000")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("club-account-statement")).toHaveTextContent(`Canonical Club Account Statement for ${role}`);
+    expect(screen.queryByText("Club account statements are not connected to a verified backend source. No balances or transactions are shown.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Club Finance Reports/ })).toBeInTheDocument();
   });
 

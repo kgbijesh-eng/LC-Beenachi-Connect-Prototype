@@ -6,6 +6,7 @@ import ReportsBackend from "./ReportsBackend";
 import { eventMeetingSection } from "./eventMeetingPeriod";
 import ProfileUpdatesBackend from "./ProfileUpdatesBackend";
 import FinanceBackend from "./FinanceBackend";
+import ClubAccountStatementBackend from "./ClubAccountStatementBackend";
 import PersonalProfileDocuments from "./PersonalProfileDocuments";
 import AnnouncementsBackend, { AnnouncementDashboardStatus } from "./AnnouncementsBackend";
 import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";
@@ -2561,7 +2562,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
         )}
                 {screen === "finance-module" && (
                   financeSection === "Club Account Statement"
-                    ? <ClubAccountStatementUnavailable />
+                    ? <ClubAccountStatementBackend role={role} />
                     : <FinanceBackend role={role} view={financeSection === "Outstanding Dues" ? "outstanding" : financeSection === "Member Ledger / Dues" ? "summary" : "workspace"} onRecordPayment={openOutstandingPayment} />
                 )}
         {screen === "reports-tools-module" && (
@@ -4334,16 +4335,6 @@ function AnnouncementDetailScreen({
         <div className="notice">Announcement records are not connected to a verified backend source. No announcement records are shown.</div>
         <div className="notice memberHelperText">Real announcement records and actions will appear here only after a verified backend workflow is connected.</div>
       </div>
-    </section>
-  );
-}
-
-function ClubAccountStatementUnavailable() {
-  return (
-    <section className="stack">
-      <Toolbar title="Club Account Statement" actionLabel="Not connected" />
-      <div className="notice">Club account statements are not connected to a verified backend source. No balances or transactions are shown.</div>
-      <div className="notice memberHelperText">Member dues, payments, receipts, and verified club finance reports remain available through their existing backend-connected destinations.</div>
     </section>
   );
 }
