@@ -1202,6 +1202,87 @@ h3 {
   gap: 12px;
 }
 
+.statementFilters,
+.statementMeta,
+.statementTotals,
+.statementReconciliation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+
+.statementFilters {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.statementFilters label {
+  display: grid;
+  gap: 5px;
+  min-width: 160px;
+  font-weight: 700;
+}
+
+.statementMeta > span,
+.statementTotals > span,
+.statementReconciliation > span {
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.statementFunds,
+.statementAccounts,
+.statementJournals {
+  display: grid;
+  gap: 14px;
+}
+
+.statementFund {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.statementFund > header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.statementClassification { display: grid; gap: 8px; }
+.statementAccounts { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.statementAccounts > article { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.statementAccounts > article > div { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.statementAccounts dl,
+.statementJournals dl { display: grid; gap: 6px; margin: 0; }
+.statementAccounts dl > div,
+.statementJournals dl > div { display: flex; justify-content: space-between; gap: 12px; }
+.statementAccounts dt,
+.statementJournals dt { color: var(--muted); }
+.statementAccounts dd,
+.statementJournals dd { margin: 0; font-weight: 800; overflow-wrap: anywhere; }
+.statementJournals details { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.statementJournals summary { cursor: pointer; overflow-wrap: anywhere; }
+.statementState-forbidden,
+.statementState-not-activated,
+.statementState-integrity,
+.statementState-error { border-left-color: #a12b2b; }
+
+@media (max-width: 640px) {
+  .statementFilters > *, .statementFilters label { width: 100%; }
+  .statementAccounts { grid-template-columns: 1fr; }
+  .statementTotals > span, .statementMeta > span { flex: 1 1 140px; }
+}
+
 .fundSummaryCard {
   display: grid;
   gap: 12px;
