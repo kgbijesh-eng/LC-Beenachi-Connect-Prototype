@@ -13,7 +13,7 @@ use App\Models\LedgerAccount;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Finance\ClubAccountingCutoverPackageService;
-use App\Services\Finance\ClubCutoverAuthorityAdministrationService;
+use App\Services\Finance\ClubCutoverEvidenceVerificationService;
 use App\Services\Finance\ClubCutoverLifecycleService;
 use App\Services\Finance\Exceptions\CutoverPackageException;
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
@@ -21,16 +21,17 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Support\InteractsWithCutoverGovernance;
 use Tests\TestCase;
 
 class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
 {
-    use RefreshDatabase;
+    use InteractsWithCutoverGovernance, RefreshDatabase;
 
     public function test_draft_identity_is_persisted_club_scoped_audited_and_dr033_has_no_default(): void
     {
         $fixture = $this->fixture();
-        $package = $this->service()->createDraft($fixture['club']->id, $fixture['actor']->id);
+        $package = $this->authorizedDraft($fixture);
 
         $this->assertSame('2027-07-01', $package->cutover_date->format('Y-m-d'));
         $this->assertSame('2027-28', $package->lions_year);
@@ -46,7 +47,7 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
     public function test_cross_club_account_mapping_and_duplicate_rows_or_accounts_are_rejected(): void
     {
         $fixture = $this->fixture();
-        $package = $this->service()->createDraft($fixture['club']->id, $fixture['actor']->id);
+        $package = $this->authorizedDraft($fixture);
         $foreign = $this->account($fixture['otherClub'], $fixture['actor'], 'FOREIGN-CASH', 'asset', 'debit');
 
         $this->assertCutoverFailure(fn () => $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, 1, $this->rows($fixture, null, [['row_key' => 'BANK-OPERATING', 'ledger_account_id' => $foreign->id]])));
@@ -69,6 +70,7 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
         }
 
         $package = $this->service()->replaceEvidenceReferences($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version, $this->evidence());
+        $package = $this->verifyAllEvidence($fixture, $package);
         $validation = $this->service()->validate($package);
         $this->assertTrue($validation['checks']['evidence:bank_reconciliation']);
         $this->assertTrue($validation['checks']['reconciliation_zero']);
@@ -119,8 +121,9 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
             $this->assertCutoverFailure(fn () => $this->service()->{$method}($transient));
         }
 
-        $missing = $this->service()->createDraft($fixture['club']->id, $fixture['actor']->id, 2);
-        DB::table('club_accounting_cutover_packages')->where('id', $missing->id)->delete();
+        $missing = $package->replicate();
+        $missing->id = PHP_INT_MAX;
+        $missing->exists = true;
         $this->assertCutoverFailure(fn () => $this->service()->checksum($missing));
     }
 
@@ -207,7 +210,7 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
     public function test_stale_lock_and_wrong_club_are_rejected_without_mutation(): void
     {
         $fixture = $this->fixture();
-        $package = $this->service()->createDraft($fixture['club']->id, $fixture['actor']->id);
+        $package = $this->authorizedDraft($fixture);
         $this->assertCutoverFailure(fn () => $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, 99, $this->rows($fixture)));
         $this->assertCutoverFailure(fn () => $this->service()->replaceSchedules($fixture['otherClub']->id, $package->id, $fixture['actor']->id, 1, $this->rows($fixture)));
         $this->assertSame(0, $package->scheduleRows()->count());
@@ -339,6 +342,9 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
         $president = User::factory()->create();
         $club = Club::create(['name' => 'Beenachi', 'code' => 'LCB']);
         ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']);
+        ClubMembership::create(['club_id' => $club->id, 'user_id' => $verifier->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active']);
+        ClubMembership::create(['club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
+        ClubMembership::create(['club_id' => $club->id, 'user_id' => $preparer->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
         $otherClub = Club::create(['name' => 'Other', 'code' => 'OTH']);
         $accounts = [
             'cash' => $this->account($club, $actor, 'CASH-ON-HAND', 'asset', 'debit'),
@@ -389,7 +395,7 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
 
     private function populatedPackage(array $fixture, bool $withEvidence = true, int $version = 1): ClubAccountingCutoverPackage
     {
-        $package = $this->service()->createDraft($fixture['club']->id, $fixture['actor']->id, $version);
+        $package = $this->authorizedDraft($fixture, $version);
         $package = $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, 1, $this->rows($fixture));
         if ($withEvidence) {
             $package = $this->service()->replaceEvidenceReferences($fixture['club']->id, $package->id, $fixture['actor']->id, 2, $this->evidence());
@@ -400,16 +406,16 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
 
     private function reviewablePackage(array $fixture, string $classification, int $version = 1): ClubAccountingCutoverPackage
     {
-        $package = $this->service()->createDraft($fixture['club']->id, $fixture['actor']->id, $version);
+        $package = $this->authorizedDraft($fixture, $version);
         $package = $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, 1, $this->rows($fixture));
         $package = $this->service()->replaceEvidenceReferences($fixture['club']->id, $package->id, $fixture['actor']->id, 2, $this->evidence());
-        $package = $this->service()->refreshValidation($fixture['club']->id, $package->id, $fixture['actor']->id, 3);
-        $admin = app(ClubCutoverAuthorityAdministrationService::class);
-        $admin->assignPermission($package, $fixture['preparer'], 'finance.cutover.package.prepare', 'PREPARE-'.$package->id, $fixture['actor']);
-        $admin->assignPermission($package, $fixture['verifier'], 'finance.cutover.package.verify', 'VERIFY-'.$package->id, $fixture['actor']);
-        $admin->assignPermission($package, $fixture['ca'], 'finance.cutover.package.accounting-review', 'REVIEW-'.$package->id, $fixture['actor']);
-        $admin->assignPermission($package, $fixture['president'], 'finance.cutover.package.business-approve', 'APPROVE-'.$package->id, $fixture['actor']);
-        $admin->appoint($package, $fixture['ca'], 'independent_ca', 'CA-'.$package->id, $fixture['actor']);
+        $package = $this->verifyAllEvidence($fixture, $package);
+        $package = $this->service()->refreshValidation($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version);
+        $this->dualAssign($package, $fixture['preparer'], 'finance.cutover.package.prepare', $fixture['president'], $fixture['verifier'], 'PREPARE-'.$package->id);
+        $appointment = $this->dualAppoint($package, $fixture['ca'], 'independent_ca', $fixture['president'], $fixture['verifier'], 'CA-'.$package->id);
+        $this->dualAttestEligibility($appointment, $fixture['president'], $fixture['verifier'], 'ELIGIBILITY-'.$package->id);
+        $this->dualAssign($package, $fixture['ca'], 'finance.cutover.package.accounting-review', $fixture['president'], $fixture['verifier'], 'REVIEW-'.$package->id);
+        $this->dualAssign($package, $fixture['president'], 'finance.cutover.package.business-approve', $fixture['president'], $fixture['verifier'], 'APPROVE-'.$package->id);
         $life = app(ClubCutoverLifecycleService::class);
         $package = $life->prepare($package, $fixture['preparer'], $package->lock_version);
 
@@ -434,5 +440,27 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
         } catch (CutoverPackageException) {
             $this->addToAssertionCount(1);
         }
+    }
+
+    private function authorizedDraft(array $fixture, int $version = 1): ClubAccountingCutoverPackage
+    {
+        $package = $this->bootstrapCutoverPackage($fixture['club'], $fixture['actor'], $fixture['president'], $fixture['verifier'], 'BOOTSTRAP-'.$fixture['club']->id.'-'.$version, $version);
+        $this->dualAssign($package, $fixture['actor'], 'finance.cutover.package.validate', $fixture['president'], $fixture['verifier'], 'AUTHOR-VALIDATE-'.$package->id);
+
+        return $package;
+    }
+
+    private function verifyAllEvidence(array $fixture, ClubAccountingCutoverPackage $package): ClubAccountingCutoverPackage
+    {
+        if (! $package->permissionAssignments()->where('user_id', $fixture['verifier']->id)->whereHas('permission', fn ($query) => $query->where('slug', 'finance.cutover.package.verify'))->exists()) {
+            $this->dualAssign($package, $fixture['verifier'], 'finance.cutover.package.verify', $fixture['president'], $fixture['verifier'], 'EVIDENCE-VERIFY-'.$package->id);
+        }
+        $service = app(ClubCutoverEvidenceVerificationService::class);
+        foreach ($package->evidenceReferences as $evidence) {
+            $service->decide($package->fresh(), $evidence, $fixture['verifier'], 'verified', 'VERIFY-'.$package->id.'-'.$evidence->id, 'Metadata presence checked.', $package->fresh()->lock_version);
+            $package = $package->fresh('evidenceReferences');
+        }
+
+        return $package;
     }
 }

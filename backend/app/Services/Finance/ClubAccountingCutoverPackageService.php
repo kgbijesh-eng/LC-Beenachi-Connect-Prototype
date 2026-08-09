@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Services\Finance;
 
 use App\Models\AuditLog;
-use App\Models\Club;
 use App\Models\ClubAccountingCutoverApproval;
 use App\Models\ClubAccountingCutoverApprovalEvent;
+use App\Models\ClubAccountingCutoverEvidenceVerification;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingCutoverReview;
 use App\Models\ClubAccountingCutoverReviewEvent;
@@ -23,6 +23,8 @@ use JsonException;
 
 final class ClubAccountingCutoverPackageService
 {
+    public function __construct(private readonly ClubCutoverAuthorityResolver $authority) {}
+
     public const PREVIEW_CONTRACT = 'OPENING-JOURNAL-PREVIEW-2026-01';
 
     private const REQUIRED_SCHEDULES = [
@@ -46,29 +48,7 @@ final class ClubAccountingCutoverPackageService
 
     public function createDraft(int $clubId, int $actorUserId, int $packageVersion = 1): ClubAccountingCutoverPackage
     {
-        if ($packageVersion < 1 || ! Club::query()->whereKey($clubId)->exists() || ! User::query()->whereKey($actorUserId)->exists()) {
-            throw new CutoverPackageException('The cutover package request is invalid.');
-        }
-
-        return DB::transaction(function () use ($clubId, $actorUserId, $packageVersion): ClubAccountingCutoverPackage {
-            $package = ClubAccountingCutoverPackage::create([
-                'club_id' => $clubId,
-                'lions_year' => ClubAccountingCutoverPackage::LIONS_YEAR,
-                'cutover_date' => ClubAccountingCutoverPackage::CUTOVER_DATE,
-                'chart_version' => ClubAccountingCutoverPackage::CHART_VERSION,
-                'package_version' => $packageVersion,
-                'status' => ClubAccountingCutoverPackage::STATUS_DRAFT,
-                'currency' => ClubAccountingCutoverPackage::CURRENCY_INR,
-                'reconciliation_difference_paise' => 0,
-                'activation_ready' => false,
-                'lock_version' => 1,
-                'created_by_user_id' => $actorUserId,
-                'updated_by_user_id' => $actorUserId,
-            ]);
-            $this->audit($package, $actorUserId, 'finance.cutover_package.created', ['package_version' => $packageVersion]);
-
-            return $package->fresh();
-        });
+        throw new CutoverPackageException('A dual-approved package bootstrap operation is required.');
     }
 
     public function replaceSchedules(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, array $rows): ClubAccountingCutoverPackage
@@ -143,7 +123,19 @@ final class ClubAccountingCutoverPackageService
             return $rows->isNotEmpty() && $rows->every(fn ($row): bool => $row->presentation_group === $group && $row->ledger_account_id === null);
         });
 
-        $evidenceTypes = $package->evidenceReferences->where('verification_status', 'verified')->pluck('evidence_type');
+        $evidenceTypes = $package->evidenceReferences->filter(function ($evidence) use ($package): bool {
+            if ($evidence->verification_status !== 'verified') {
+                return false;
+            }
+
+            $verification = ClubAccountingCutoverEvidenceVerification::query()
+                ->where('club_id', $package->club_id)->where('cutover_package_id', $package->id)
+                ->where('package_version', $package->package_version)->where('evidence_reference_id', $evidence->id)
+                ->where('evidence_reference_public_id', $evidence->public_id)->latest('id')->first();
+
+            return $verification !== null && $verification->result === 'verified'
+                && hash_equals($verification->evidence_binding_digest, ClubCutoverEvidenceVerificationService::bindingDigest($evidence));
+        })->pluck('evidence_type');
         foreach (self::REQUIRED_EVIDENCE as $type) {
             $checks["evidence:{$type}"] = $evidenceTypes->contains($type);
         }
@@ -158,6 +150,15 @@ final class ClubAccountingCutoverPackageService
     {
         return DB::transaction(function () use ($clubId, $packageId, $actorUserId, $expectedLockVersion): ClubAccountingCutoverPackage {
             $package = $this->lockPackage($clubId, $packageId, $expectedLockVersion);
+            $actor = User::query()->find($actorUserId);
+            if (! $actor) {
+                throw new CutoverPackageException('The validation request violates club scope.');
+            }
+            try {
+                $this->authority->permission($package, $actor, 'finance.cutover.package.validate');
+            } catch (\Throwable $e) {
+                throw new CutoverPackageException('Persisted validation requires the exact package validation permission.', previous: $e);
+            }
             $validation = $this->validate($package);
             $checksum = $this->checksum($package);
             $package->update([
@@ -291,6 +292,15 @@ final class ClubAccountingCutoverPackageService
     {
         return DB::transaction(function () use ($clubId, $packageId, $actorUserId, $expectedLockVersion, $reason, $mutation): ClubAccountingCutoverPackage {
             $package = $this->lockPackage($clubId, $packageId, $expectedLockVersion);
+            $actor = User::query()->find($actorUserId);
+            if (! $actor) {
+                throw new CutoverPackageException('The package authoring request violates club scope.');
+            }
+            try {
+                $this->authority->permission($package, $actor, 'finance.cutover.package.prepare');
+            } catch (\Throwable $e) {
+                throw new CutoverPackageException('Package authoring requires the exact package preparation permission.', previous: $e);
+            }
             if ($package->status !== ClubAccountingCutoverPackage::STATUS_DRAFT) {
                 throw new CutoverPackageException('Only draft cutover packages may be edited.');
             }
@@ -366,13 +376,14 @@ final class ClubAccountingCutoverPackageService
             $type = strtolower(trim((string) ($reference['evidence_type'] ?? '')));
             $opaque = strtoupper(trim((string) ($reference['opaque_reference'] ?? '')));
             $version = strtoupper(trim((string) ($reference['evidence_version'] ?? '')));
-            $status = strtolower(trim((string) ($reference['verification_status'] ?? '')));
+            // Submission is never an authoritative verification act (CADR-005).
+            $status = 'unverified';
             $date = (string) ($reference['evidence_date'] ?? '');
             $digest = isset($reference['digest_sha256']) ? strtolower(trim((string) $reference['digest_sha256'])) : null;
             $note = isset($reference['reviewer_note']) ? trim((string) $reference['reviewer_note']) : null;
             $this->assertOpaque($opaque, 'evidence reference');
             if (! preg_match('/\A[a-z][a-z0-9_]{2,39}\z/', $type) || ! preg_match('/\A[A-Z0-9][A-Z0-9._:-]{0,39}\z/', $version)
-                || ! in_array($status, ['unverified', 'verified', 'rejected'], true) || ! $this->validDate($date)
+                || ! $this->validDate($date)
                 || ($digest !== null && ! preg_match('/\A[a-f0-9]{64}\z/', $digest)) || ($note !== null && ($this->containsSensitiveValue($note) || strlen($note) > 500)) || isset($seen[$opaque])) {
                 throw new CutoverPackageException('An evidence reference is invalid.');
             }

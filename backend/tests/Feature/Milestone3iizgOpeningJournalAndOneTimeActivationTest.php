@@ -22,6 +22,7 @@ use App\Models\User;
 use App\Services\Finance\ClubAccountingCutoverPackageService;
 use App\Services\Finance\ClubCutoverAuthorityAdministrationService;
 use App\Services\Finance\ClubCutoverAuthorityResolver;
+use App\Services\Finance\ClubCutoverEvidenceVerificationService;
 use App\Services\Finance\ClubCutoverLifecycleService;
 use App\Services\Finance\ClubOpeningJournalActivationService;
 use App\Services\Finance\CutoverExecutionRequest;
@@ -37,11 +38,12 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\InteractsWithCutoverGovernance;
 use Tests\TestCase;
 
 class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
 {
-    use RefreshDatabase;
+    use InteractsWithCutoverGovernance, RefreshDatabase;
 
     public function test_permissions_exist_but_no_generic_role_or_finance_manage_grants_cutover_authority(): void
     {
@@ -141,6 +143,13 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
         $this->assertSame('posted', $first->journalEntry->status);
         $this->assertSame($first->journalEntry->lines->where('direction', 'debit')->sum('amount_paise'), $first->journalEntry->lines->where('direction', 'credit')->sum('amount_paise'));
         $this->assertDatabaseHas('club_accounting_cutover_execution_events', ['event_type' => 'execution_replay', 'execution_success_id' => $first->id]);
+        $operatorAppointment = $fixture['package']->authorityAppointments()->where('authority_type', 'technical_operator')->firstOrFail();
+        try {
+            app(ClubCutoverAuthorityAdministrationService::class)->selfRevokeAppointment($operatorAppointment, $fixture['operator'], 'POSTED-SELF-REVOKE', 'Consumed authority must remain consumed.');
+            $this->fail('Consumed authority cannot be revoked or restored.');
+        } catch (CutoverAuthorizationException) {
+            $this->addToAssertionCount(1);
+        }
     }
 
     public function test_revoked_activation_or_changed_retry_fails_without_partial_posting_or_consumption(): void
@@ -256,7 +265,7 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
     {
         $fixture = $this->baseFixture();
         $admin = app(ClubCutoverAuthorityAdministrationService::class);
-        $admin->assignPermission($fixture['package'], $fixture['president'], 'finance.cutover.package.business-approve', 'PRESIDENT-PERMISSION', $fixture['grantor']);
+        $this->dualAssign($fixture['package'], $fixture['president'], 'finance.cutover.package.business-approve', $fixture['president'], $fixture['verifier'], 'PRESIDENT-PERMISSION');
         $other = User::factory()->create();
         ClubMembership::create(['club_id' => $fixture['club']->id, 'user_id' => $other->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']);
         $this->expectException(CutoverAuthorizationException::class);
@@ -267,19 +276,17 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
     {
         $fixture = $this->baseFixture();
         $admin = app(ClubCutoverAuthorityAdministrationService::class);
-        $admin->assignPermission($fixture['package'], $fixture['ca'], 'finance.cutover.package.accounting-review', 'CA-PERM-ONLY', $fixture['grantor']);
-        $resolver = app(ClubCutoverAuthorityResolver::class);
         $this->expectException(CutoverAuthorizationException::class);
-        $resolver->appointment($fixture['package'], $fixture['ca'], ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA);
+        $admin->requestPermission($fixture['package'], $fixture['ca'], 'finance.cutover.package.accounting-review', 'CA-PERM-ONLY', $fixture['verifier']);
     }
 
     public function test_database_enforces_single_current_appointment_and_declared_execution_uniqueness(): void
     {
         $fixture = $this->baseFixture();
         $admin = app(ClubCutoverAuthorityAdministrationService::class);
-        $admin->appoint($fixture['package'], $fixture['ca'], ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, 'CA-PRIMARY-APPOINTMENT', $fixture['grantor']);
+        $this->dualAppoint($fixture['package'], $fixture['ca'], ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, $fixture['president'], $fixture['verifier'], 'CA-PRIMARY-APPOINTMENT');
         try {
-            $admin->appoint($fixture['package'], User::factory()->create(), ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, 'CA-CONFLICTING-APPOINTMENT', $fixture['grantor']);
+            $this->dualAppoint($fixture['package'], User::factory()->create(), ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, $fixture['president'], $fixture['verifier'], 'CA-CONFLICTING-APPOINTMENT');
             $this->fail('A second current appointment for an exclusive package authority must fail.');
         } catch (QueryException) {
             $this->addToAssertionCount(1);
@@ -301,14 +308,17 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
     {
         $fixture = $this->businessApprovedFixture();
         $admin = app(ClubCutoverAuthorityAdministrationService::class);
-        $caAppointment = ClubAccountingCutoverAuthorityAppointment::query()->where('cutover_package_id', $fixture['package']->id)->where('authority_type', 'independent_ca')->firstOrFail();
-        $admin->revokeAppointment($caAppointment, $fixture['grantor'], 'REVOKE-CA-FOR-PRESIDENT-DRY', 'Simulate an incorrect replacement appointment.');
-        $admin->appoint($fixture['package'], $fixture['president'], 'independent_ca', 'APPOINT-PRESIDENT-AS-CA-DRY', $fixture['grantor']);
+        try {
+            $admin->requestAppointment($fixture['package'], $fixture['president'], 'independent_ca', 'APPOINT-PRESIDENT-AS-CA-DRY', $fixture['verifier']);
+            $this->fail('President appointment as Independent CA must be rejected.');
+        } catch (CutoverAuthorizationException) {
+            $this->addToAssertionCount(1);
+        }
 
         try {
             app(ClubCutoverLifecycleService::class)->decide($fixture['package']->fresh(), $fixture['president'], $fixture['package']->fresh()->lock_version, 'dry_run', 'independent_ca', 'INVALID-PRESIDENT-CA-DRY', 'President must not act as the trusted reviewer.');
             $this->fail('The President approver must not submit the independent-CA dry-run decision.');
-        } catch (CutoverPackageException) {
+        } catch (CutoverAuthorizationException|CutoverPackageException) {
             $this->addToAssertionCount(1);
         }
 
@@ -328,14 +338,17 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
         $life->decide($package, $fixture['president'], $package->lock_version, 'activation', 'president', 'VALID-PRESIDENT-ACTIVATION', 'President authorizes activation.');
 
         $admin = app(ClubCutoverAuthorityAdministrationService::class);
-        $caAppointment = ClubAccountingCutoverAuthorityAppointment::query()->where('cutover_package_id', $package->id)->where('authority_type', 'independent_ca')->firstOrFail();
-        $admin->revokeAppointment($caAppointment, $fixture['grantor'], 'REVOKE-CA-FOR-PRESIDENT-ACT', 'Simulate an incorrect replacement appointment.');
-        $admin->appoint($package, $fixture['president'], 'independent_ca', 'APPOINT-PRESIDENT-AS-CA-ACT', $fixture['grantor']);
+        try {
+            $admin->requestAppointment($package, $fixture['president'], 'independent_ca', 'APPOINT-PRESIDENT-AS-CA-ACT', $fixture['verifier']);
+            $this->fail('President appointment as Independent CA must be rejected.');
+        } catch (CutoverAuthorizationException) {
+            $this->addToAssertionCount(1);
+        }
 
         try {
             $life->decide($package->fresh(), $fixture['president'], $package->fresh()->lock_version, 'activation', 'independent_ca', 'INVALID-PRESIDENT-CA-ACT', 'President must not act as the trusted reviewer.');
             $this->fail('The President approver must not submit the independent-CA activation decision.');
-        } catch (CutoverPackageException) {
+        } catch (CutoverAuthorizationException|CutoverPackageException) {
             $this->addToAssertionCount(1);
         }
 
@@ -407,11 +420,12 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
         $f = $this->baseFixture();
         $admin = app(ClubCutoverAuthorityAdministrationService::class);
         $life = app(ClubCutoverLifecycleService::class);
-        foreach ([[$f['preparer'], 'prepare'], [$f['verifier'], 'verify'], [$f['ca'], 'accounting-review'], [$f['ca'], 'dry-run-accept'], [$f['ca'], 'activate-authorize'], [$f['ca'], 'rollback-authorize'], [$f['president'], 'business-approve'], [$f['president'], 'dry-run-accept'], [$f['president'], 'activate-authorize'], [$f['president'], 'rollback-authorize'], [$f['operator'], 'execute']] as $index => [$user, $permission]) {
-            $admin->assignPermission($f['package'], $user, "finance.cutover.package.{$permission}", "ASSIGN-{$index}-{$permission}", $f['grantor']);
+        $caAppointment = $this->dualAppoint($f['package'], $f['ca'], 'independent_ca', $f['president'], $f['verifier'], 'APPOINT-CA-001');
+        $this->dualAttestEligibility($caAppointment, $f['president'], $f['verifier'], 'ELIGIBILITY-CA-001');
+        $this->dualAppoint($f['package'], $f['operator'], 'technical_operator', $f['president'], $f['verifier'], 'APPOINT-OPERATOR-001');
+        foreach ([[$f['preparer'], 'prepare'], [$f['ca'], 'accounting-review'], [$f['ca'], 'dry-run-accept'], [$f['ca'], 'activate-authorize'], [$f['ca'], 'rollback-authorize'], [$f['president'], 'business-approve'], [$f['president'], 'dry-run-accept'], [$f['president'], 'activate-authorize'], [$f['president'], 'rollback-authorize'], [$f['operator'], 'execute']] as $index => [$user, $permission]) {
+            $this->dualAssign($f['package'], $user, "finance.cutover.package.{$permission}", $f['president'], $f['verifier'], "ASSIGN-{$index}-{$permission}");
         }
-        $admin->appoint($f['package'], $f['ca'], 'independent_ca', 'APPOINT-CA-001', $f['grantor']);
-        $admin->appoint($f['package'], $f['operator'], 'technical_operator', 'APPOINT-OPERATOR-001', $f['grantor']);
         $package = $life->prepare($f['package'], $f['preparer'], $f['package']->lock_version);
         $package = $life->verify($package, $f['verifier'], $package->lock_version);
         $life->review($package, $f['ca'], $package->lock_version, 'OPENING-BALANCE-EQUITY', 'CA-REVIEW-001', '2027-07-02', 'Reconciled historical evidence substantiates opening balance equity.');
@@ -450,13 +464,17 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
         }
         $club = Club::create(['name' => 'Beenachi', 'code' => 'LCB']);
         ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']);
+        ClubMembership::create(['club_id' => $club->id, 'user_id' => $verifier->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active']);
+        ClubMembership::create(['club_id' => $club->id, 'user_id' => $grantor->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
+        ClubMembership::create(['club_id' => $club->id, 'user_id' => $preparer->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
         $accounts = [];
         foreach ([['cash', 'CASH-ON-HAND', 'asset', 'debit'], ['bank', 'BANK-OPERATING', 'asset', 'debit'], ['receivable', 'MEMBER-RECEIVABLES', 'asset', 'debit'], ['other_asset', 'CLUB-PROPERTY', 'asset', 'debit'], ['liability', 'LIABILITY-GENERAL', 'liability', 'credit'], ['restricted', 'LIABILITY-RESTRICTED-COLLECTION', 'liability', 'credit'], ['equity', 'OPENING-BALANCE-EQUITY', 'equity', 'credit'], ['surplus', 'ACCUMULATED-SURPLUS', 'equity', 'credit']] as [$key,$code,$type,$normal]) {
             $accounts[$key] = LedgerAccount::create(['club_id' => $club->id, 'code' => $code, 'name' => $code, 'account_type' => $type, 'normal_balance' => $normal, 'currency' => 'INR', 'is_active' => true, 'created_by_user_id' => $grantor->id]);
         }
         ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $grantor->id]);
         $service = app(ClubAccountingCutoverPackageService::class);
-        $package = $service->createDraft($club->id, $grantor->id);
+        $package = $this->bootstrapCutoverPackage($club, $grantor, $president, $verifier, 'BASE-BOOTSTRAP');
+        $this->dualAssign($package, $grantor, 'finance.cutover.package.validate', $president, $verifier, 'BASE-AUTHOR-VALIDATE');
         $rows = [
             ['schedule_type' => 'cash_on_hand', 'row_key' => 'CASH', 'non_sensitive_label' => 'Cash', 'ledger_account_id' => $accounts['cash']->id, 'fund_code' => 'GENERAL_CLUB_FUND', 'direction' => 'debit', 'amount_paise' => 10000],
             ['schedule_type' => 'bank_account', 'row_key' => 'BANK', 'non_sensitive_label' => 'Bank', 'ledger_account_id' => $accounts['bank']->id, 'fund_code' => 'GENERAL_CLUB_FUND', 'direction' => 'debit', 'amount_paise' => 20000],
@@ -472,6 +490,12 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
         $package = $service->replaceSchedules($club->id, $package->id, $grantor->id, $package->lock_version, $rows);
         $evidence = collect(['cash_count', 'bank_reconciliation', 'member_receivables', 'liabilities_restrictions', 'reconciliation'])->map(fn ($type, $i) => ['evidence_type' => $type, 'opaque_reference' => 'EVIDENCE-'.strtoupper(str_replace('_', '-', $type)).'-001', 'evidence_date' => '2027-07-01', 'evidence_version' => 'V1', 'digest_sha256' => str_repeat(dechex($i + 1), 64), 'verification_status' => 'verified'])->all();
         $package = $service->replaceEvidenceReferences($club->id, $package->id, $grantor->id, $package->lock_version, $evidence);
+        $this->dualAssign($package, $verifier, 'finance.cutover.package.verify', $president, $verifier, 'BASE-EVIDENCE-VERIFY');
+        $verification = app(ClubCutoverEvidenceVerificationService::class);
+        foreach ($package->evidenceReferences as $item) {
+            $verification->decide($package->fresh(), $item, $verifier, 'verified', 'BASE-VERIFY-'.$item->id, 'Metadata presence checked.', $package->fresh()->lock_version);
+            $package = $package->fresh('evidenceReferences');
+        }
         $package = $service->refreshValidation($club->id, $package->id, $grantor->id, $package->lock_version);
 
         return compact('club', 'grantor', 'preparer', 'verifier', 'ca', 'president', 'operator', 'accounts', 'package');
