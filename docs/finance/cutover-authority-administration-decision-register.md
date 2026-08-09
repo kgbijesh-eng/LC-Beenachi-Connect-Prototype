@@ -4,7 +4,7 @@
 **Purpose:** Only unresolved governance decisions required to complete safe cutover authority/evidence administration.
 **Boundary:** CADR decisions are independent of DR-033. DR-033 remains Pending and is not renumbered here.
 
-No item below is Approved merely because a recommendation is provided.
+All seven CADR items below were explicitly approved in Milestone 3IIZR after governance review. Their approved resolutions are authoritative for later implementation, but 3IIZR itself authorizes no runtime implementation.
 
 ## Already-approved policy that does not require a CADR
 
@@ -51,14 +51,20 @@ The exact actor/permission name cannot be selected from current repository autho
 **Recommended direction**
 Define an explicit least-privilege grantor policy, prohibit grantor-as-grantee unless expressly approved, and use stronger dual control for high-risk review/activation/execution grants if governance approves it. Do not reuse generic finance permissions.
 
+**Approved resolution**
+
+Package-scoped cutover permission assignments require joint approval by the active same-club President and Secretary.
+Neither approval alone grants the permission. Generic finance/admin authority, repository ownership, technical access, or ordinary administrator power cannot substitute for this dual approval.
+Every assignment remains exact-package scoped and auditable. A governance approver may also be the grantee only where the already-approved role matrix permits that role and the other governance officer independently co-approves it. No grant may create or preserve a prohibited separation-of-duties conflict.
+
 **Approval owner**
 Business owner + security/architecture review, consistent with the DR-053 approval boundary.
 
 **Status**
-Pending
+Approved
 
 **Implementation blocked?**
-Yes — all authenticated permission-assignment endpoints/policies and any automated assignment workflow.
+No longer blocked by this governance question. 3IIZR itself still authorizes no implementation; a later explicitly authorized implementation milestone must enforce this resolution exactly.
 
 ---
 
@@ -89,14 +95,20 @@ Current sources do not choose among them.
 **Recommended direction**
 Require an explicit non-self appointment authority, package scope, professional-eligibility prerequisite, and immutable appointment reference; consider dual control because the appointment participates in accounting review and activation.
 
+**Approved resolution**
+
+A package-scoped Independent CA appointment requires joint approval by the active same-club President and Secretary.
+The CA cannot self-appoint and must be separate from the President, package preparer, internal verifier, and Technical Operator for that package.
+The appointment does not become operational merely because it exists in the application. CADR-006 professional-eligibility and independence evidence must first be satisfied.
+
 **Approval owner**
 Business owner + security/architecture review; professional-independence requirements require accounting/professional input.
 
 **Status**
-Pending
+Approved
 
 **Implementation blocked?**
-Yes — production CA-appointment creation/replacement surface.
+No longer blocked by this governance question. 3IIZR itself still authorizes no implementation; a later explicitly authorized implementation milestone must enforce this resolution exactly.
 
 ---
 
@@ -127,14 +139,20 @@ Current sources do not choose the grantor.
 **Recommended direction**
 Use explicit non-self, least-privilege appointment authority and enforce the approved President/technical-operator conflict before allowing the appointment.
 
+**Approved resolution**
+
+A package-scoped Technical Operator appointment requires joint approval by the active same-club President and Secretary.
+The Technical Operator must be separate from the President, package preparer, Secretary/internal verifier, and Independent CA for that package.
+The operator performs execution only. Appointment does not confer preparation, verification, accounting-review, business-approval, dry-run acceptance, activation-authorization, or rollback authority. Exact execute authority and current appointment must be revalidated immediately before execution.
+
 **Approval owner**
 Business owner + security/architecture review.
 
 **Status**
-Pending
+Approved
 
 **Implementation blocked?**
-Yes — production technical-operator appointment/replacement surface.
+No longer blocked by this governance question. 3IIZR itself still authorizes no implementation; a later explicitly authorized implementation milestone must enforce this resolution exactly.
 
 ---
 
@@ -167,14 +185,21 @@ These are alternatives, not approved policy.
 **Recommended direction**
 Permit rapid fail-safe removal of unconsumed authority while preserving immutable history; define exactly who may initiate and approve it, and serialize/revalidate revocation transactionally. Self-revocation may be useful as a safety stop but must be explicitly approved.
 
+**Approved resolution**
+
+An authority holder may immediately self-revoke their own unconsumed cutover appointment or package permission as a fail-safe.
+Revoking or invalidating another person's appointment or package permission requires joint approval by the active same-club President and Secretary.
+All revocation/invalidation remains append-only and auditable. Historical appointments, permissions, reviews, approvals, and decisions are never deleted or rewritten. Consumed execution authority can never be made reusable by revocation or later replacement.
+Existing President/Independent-CA lifecycle-decision revocation rules remain separate and unchanged.
+
 **Approval owner**
 Business owner + security/architecture review.
 
 **Status**
-Pending
+Approved
 
 **Implementation blocked?**
-Yes — appointment/permission revoke/invalidate endpoints and automated revocation workflows.
+No longer blocked by this governance question. 3IIZR itself still authorizes no implementation; a later explicitly authorized implementation milestone must enforce this resolution exactly.
 
 ---
 
@@ -207,14 +232,21 @@ Current approved contracts do not select the exact metadata-state actor/workflow
 **Recommended direction**
 Use a separately authenticated verification act with actor, package/version, opaque evidence reference, status, time, and safe reason/provenance. Do not let the package preparer self-certify evidence merely by submitting `verified`.
 
+**Approved resolution**
+
+The Treasurer/package preparer may submit or replace evidence metadata only in the unverified state.
+The Secretary/internal verifier is the authenticated actor authorized to mark evidence metadata verified or rejected.
+Each verification/rejection must bind the actor, club, package, package version, opaque evidence reference, resulting status, timestamp, and a safe reason or note.
+Evidence metadata verification is an internal control only and never substitutes for Independent CA professional review, document authenticity, reconciliation, or professional acceptance.
+
 **Approval owner**
 Business owner + accounting reviewer + privacy/security review for protected-evidence handling.
 
 **Status**
-Pending
+Approved
 
 **Implementation blocked?**
-Yes — production evidence-verification mutation and any production validation gate that relies on authorized `verified` metadata.
+No longer blocked by this governance question. 3IIZR itself still authorizes no implementation; a later explicitly authorized implementation milestone must enforce this resolution exactly.
 
 ---
 
@@ -245,14 +277,22 @@ The exact required evidence set and verifier are not approved.
 **Recommended direction**
 Require externally controlled qualification/standing and independence evidence before the application marks a CA appointment operationally eligible; retain only non-sensitive opaque references and audit provenance in ordinary application data.
 
+**Approved resolution**
+
+An Independent CA appointment becomes operational only after required professional qualification, identity, current standing where applicable, engagement/appointment evidence, and independence evidence have been externally checked.
+The active same-club President and Secretary jointly confirm that the required external eligibility and independence evidence has been checked before the application treats the appointment as operationally eligible.
+That confirmation does not make the President or Secretary the professional certifier. Sensitive credentials, identity documents, signatures, declarations, and professional working papers remain outside Git and ordinary application audit content.
+This CADR-006 confirmation is separate from CADR-005 evidence-metadata verification: CADR-005 governs package evidence metadata verification, while CADR-006 governs whether an Independent CA appointment may become operationally eligible.
+The application may retain only safe eligibility status, verification date, the identities of the President and Secretary as governance-attesting officers, opaque references to the external evidence or verification source, optional digests, independence status, and safe provenance metadata. Those officers must not be represented as the professional certifier merely because they provided the required governance confirmation.
+
 **Approval owner**
 Business owner + independent professional/accounting governance + privacy/security review.
 
 **Status**
-Pending
+Approved
 
 **Implementation blocked?**
-Yes — any production rule that treats a CA application appointment as professionally eligible.
+No longer blocked by this governance question. 3IIZR itself still authorizes no implementation; a later explicitly authorized implementation milestone must enforce this resolution exactly.
 
 ---
 
@@ -283,29 +323,44 @@ Current sources do not provide a complete authority-history read matrix.
 **Recommended direction**
 Approve a least-privilege metadata-only read policy separately from restricted evidence access. Expose package status/version/checksum, authority/permission bindings, expiry/currentness, revocation history, opaque evidence status, and blockers only to explicitly authorized actors.
 
+**Approved resolution**
+
+The President and Secretary receive full metadata-only visibility of cutover authority administration history for their club.
+The Treasurer/package preparer may see package readiness and their own relevant assignments and authority status, but not unrelated CA/operator administration history.
+The Independent CA may see their own appointment, permissions, currentness/revocation/expiry state, and package metadata required for professional review.
+The Technical Operator may see their own appointment, execute permission, and current execution-authority status.
+Normal Members receive no authority-administration access.
+Protected evidence content remains separately controlled. finance.cutover.package.view-restricted-manifest must not be repurposed as a general authority-administration-history permission.
+
 **Approval owner**
 Business owner + security/privacy review.
 
 **Status**
-Pending
+Approved
 
 **Implementation blocked?**
-Yes — authority-administration listing/detail/history endpoints or UI.
+No longer blocked by this governance question. 3IIZR itself still authorizes no implementation; a later explicitly authorized implementation milestone must enforce this resolution exactly.
 
 ---
 
 ## Register summary
 
-| ID | Short title | Status | Blocks implementation? |
+| ID | Short title | Status | Governance ambiguity still blocks later implementation? |
 |---|---|---|---:|
-| CADR-001 | Package permission grantor policy | Pending | Yes |
-| CADR-002 | Independent-CA appointment grantor | Pending | Yes |
-| CADR-003 | Technical-operator appointment grantor | Pending | Yes |
-| CADR-004 | Appointment/permission revocation authority | Pending | Yes |
-| CADR-005 | Evidence metadata verifier authority | Pending | Yes |
-| CADR-006 | Independent-CA professional eligibility evidence | Pending | Yes |
-| CADR-007 | Authority administration read/inspection policy | Pending | Yes |
+| CADR-001 | Package permission grantor policy | Approved | No |
+| CADR-002 | Independent-CA appointment grantor | Approved | No |
+| CADR-003 | Technical-operator appointment grantor | Approved | No |
+| CADR-004 | Appointment/permission revocation authority | Approved | No |
+| CADR-005 | Evidence metadata verifier authority | Approved | No |
+| CADR-006 | Independent-CA professional eligibility evidence | Approved | No |
+| CADR-007 | Authority administration read/inspection policy | Approved | No |
 
-**Pending CADR count: 7**
+**Approved CADR count: 7**
 
-These decisions are deliberately narrower than DR-033. They authorize no accounting classification, evidence, mapping, appointment, permission, approval, or production operation.
+**Pending CADR count: 0**
+
+All seven 3IIZQ governance questions are resolved.
+
+Resolution of these CADRs does **not** itself authorize an authenticated administration API, controller, policy, command, UI, database migration, permission assignment, authority appointment, evidence ingestion, CA professional review, President cutover approval, accounting activation, or production cutover.
+
+DR-033 remains Pending and is independent of this CADR register.
