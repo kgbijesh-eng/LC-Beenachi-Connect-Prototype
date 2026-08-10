@@ -1278,6 +1278,9 @@ h3 {
 .statementSnapshot summary { cursor: pointer; font-weight: 700; }
 .statementSnapshot code { overflow-wrap: anywhere; }
 .expenseForm { align-items: end; }
+.expenseHistory textarea { min-height: 7rem; resize: vertical; }
+.reversalSummary { border-left: 4px solid #8a5a00; }
+.reversalForm { display: grid; gap: 1rem; }
 .expenseForm label { min-width: min(100%, 190px); }
 .statementState-forbidden,
 .statementState-not-activated,

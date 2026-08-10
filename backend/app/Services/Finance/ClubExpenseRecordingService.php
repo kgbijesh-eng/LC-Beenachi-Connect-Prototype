@@ -48,6 +48,14 @@ final class ClubExpenseRecordingService
                 throw new ClubExpenseException('Authoritative accounting is not active for the selected date.');
             }
 
+            $correctedFrom = null;
+            if ($canonical['corrected_from_expense']) {
+                $correctedFrom = ClubExpense::query()->where('club_id', $lockedClub->id)->where('public_id', $canonical['corrected_from_expense'])->lockForUpdate()->first();
+                if (! $correctedFrom || ! $correctedFrom->reversal()->exists() || $correctedFrom->correctedReplacement()->exists()) {
+                    throw new ClubExpenseConflictException('The corrected expense source is unavailable or already has a replacement.');
+                }
+            }
+
             $accounts = LedgerAccount::query()->whereIn('public_id', [$canonical['expense_account'], $canonical['payment_account']])->lockForUpdate()->get()->keyBy(fn (LedgerAccount $account) => strtolower($account->public_id));
             $expenseAccount = $accounts->get($canonical['expense_account']);
             $paymentAccount = $accounts->get($canonical['payment_account']);
@@ -59,6 +67,7 @@ final class ClubExpenseRecordingService
                 'fund_code' => $canonical['fund_code'], 'amount_paise' => $canonical['amount_paise'], 'currency' => LedgerAccount::CURRENCY_INR,
                 'payee' => $canonical['payee'], 'description' => $canonical['description'], 'external_reference' => $canonical['external_reference'],
                 'idempotency_key' => $canonical['idempotency_key'], 'request_digest' => $canonical['request_digest'], 'created_by_user_id' => $actor->id,
+                'corrected_from_expense_id' => $correctedFrom?->id,
             ]);
 
             $journal = $this->journals->post(new JournalPostingRequest(
@@ -96,8 +105,9 @@ final class ClubExpenseRecordingService
         $payment = strtolower(trim((string) $input['payment_account']));
         $payee = isset($input['payee']) ? trim((string) $input['payee']) : null;
         $external = isset($input['external_reference']) ? trim((string) $input['external_reference']) : null;
-        $canonical = ['accounting_date' => $input['accounting_date'], 'expense_account' => $expense, 'payment_account' => $payment, 'fund_code' => $input['fund'], 'amount_paise' => (int) $input['amount_paise'], 'payee' => $payee === '' ? null : $payee, 'description' => trim((string) $input['description']), 'external_reference' => $external === '' ? null : $external, 'idempotency_key' => $key];
-        if (! Str::isUuid($key) || ! Str::isUuid($expense) || ! Str::isUuid($payment) || ! FundCode::tryFrom($canonical['fund_code']) || $canonical['amount_paise'] < 1) {
+        $correctedFrom = isset($input['corrected_from_expense']) ? strtolower(trim((string) $input['corrected_from_expense'])) : null;
+        $canonical = ['accounting_date' => $input['accounting_date'], 'expense_account' => $expense, 'payment_account' => $payment, 'fund_code' => $input['fund'], 'amount_paise' => (int) $input['amount_paise'], 'payee' => $payee === '' ? null : $payee, 'description' => trim((string) $input['description']), 'external_reference' => $external === '' ? null : $external, 'idempotency_key' => $key, 'corrected_from_expense' => $correctedFrom === '' ? null : $correctedFrom];
+        if (! Str::isUuid($key) || ! Str::isUuid($expense) || ! Str::isUuid($payment) || ($canonical['corrected_from_expense'] !== null && ! Str::isUuid($canonical['corrected_from_expense'])) || ! FundCode::tryFrom($canonical['fund_code']) || $canonical['amount_paise'] < 1) {
             throw new ClubExpenseException('The expense request is invalid.');
         }
         $canonical['request_digest'] = hash('sha256', json_encode($canonical, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
@@ -112,5 +122,5 @@ final class ClubExpenseRecordingService
     }
 
     private function account(LedgerAccount $account): array { return ['id' => $account->public_id, 'code' => $account->code, 'name' => $account->name]; }
-    private function loaded(ClubExpense $expense): ClubExpense { return $expense->fresh()->load(['expenseAccount', 'paymentAccount', 'journalEntry']); }
+    private function loaded(ClubExpense $expense): ClubExpense { return $expense->fresh()->load(['expenseAccount', 'paymentAccount', 'journalEntry', 'reversal.journalEntry', 'correctedReplacement.journalEntry', 'correctedFrom']); }
 }

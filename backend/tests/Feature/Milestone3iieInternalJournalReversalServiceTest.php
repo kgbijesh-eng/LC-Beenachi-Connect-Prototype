@@ -262,13 +262,14 @@ class Milestone3iieInternalJournalReversalServiceTest extends TestCase
         $original->fresh()->lines()->firstOrFail()->delete();
     }
 
-    public function test_reversal_service_exposes_no_route_or_existing_workflow_integration(): void
+    public function test_reversal_service_exposes_no_generic_journal_route(): void
     {
         $uris = collect(app('router')->getRoutes())
             ->map(fn ($route) => $route->uri())
-            ->filter(fn (string $uri) => str_contains($uri, 'journal-reversal') || str_contains($uri, 'reversal'));
+            ->filter(fn (string $uri) => str_contains($uri, 'journal-reversal') || str_contains($uri, '/journals/') && str_contains($uri, 'reversal'));
 
         $this->assertSame([], $uris->values()->all());
+        $this->assertContains('api/v1/clubs/{club}/finance/expenses/{expense}/reversal', collect(app('router')->getRoutes())->map(fn ($route) => $route->uri())->all());
         $this->assertSame(0, AuditLog::count());
     }
 

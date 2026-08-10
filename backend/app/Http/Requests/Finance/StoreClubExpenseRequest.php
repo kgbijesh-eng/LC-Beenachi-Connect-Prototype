@@ -21,6 +21,7 @@ class StoreClubExpenseRequest extends FormRequest
             'description' => ['required', 'string', 'max:500'],
             'external_reference' => ['nullable', 'string', 'max:120'],
             'idempotency_key' => ['required', 'uuid'],
+            'corrected_from_expense' => ['nullable', 'uuid'],
             'currency' => ['prohibited'], 'journal_lines' => ['prohibited'], 'club_id' => ['prohibited'],
         ];
     }

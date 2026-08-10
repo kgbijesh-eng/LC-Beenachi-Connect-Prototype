@@ -9,6 +9,8 @@ class ClubExpenseResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $reversal = $this->whenLoaded('reversal');
+        $replacement = $this->whenLoaded('correctedReplacement');
         return [
             'id' => $this->public_id,
             'accounting_date' => $this->accounting_date->format('Y-m-d'),
@@ -20,8 +22,21 @@ class ClubExpenseResource extends JsonResource
             'payee' => $this->payee,
             'description' => $this->description,
             'external_reference' => $this->external_reference,
-            'status' => 'posted',
-            'journal' => ['id' => $this->journalEntry->public_id, 'reference' => $this->journalEntry->reference],
+            'status' => $reversal && ! ($reversal instanceof \Illuminate\Http\Resources\MissingValue) ? 'reversed' : 'posted',
+            'journal' => [
+                'id' => $this->journalEntry->public_id, 'reference' => $this->journalEntry->reference,
+                'lines' => $this->journalEntry->relationLoaded('lines') ? $this->journalEntry->lines->map(fn ($line) => ['id' => $line->public_id, 'account' => ['id' => $line->ledgerAccount->public_id, 'code' => $line->ledgerAccount->code, 'name' => $line->ledgerAccount->name], 'direction' => $line->direction, 'amount_paise' => $line->amount_paise, 'fund' => $line->fund_code])->values() : null,
+            ],
+            'created_by' => $this->relationLoaded('creator') ? ['name' => $this->creator?->name] : null,
+            'reversal' => $reversal && ! ($reversal instanceof \Illuminate\Http\Resources\MissingValue) ? [
+                'id' => $reversal->public_id, 'accounting_date' => $reversal->accounting_date->format('Y-m-d'),
+                'reason' => $reversal->reason, 'journal' => ['id' => $reversal->journalEntry->public_id, 'reference' => $reversal->journalEntry->reference,
+                    'lines' => $reversal->journalEntry->relationLoaded('lines') ? $reversal->journalEntry->lines->map(fn ($line) => ['id' => $line->public_id, 'account' => ['id' => $line->ledgerAccount->public_id, 'code' => $line->ledgerAccount->code, 'name' => $line->ledgerAccount->name], 'direction' => $line->direction, 'amount_paise' => $line->amount_paise, 'fund' => $line->fund_code])->values() : null],
+                'created_by' => $reversal->relationLoaded('creator') ? ['name' => $reversal->creator?->name] : null,
+                'created_at' => $reversal->created_at?->toISOString(),
+            ] : null,
+            'corrected_expense' => $replacement && ! ($replacement instanceof \Illuminate\Http\Resources\MissingValue) ? ['id' => $replacement->public_id, 'amount_paise' => $replacement->amount_paise, 'journal_reference' => $replacement->journalEntry?->reference] : null,
+            'corrected_from_expense' => $this->correctedFrom?->public_id,
             'created_at' => $this->created_at?->toISOString(),
         ];
     }

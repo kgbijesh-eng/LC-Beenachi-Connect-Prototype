@@ -96,10 +96,16 @@ Route::prefix('v1')->group(function (): void {
         });
         Route::get('/clubs/{club}/finance/account-statement', [ClubAccountStatementController::class, 'show'])
             ->middleware('club.permission:finance.club.statement.view,club');
+        Route::middleware('club.permission:finance.club.expenses.view,club')->group(function (): void {
+            Route::get('/clubs/{club}/finance/expenses', [ClubExpenseController::class, 'index']);
+            Route::get('/clubs/{club}/finance/expenses/{expense}', [ClubExpenseController::class, 'show'])->whereUuid('expense');
+        });
         Route::middleware('club.permission:finance.club.expenses.create,club')->group(function (): void {
             Route::get('/clubs/{club}/finance/expenses/options', [ClubExpenseController::class, 'options']);
             Route::post('/clubs/{club}/finance/expenses', [ClubExpenseController::class, 'store']);
         });
+        Route::post('/clubs/{club}/finance/expenses/{expense}/reversal', [ClubExpenseController::class, 'reverse'])
+            ->whereUuid('expense')->middleware('club.permission:finance.club.expenses.reverse,club');
         Route::middleware('club.permission:finance.self.view,club')->group(function (): void {
             Route::get('/clubs/{club}/finance/me/summary', [FinanceReadController::class, 'ownSummary']);
             Route::get('/clubs/{club}/finance/me/charges', [FinanceReadController::class, 'ownCharges']);
