@@ -20,6 +20,7 @@ const trial = { opening_debits_paise: 100000, opening_credits_paise: 100000, per
 function statement() {
   return {
     contract_version: "CLUB-ACCOUNT-STATEMENT-2026-01",
+    snapshot_fingerprint: "a".repeat(64),
     club_id: 7,
     currency: "INR",
     amount_unit: "paise",
@@ -36,7 +37,7 @@ function statement() {
       { fund_code: "FELLOWSHIP_MEMBER_ACTIVITY_FUND", display_name: "Fellowship and Member Activity Fund", totals: emptyTotals, trial_balance: trial, classifications: [{ classification: "EXPENSES", totals: emptyTotals, accounts: [{ account_id: "fellowship-expense", account_code: "FELLOWSHIP-EXPENSE", account_name: "Fellowship expense", normal_balance: "debit", statement_classification: "EXPENSES", fund_code: "FELLOWSHIP_MEMBER_ACTIVITY_FUND", ...emptyTotals, journal_ids: [] }] }] }
     ],
     overall_trial_balance: trial,
-    traceability: { journals: [{ journal_id: "journal-public", reference: "JRN-2027-0002", accounting_date: "2027-07-15", journal_type: "member_payment", description: "Member receipt RCP-021", debit_total_paise: 25050, credit_total_paise: 25050, reversal_of_journal_id: "journal-original", reversed_by_journal_id: null, source_type: "member_payment", source_id: "payment-public", contribution: "period_movement" }] },
+    traceability: { journals: [{ journal_id: "journal-public", reference: "JRN-2027-0002", accounting_date: "2027-07-15", journal_type: "member_payment", description: "Member receipt RCP-021", debit_total_paise: 25050, credit_total_paise: 25050, reversal_of_journal_id: "journal-original", reversed_by_journal_id: null, source_type: "member_payment", source_id: "payment-public", contribution: "period_movement", lines: [{ journal_line_id: "line-public", opening_schedule_row_id: "opening-row-public", payment_allocations: [{ allocation_id: "allocation-public", payment_id: "payment-public", line_role: "asset_debit", amount_paise: 25050 }] }] }] },
     integrity: { period_debits_equal_credits: true, opening_balances_reconcile: true, closing_balances_reconcile: true, fund_balances_reconcile: true }
   };
 }
@@ -54,6 +55,8 @@ describe("Club Account Statement frontend integration", () => {
     render(<ClubAccountStatementBackend role="treasurer" />);
 
     expect(await screen.findByText("Canonical statement loaded from the accounting ledger.")).toBeInTheDocument();
+    expect(screen.getByText("LC Beenachi")).toBeInTheDocument();
+    expect(screen.getByText("2027-07-01", { selector: ".statementMeta span" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "General Club Fund" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Service Activity Fund" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Fellowship and Member Activity Fund" })).toBeInTheDocument();
@@ -66,7 +69,11 @@ describe("Club Account Statement frontend integration", () => {
     expect(screen.getByText(/Member receipt RCP-021/)).toBeInTheDocument();
     fireEvent.click(screen.getByText(/JRN-2027-0002/));
     expect(screen.getByText("Reversal of journal journal-original")).toBeInTheDocument();
+    expect(screen.getByText("Opening schedule opening-row-public")).toBeInTheDocument();
+    expect(screen.getByText(/Payment payment-public · Asset Debit · ₹250.50/)).toBeInTheDocument();
     expect(screen.getAllByText(/Reconciled/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText("Technical statement details"));
+    expect(screen.getByText("a".repeat(64))).toBeInTheDocument();
   });
 
   it("sends canonical Lions Year, period, and custom date query parameters", async () => {

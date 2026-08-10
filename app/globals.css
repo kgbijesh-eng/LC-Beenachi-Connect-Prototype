@@ -1272,6 +1272,11 @@ h3 {
 .statementJournals dd { margin: 0; font-weight: 800; overflow-wrap: anywhere; }
 .statementJournals details { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .statementJournals summary { cursor: pointer; overflow-wrap: anywhere; }
+.statementProvenance { display: grid; gap: 8px; margin-top: 12px; }
+.statementProvenance > div { display: grid; gap: 4px; padding: 9px 11px; border-radius: 10px; background: var(--page); overflow-wrap: anywhere; }
+.statementSnapshot { padding: 10px 12px; color: var(--muted); }
+.statementSnapshot summary { cursor: pointer; font-weight: 700; }
+.statementSnapshot code { overflow-wrap: anywhere; }
 .statementState-forbidden,
 .statementState-not-activated,
 .statementState-integrity,

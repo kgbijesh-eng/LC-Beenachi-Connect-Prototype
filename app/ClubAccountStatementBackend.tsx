@@ -47,9 +47,20 @@ type StatementJournal = {
   source_type: string | null;
   source_id: string | null;
   contribution: "opening_balance" | "period_movement";
+  lines: {
+    journal_line_id: string;
+    opening_schedule_row_id: string | null;
+    payment_allocations: {
+      allocation_id: string;
+      payment_id: string;
+      line_role: string;
+      amount_paise: number;
+    }[];
+  }[];
 };
 type Statement = {
   contract_version: string;
+  snapshot_fingerprint: string;
   club_id: number;
   currency: "INR";
   amount_unit: "paise";
@@ -97,6 +108,7 @@ function label(value: string): string {
 function validStatement(value: unknown, clubId: number): value is Statement {
   const row = value as Partial<Statement> | null;
   return Boolean(row && row.contract_version === "CLUB-ACCOUNT-STATEMENT-2026-01" && row.club_id === clubId
+    && /^[0-9a-f]{64}$/.test(row.snapshot_fingerprint ?? "")
     && row.currency === "INR" && row.amount_unit === "paise" && Array.isArray(row.funds)
     && Array.isArray(row.traceability?.journals) && row.integrity
     && Object.values(row.integrity).every((status) => status === true));
@@ -189,9 +201,12 @@ export default function ClubAccountStatementBackend({ role }: { role: DevRole })
 
     {statement && (state === "ready" || state === "empty") && <>
       <section className="statementMeta" aria-label="Statement scope">
+        <span><strong>Club</strong> {session?.membership.club.name}</span>
         <span><strong>Lions Year</strong> {statement.lions_year.label}</span>
         <span><strong>Range</strong> {statement.range.from} to {statement.range.to}</span>
         <span><strong>Period</strong> {statement.range.is_closed ? "Closed" : "Open"}</span>
+        <span><strong>Accounting coverage from</strong> {statement.source.cutover_date}</span>
+        <span><strong>Currency</strong> {statement.currency}</span>
         <span><strong>Journals</strong> {statement.source.journal_count}</span>
       </section>
 
@@ -222,8 +237,20 @@ export default function ClubAccountStatementBackend({ role }: { role: DevRole })
           {journal.source_type && <p>Source: {journal.source_type}{journal.source_id ? ` · ${journal.source_id}` : ""}</p>}
           {journal.reversal_of_journal_id && <p>Reversal of journal {journal.reversal_of_journal_id}</p>}
           {journal.reversed_by_journal_id && <p>Reversed by journal {journal.reversed_by_journal_id}</p>}
+          {journal.lines.some((line) => line.opening_schedule_row_id || line.payment_allocations.length > 0) && <div className="statementProvenance">
+            <h4>Source provenance</h4>
+            {journal.lines.map((line) => <div key={line.journal_line_id}>
+              <strong>Journal line {line.journal_line_id}</strong>
+              {line.opening_schedule_row_id && <span>Opening schedule {line.opening_schedule_row_id}</span>}
+              {line.payment_allocations.map((allocation) => <span key={`${line.journal_line_id}-${allocation.allocation_id}`}>
+                Payment {allocation.payment_id} · {label(allocation.line_role)} · {formatInrPaise(allocation.amount_paise)}
+              </span>)}
+            </div>)}
+          </div>}
         </details>)}</div>
       </section>
+
+      <details className="statementSnapshot"><summary>Technical statement details</summary><p>Snapshot fingerprint <code>{statement.snapshot_fingerprint}</code></p></details>
     </>}
   </section>;
 }
