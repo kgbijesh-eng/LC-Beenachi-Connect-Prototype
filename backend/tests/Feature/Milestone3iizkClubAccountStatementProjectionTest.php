@@ -239,7 +239,47 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         $second = $this->getJson($this->endpoint($fixture))->assertOk()->json('data');
 
         $this->assertSame($first, $second);
+        $this->assertMatchesRegularExpression('/\A[0-9a-f]{64}\z/', $first['snapshot_fingerprint']);
         $this->assertSame($before, $this->tableCounts());
+    }
+
+    public function test_snapshot_fingerprint_changes_with_statement_state_and_query_scope(): void
+    {
+        $fixture = $this->fixture();
+        Sanctum::actingAs($fixture['officer']);
+
+        $initial = $this->getJson($this->endpoint($fixture))->assertOk()->json('data.snapshot_fingerprint');
+        $range = $this->getJson($this->endpoint($fixture).'&from=2027-07-01&to=2027-07-31')
+            ->assertOk()->json('data.snapshot_fingerprint');
+        $this->assertNotSame($initial, $range);
+
+        $this->postJournal($fixture['club'], $fixture['period'], $fixture['officer'], '2027-07-20', 'snapshot-change', [
+            new JournalLineInput($fixture['cash']->id, 'debit', 50, fundCode: 'GENERAL_CLUB_FUND'),
+            new JournalLineInput($fixture['income']->id, 'credit', 50, fundCode: 'GENERAL_CLUB_FUND'),
+        ]);
+
+        $changed = $this->getJson($this->endpoint($fixture))->assertOk()->json('data.snapshot_fingerprint');
+        $this->assertNotSame($initial, $changed);
+    }
+
+    public function test_snapshot_fingerprint_is_tenant_scoped_and_ignores_unrelated_changes(): void
+    {
+        $first = $this->fixture('A');
+        $second = $this->fixture('B');
+        Sanctum::actingAs($first['officer']);
+
+        $before = $this->getJson($this->endpoint($first))->assertOk()->json('data.snapshot_fingerprint');
+        User::factory()->create();
+        $this->postJournal($second['club'], $second['period'], $second['officer'], '2027-07-20', 'other-club-change', [
+            new JournalLineInput($second['cash']->id, 'debit', 75, fundCode: 'GENERAL_CLUB_FUND'),
+            new JournalLineInput($second['income']->id, 'credit', 75, fundCode: 'GENERAL_CLUB_FUND'),
+        ]);
+        $after = $this->getJson($this->endpoint($first))->assertOk()->json('data.snapshot_fingerprint');
+        Sanctum::actingAs($second['officer']);
+        $other = $this->getJson($this->endpoint($second))->assertOk()->json('data.snapshot_fingerprint');
+
+        $this->assertSame($before, $after);
+        $this->assertNotSame($before, $other);
     }
 
     public function test_pre_cutover_posted_activity_is_excluded_and_zero_activity_range_is_valid(): void
@@ -360,18 +400,18 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         $this->assertSame($first, $second);
     }
 
-    private function fixture(): array
+    private function fixture(string $suffix = ''): array
     {
         $club = Club::create([
-            'name' => 'Statement Test Club', 'code' => 'STATEMENT',
+            'name' => 'Statement Test Club '.$suffix, 'code' => 'STATEMENT'.$suffix,
             'timezone' => 'Asia/Kolkata', 'is_active' => true,
         ]);
         $officer = User::factory()->create();
-        $permission = Permission::create([
+        $permission = Permission::firstOrCreate(['slug' => 'finance.club.statement.view'], [
             'name' => 'View Club Account Statements', 'slug' => 'finance.club.statement.view',
             'group' => 'finance', 'description' => 'View statements.',
         ]);
-        $role = Role::create(['name' => 'Finance Chair', 'slug' => 'finance-chair', 'description' => 'Finance Chair']);
+        $role = Role::create(['name' => 'Finance Chair '.$suffix, 'slug' => 'finance-chair'.strtolower($suffix), 'description' => 'Finance Chair']);
         $role->permissions()->attach($permission);
         ClubMembership::create(['club_id' => $club->id, 'user_id' => $officer->id, 'role_id' => $role->id, 'status' => 'active']);
         $period = ClubAccountingPeriod::create([

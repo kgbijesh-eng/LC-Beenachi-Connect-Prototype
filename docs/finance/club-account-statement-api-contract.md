@@ -1,8 +1,41 @@
 # Club Account Statement Read-Only API Contract
 
-**Status:** Proposed and unimplemented, aligned to the business-owner decisions approved on 13 July 2026. This document registers no route and authorizes no runtime work.
+**Status:** The whole-club contract below is authoritative and implemented. The account-specific proposal retained after it is historical and non-authoritative.
 
-## 1. Endpoint and access
+## Authoritative implemented contract
+
+The runtime endpoint is:
+
+```text
+GET /api/v1/clubs/{club}/finance/account-statement
+```
+
+It requires authentication, active membership of the route-bound club, and the exact permission `finance.club.statement.view`. Normal Members without that permission, inactive memberships, and cross-club callers are denied by the existing club-permission middleware. The endpoint is read-only.
+
+The required query field is `lions_year` in `YYYY-YY` form. Callers may select either `period_id` or the inclusive `from` and `to` dates, but not both. The selected range must remain within the club-owned Lions Year, which always runs from 1 July through 30 June, and cannot start before the activated cutover date.
+
+The response is a canonical whole-club projection in integer paise and INR. It returns the selected range, cutover coverage, all three authoritative funds, all canonical statement classifications, separate real ledger accounts, opening balances, period debits and credits, net movement, closing balances, overall trial-balance totals, journal and line provenance, opening-schedule provenance, payment-allocation provenance, linked reversals, and integrity results. The opening journal contributes to opening balance and is never presented as current-period income or expense.
+
+Every projection executes all material reads inside one database transaction. PostgreSQL establishes `REPEATABLE READ READ ONLY` before the first read, so its period, activation, account metadata, journals, lines, funds, reversals and provenance share one transaction-wide snapshot. SQLite uses its native transaction snapshot behavior and receives no PostgreSQL-specific SQL.
+
+Successful data includes:
+
+```json
+{
+  "contract_version": "CLUB-ACCOUNT-STATEMENT-2026-01",
+  "snapshot_fingerprint": "64-lowercase-hexadecimal-characters"
+}
+```
+
+`snapshot_fingerprint` is an opaque SHA-256 digest of a deterministically ordered canonical representation. It binds the statement contract, safe club code, requested scope, Lions Year/range, cutover package public identity/version/checksum, posted journal content, account metadata, fund attribution, balances, reversals and returned provenance. It excludes generation time, randomness, process/request identity, and internal numeric club/period identifiers. Identical financial state and scope produce the same fingerprint; statement-relevant changes produce a different fingerprint; unrelated activity in another club does not affect it. The fingerprint is provenance metadata, not an ETag or persisted statement record.
+
+Accounting not activated returns `409 ACCOUNTING_NOT_ACTIVATED`. Statement-integrity or activation corruption returns `409 STATEMENT_INTEGRITY_FAILURE`. Invalid query scope returns `422`. Existing authentication and authorization errors retain their standard API behavior. Missing or corrupt canonical accounting metadata fails closed and no authoritative monetary response is returned.
+
+## Historical superseded proposal
+
+The remainder of this document records the original account-specific, paginated proposal approved for future scoping on 13 July 2026. It proposed `/account-statements/{account}`, pagination, `statement_id`, and filter semantics that were not selected by the later whole-club implementation. It is retained for decision history only and does not describe an active route or response.
+
+## H1. Proposed endpoint and access
 
 Proposed route:
 

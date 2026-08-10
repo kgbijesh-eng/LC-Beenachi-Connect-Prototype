@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Finance;
 
+use App\Models\Club;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingPeriod;
 use App\Models\ClubJournalEntry;
@@ -35,6 +36,12 @@ final class ClubAccountStatementProjectionService
     public function project(ClubAccountStatementQuery $query): array
     {
         return DB::transaction(function () use ($query): array {
+            $this->establishConsistentSnapshot();
+
+            $club = Club::query()->find($query->clubId);
+            if (! $club) {
+                throw new InvalidClubAccountStatementQueryException('The statement query is invalid.');
+            }
             [$period, $from, $to] = $this->resolveRange($query);
             $activation = $this->resolveActivation($query, $from);
             $entries = $this->eligibleEntries(
@@ -43,8 +50,59 @@ final class ClubAccountStatementProjectionService
                 $to,
             );
 
-            return $this->build($query, $period, $activation, $entries, $from, $to);
+            $statement = $this->build($query, $period, $activation, $entries, $from, $to);
+            $statement['snapshot_fingerprint'] = $this->snapshotFingerprint(
+                $statement,
+                (string) $club->code,
+                $activation,
+            );
+
+            return $statement;
         }, 3);
+    }
+
+    private function establishConsistentSnapshot(): void
+    {
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::statement('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        }
+    }
+
+    private function snapshotFingerprint(
+        array $statement,
+        string $clubCode,
+        ClubAccountingCutoverPackage $activation,
+    ): string {
+        $scope = $statement;
+        unset($scope['club_id'], $scope['lions_year']['id'], $scope['range']['period_id']);
+
+        $canonical = [
+            'fingerprint_contract' => 'CLUB-ACCOUNT-STATEMENT-SNAPSHOT-2026-01',
+            'statement_contract' => self::CONTRACT_VERSION,
+            'club_code' => $clubCode,
+            'activation' => [
+                'public_id' => $activation->public_id,
+                'package_version' => $activation->package_version,
+                'canonical_checksum' => $activation->canonical_checksum,
+            ],
+            'statement' => $scope,
+        ];
+
+        return hash('sha256', json_encode(
+            $this->canonicalize($canonical),
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+        ));
+    }
+
+    private function canonicalize(array $value): array
+    {
+        if (array_is_list($value)) {
+            return array_map(fn (mixed $item): mixed => is_array($item) ? $this->canonicalize($item) : $item, $value);
+        }
+
+        ksort($value, SORT_STRING);
+
+        return array_map(fn (mixed $item): mixed => is_array($item) ? $this->canonicalize($item) : $item, $value);
     }
 
     private function resolveRange(ClubAccountStatementQuery $query): array
