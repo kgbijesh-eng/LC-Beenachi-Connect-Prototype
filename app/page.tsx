@@ -10,6 +10,8 @@ import ClubAccountStatementBackend from "./ClubAccountStatementBackend";
 import ClubExpenseBackend from "./ClubExpenseBackend";
 import ClubExpenseHistoryBackend from "./ClubExpenseHistoryBackend";
 import ClubInternalTransferBackend from "./ClubInternalTransferBackend";
+import ClubOrdinaryIncomeReceiptBackend from "./ClubOrdinaryIncomeReceiptBackend";
+import ClubOrdinaryIncomeReceiptHistoryBackend from "./ClubOrdinaryIncomeReceiptHistoryBackend";
 import PersonalProfileDocuments from "./PersonalProfileDocuments";
 import AnnouncementsBackend, { AnnouncementDashboardStatus } from "./AnnouncementsBackend";
 import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";
@@ -464,7 +466,7 @@ type AnnouncementDetail = "Published" | "Draft / Pending" | "High Priority";
 type FellowshipPaymentView = "Current Month" | "Pending Sponsors" | "Paid Sponsors";
 type PeopleSection = "Members" | "Board & Committees" | "Celebrations";
 type OperationsSection = "Events & Meetings" | "Announcements" | "Documents" | "Projects / Activities" | "Fellowship";
-type FinanceSection = "Club Account Statement" | "Record Expense" | "Expense History" | "Transfer Money" | "Member Ledger / Dues" | "Payments / Receipts" | "Club Finance Reports" | "Balance Sheet Summary" | "Outstanding Dues" | "Collection Summary" | "Fellowship Payments";
+type FinanceSection = "Club Account Statement" | "Record Expense" | "Expense History" | "Transfer Money" | "Record Ordinary Income" | "Ordinary Income History" | "Member Ledger / Dues" | "Payments / Receipts" | "Club Finance Reports" | "Balance Sheet Summary" | "Outstanding Dues" | "Collection Summary" | "Fellowship Payments";
 type ClubStatementSection =
   | "Account Overview"
   | "Fund-wise Opening Balance"
@@ -1140,6 +1142,8 @@ const operationsMenuItems: NavItem[] = [
 ];
 
 const financeMenuItems: NavItem[] = [
+  { label: "Record Ordinary Income", screen: "finance-module", financeSection: "Record Ordinary Income" },
+  { label: "Ordinary Income History", screen: "finance-module", financeSection: "Ordinary Income History" },
   { label: "Record Expense", screen: "finance-module", financeSection: "Record Expense" },
   { label: "Expense History", screen: "finance-module", financeSection: "Expense History" },
   { label: "Transfer Money", screen: "finance-module", financeSection: "Transfer Money" },
@@ -1223,7 +1227,7 @@ const navByRole: Record<Role, NavGroup[]> = {
     { title: "My Member Area", items: myMemberAreaItems },
     { title: "People", items: peopleMenuItems },
     { title: "Operations", items: operationsMenuItems },
-    { title: "Finance", items: financeMenuItems.filter((item) => item.label !== "Transfer Money") },
+    { title: "Finance", items: financeMenuItems.filter((item) => item.label !== "Transfer Money" && item.label !== "Record Ordinary Income") },
     { title: "Reports & Tools", items: [
       ...reportMenuItems,
       { label: "Notifications & Reminders", screen: "notifications-reminders" },
@@ -2575,6 +2579,10 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
                       ? <ClubExpenseHistoryBackend role={role} />
                     : financeSection === "Transfer Money"
                       ? <ClubInternalTransferBackend role={role} />
+                    : financeSection === "Record Ordinary Income"
+                      ? <ClubOrdinaryIncomeReceiptBackend role={role} />
+                    : financeSection === "Ordinary Income History"
+                      ? <ClubOrdinaryIncomeReceiptHistoryBackend role={role} />
                     : <FinanceBackend role={role} view={financeSection === "Outstanding Dues" ? "outstanding" : financeSection === "Member Ledger / Dues" ? "summary" : "workspace"} onRecordPayment={openOutstandingPayment} />
                 )}
         {screen === "reports-tools-module" && (

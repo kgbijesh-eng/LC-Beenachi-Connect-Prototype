@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\Finance\ClubAccountStatementController;
 use App\Http\Controllers\Api\V1\Finance\ClubFinanceReportController;
 use App\Http\Controllers\Api\V1\Finance\ClubExpenseController;
 use App\Http\Controllers\Api\V1\Finance\ClubInternalTransferController;
+use App\Http\Controllers\Api\V1\Finance\ClubOrdinaryIncomeReceiptController;
 use App\Http\Controllers\Api\V1\Finance\MemberFinanceSummaryController;
 use App\Http\Controllers\Api\V1\Finance\MemberLedgerBalanceController;
 use App\Http\Controllers\Api\V1\Finance\PaymentController;
@@ -112,6 +113,14 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/finance/transfers', [ClubInternalTransferController::class, 'index']);
             Route::get('/clubs/{club}/finance/transfers/{transfer}', [ClubInternalTransferController::class, 'show'])->whereUuid('transfer');
             Route::post('/clubs/{club}/finance/transfers', [ClubInternalTransferController::class, 'store']);
+        });
+        Route::middleware('club.permission:finance.club.ordinary_income_receipts.view,club')->group(function (): void {
+            Route::get('/clubs/{club}/finance/ordinary-income-receipts', [ClubOrdinaryIncomeReceiptController::class, 'index']);
+            Route::get('/clubs/{club}/finance/ordinary-income-receipts/{receipt}', [ClubOrdinaryIncomeReceiptController::class, 'show'])->whereUuid('receipt');
+        });
+        Route::middleware('club.permission:finance.club.ordinary_income_receipts.create,club')->group(function (): void {
+            Route::get('/clubs/{club}/finance/ordinary-income-receipts/options', [ClubOrdinaryIncomeReceiptController::class, 'options']);
+            Route::post('/clubs/{club}/finance/ordinary-income-receipts', [ClubOrdinaryIncomeReceiptController::class, 'store']);
         });
         Route::middleware('club.permission:finance.self.view,club')->group(function (): void {
             Route::get('/clubs/{club}/finance/me/summary', [FinanceReadController::class, 'ownSummary']);
