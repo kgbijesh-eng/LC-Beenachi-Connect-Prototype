@@ -91,13 +91,11 @@ class Milestone3iimOpeningBalanceValidationFoundationTest extends TestCase
         $this->assertNotSame($first->dryRunFingerprint, $changed->dryRunFingerprint);
     }
 
-    public function test_income_expense_and_equity_accounts_are_blocked_for_opening(): void
+    public function test_income_and_expense_accounts_are_blocked_for_opening(): void
     {
         foreach ([
             ['INCOME-MEMBER-DUES', 'OPENING-INCOME-ACCOUNT-PROHIBITED', null, 100],
             ['EXPENSE-ADMINISTRATION', 'OPENING-EXPENSE-ACCOUNT-PROHIBITED', 100, null],
-            ['OPENING-BALANCE-EQUITY', 'DR-033-EQUITY-SELECTION-PROHIBITED', null, 100],
-            ['ACCUMULATED-SURPLUS', 'DR-033-EQUITY-SELECTION-PROHIBITED', null, 100],
         ] as [$code, $blocker, $debit, $credit]) {
             $report = $this->validate($this->request([
                 'positions' => [new ProposedOpeningPosition('ZERO', $code, 0, 'EVIDENCE-ZERO-001')],
@@ -154,7 +152,6 @@ class Milestone3iimOpeningBalanceValidationFoundationTest extends TestCase
         $report = $this->validate($this->request());
         $codes = $this->codes($report);
 
-        $this->assertContains('DR-033-EQUITY-DECISION-PENDING', $codes);
         $this->assertContains('DR-033-EQUITY-LINE-REQUIRED', $codes);
         $this->assertNotContains('OPENING-BALANCE-EQUITY', array_column($report->journalLines, 'account_code'));
         $this->assertNotContains('ACCUMULATED-SURPLUS', array_column($report->journalLines, 'account_code'));

@@ -143,19 +143,22 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
         $this->assertFalse($this->service()->readiness($package)['ready']);
     }
 
-    public function test_only_two_classifications_are_allowed_and_nothing_is_inferred_from_net_assets(): void
+    public function test_tenant_selected_equity_account_is_allowed_and_cross_club_or_non_equity_selection_fails_closed(): void
     {
         $fixture = $this->fixture();
-        $package = $this->reviewablePackage($fixture, 'OPENING-BALANCE-EQUITY');
-        $this->assertCutoverFailure(fn () => app(ClubCutoverLifecycleService::class)->review($package, $fixture['ca'], $package->lock_version, 'NET-ASSETS-SURPLUS', 'CA-REVIEW-INVALID', '2027-07-02', str_repeat('Valid rationale. ', 3)));
+        $fixture['accounts']['tenant_equity'] = $this->account($fixture['club'], $fixture['actor'], 'CLUB-NET-ASSETS', 'equity', 'credit');
+        $this->account($fixture['otherClub'], $fixture['actor'], 'FOREIGN-NET-ASSETS', 'equity', 'credit');
+        $package = $this->reviewablePackage($fixture, 'CLUB-NET-ASSETS');
+        $this->assertCutoverFailure(fn () => app(ClubCutoverLifecycleService::class)->review($package, $fixture['ca'], $package->lock_version, 'FOREIGN-NET-ASSETS', 'CA-REVIEW-FOREIGN', '2027-07-02', str_repeat('Valid rationale. ', 3)));
+        $this->assertCutoverFailure(fn () => app(ClubCutoverLifecycleService::class)->review($package, $fixture['ca'], $package->lock_version, 'BANK-OPERATING', 'CA-REVIEW-ASSET', '2027-07-02', str_repeat('Valid rationale. ', 3)));
         $this->assertNull($package->fresh()->dr033_classification);
 
-        foreach (['OPENING-BALANCE-EQUITY', 'ACCUMULATED-SURPLUS'] as $classification) {
-            $candidate = $classification === 'OPENING-BALANCE-EQUITY' ? $package : $this->reviewablePackage($fixture, $classification, 2);
-            $review = app(ClubCutoverLifecycleService::class)->review($candidate, $fixture['ca'], $candidate->lock_version, $classification, 'CA-REVIEW-'.$candidate->id, '2027-07-02', 'Evidence establishes the selected historical equity classification.');
-            $this->assertSame($classification, $review->selected_classification);
-            $this->assertSame($classification, $candidate->fresh()->dr033_classification);
-        }
+        $review = $this->service()->recordAccountingReview($fixture['club']->id, $package->id, $fixture['ca']->id, $package->lock_version, 'CA-REVIEW-'.$package->id, '2027-07-02', ' club-net-assets ', 'Evidence establishes the tenant-selected historical equity classification.');
+        $this->assertSame('CLUB-NET-ASSETS', $review->selected_classification);
+        $this->assertSame('CLUB-NET-ASSETS', $package->fresh()->dr033_classification);
+        $preview = $this->service()->preview($package->fresh());
+        $this->assertSame('CLUB-NET-ASSETS', collect($preview['lines'])->firstWhere('row_key', 'EQUITY-PREVIEW')['account_code']);
+        $this->assertSame(40000, collect($preview['lines'])->firstWhere('row_key', 'EQUITY-PREVIEW')['credit_paise']);
     }
 
     public function test_review_and_approval_bind_exact_checksum_and_content_mutation_invalidates_both_and_classification(): void
@@ -368,7 +371,8 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
 
     private function rows(array $fixture, ?string $classification = null, array $overrides = []): array
     {
-        $equity = $classification === 'ACCUMULATED-SURPLUS' ? $fixture['accounts']['surplus']->id : ($classification === 'OPENING-BALANCE-EQUITY' ? $fixture['accounts']['opening_equity']->id : null);
+        $equity = $classification === null ? null : LedgerAccount::query()
+            ->where('club_id', $fixture['club']->id)->where('code', $classification)->value('id');
         $rows = [
             ['schedule_type' => 'cash_on_hand', 'row_key' => 'CASH-ON-HAND', 'non_sensitive_label' => 'Cash on hand', 'ledger_account_id' => $fixture['accounts']['cash']->id, 'fund_code' => 'GENERAL_CLUB_FUND', 'direction' => 'debit', 'amount_paise' => 10000],
             ['schedule_type' => 'bank_account', 'row_key' => 'BANK-OPERATING', 'non_sensitive_label' => 'Operating bank alias', 'ledger_account_id' => $fixture['accounts']['bank']->id, 'fund_code' => 'GENERAL_CLUB_FUND', 'direction' => 'debit', 'amount_paise' => 20000],

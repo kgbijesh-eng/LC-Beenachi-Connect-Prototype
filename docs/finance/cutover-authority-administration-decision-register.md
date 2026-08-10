@@ -2,7 +2,7 @@
 
 **Register:** CADR — Milestone 3IIZQ
 **Purpose:** Only unresolved governance decisions required to complete safe cutover authority/evidence administration.
-**Boundary:** CADR decisions are independent of DR-033. DR-033 remains Pending and is not renumbered here.
+**Boundary:** CADR decisions are independent of DR-033. DR-033 is approved as tenant-scoped policy and is not renumbered here; package selection still requires the CADR/DR-053 controls.
 
 All seven CADR items below were explicitly approved in Milestone 3IIZR after governance review. Their approved resolutions are authoritative for later implementation, but 3IIZR itself authorizes no runtime implementation.
 
@@ -363,4 +363,4 @@ All seven 3IIZQ governance questions are resolved.
 
 Resolution of these CADRs does **not** itself authorize an authenticated administration API, controller, policy, command, UI, database migration, permission assignment, authority appointment, evidence ingestion, CA professional review, President cutover approval, accounting activation, or production cutover.
 
-DR-033 remains Pending and is independent of this CADR register.
+DR-033 tenant-scoped policy is approved and remains independent of this CADR register; no tenant account or amount is approved here.

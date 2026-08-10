@@ -34,10 +34,6 @@ class ClubAccountingCutoverPackage extends Model
 
     public const CUTOVER_DATE = '2027-07-01';
 
-    public const CLASSIFICATION_OPENING_EQUITY = 'OPENING-BALANCE-EQUITY';
-
-    public const CLASSIFICATION_ACCUMULATED_SURPLUS = 'ACCUMULATED-SURPLUS';
-
     protected $fillable = [
         'public_id', 'club_id', 'lions_year', 'cutover_date', 'chart_version', 'package_version',
         'status', 'currency', 'prepared_by_user_id', 'prepared_at', 'internally_verified_by_user_id', 'internally_verified_at', 'last_validated_at',
@@ -82,7 +78,8 @@ class ClubAccountingCutoverPackage extends Model
             $dr033Transition = $from === self::STATUS_INTERNALLY_VERIFIED
                 && $package->status === self::STATUS_ACCOUNTING_REVIEWED
                 && $package->getOriginal('dr033_classification') === null
-                && in_array($package->dr033_classification, [self::CLASSIFICATION_OPENING_EQUITY, self::CLASSIFICATION_ACCUMULATED_SURPLUS], true);
+                && is_string($package->dr033_classification)
+                && preg_match('/\A[A-Z0-9][A-Z0-9._:-]{2,39}\z/', $package->dr033_classification) === 1;
             if ($dr033Transition) {
                 $allowed[] = 'dr033_classification';
                 $allowed[] = 'canonical_checksum';

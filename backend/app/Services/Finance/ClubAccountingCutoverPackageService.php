@@ -206,7 +206,8 @@ final class ClubAccountingCutoverPackageService
 
     public function recordAccountingReview(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, string $reviewerIdentifier, string $reviewDate, string $classification, string $rationale): ClubAccountingCutoverReview
     {
-        if (! in_array($classification, [ClubAccountingCutoverPackage::CLASSIFICATION_OPENING_EQUITY, ClubAccountingCutoverPackage::CLASSIFICATION_ACCUMULATED_SURPLUS], true)
+        $classification = strtoupper(trim($classification));
+        if (! preg_match('/\A[A-Z0-9][A-Z0-9._:-]{2,39}\z/', $classification)
             || trim($reviewerIdentifier) === '' || $this->containsSensitiveValue($reviewerIdentifier)
             || strlen(trim($rationale)) < 20 || $this->containsSensitiveValue($rationale) || ! $this->validDate($reviewDate)) {
             throw new CutoverPackageException('The accounting review is invalid.');
@@ -278,7 +279,12 @@ final class ClubAccountingCutoverPackageService
         $preview = $this->preview($package);
         $checks = $validation['checks'] + [
             'checksum_current' => $package->canonical_checksum !== null && hash_equals($package->canonical_checksum, $checksum),
-            'dr033_selected' => in_array($package->dr033_classification, [ClubAccountingCutoverPackage::CLASSIFICATION_OPENING_EQUITY, ClubAccountingCutoverPackage::CLASSIFICATION_ACCUMULATED_SURPLUS], true),
+            'dr033_selected' => is_string($package->dr033_classification)
+                && LedgerAccount::query()->where('club_id', $package->club_id)
+                    ->where('code', $package->dr033_classification)
+                    ->where('account_type', LedgerAccount::TYPE_EQUITY)
+                    ->where('currency', $package->currency)
+                    ->where('is_active', true)->exists(),
             'accounting_review_current' => $this->bindingMatches($package, $review, $checksum),
             'club_approval_current' => $this->bindingMatches($package, $approval, $checksum),
             'no_previous_activation' => ! ClubJournalEntry::query()->where('club_id', $package->club_id)->where('source_type', 'accounting_opening_package')->exists(),

@@ -8,7 +8,7 @@
 
 This contract defines a future normalized, club- and tenant-scoped persistence and authorization domain for one controlled accounting cutover. It authorizes no migration, model, permission, route, service, feature flag, source hook, package creation, journal posting, activation, merge, or deployment.
 
-DR-033 remains **Pending**. No equity account or amount is selected. No package can become activation-ready until reconciled evidence supports exactly one economically correct equity classification and the required accounting and business decisions are recorded. Independent Chartered Accountant/accounting review remains mandatory and is not performed by technical validation or this contract.
+DR-033 is approved as tenant-scoped policy. No equity account or amount is selected by this contract. No package can become activation-ready until reconciled evidence supports exactly one active same-club equity account and the required accounting and business decisions are recorded. Independent Chartered Accountant/accounting review remains mandatory and is not performed by technical validation or this contract.
 
 Existing journal tables can represent posting identity, lines, dates, actors, idempotency, and reversal linkage. They cannot safely enforce package versions, manifest integrity, multi-party decisions, separation of duties, activation authority, rollback authority, or retention state. Journal JSON metadata must never be the sole package approval or activation mechanism.
 
@@ -100,7 +100,7 @@ Rules:
 - no two active activation authorizations may cover the same club and cutover boundary;
 - a corrected package is a new version and requires new decisions.
 
-Preparation and internal document verification may occur while DR-033 is Pending only as explicitly incomplete work. `ACCOUNTING_REVIEWED`, later approval states, and activation remain blocked where the equity decision is required.
+Preparation and internal document verification may occur before a tenant-specific DR-033 account is selected only as explicitly incomplete work. `ACCOUNTING_REVIEWED`, later approval states, and activation remain blocked until that package-bound selection is recorded through the required review.
 
 ## 5. Separation of duties
 
@@ -198,9 +198,9 @@ Activation prerequisites include no validation blocker, resolved DR-033, complet
 
 Posting does not automatically enable any charge, payment, allocation, receipt, void, or other source integration.
 
-## 8. DR-033 resolution boundary
+## 8. DR-033 tenant-selection boundary
 
-A future DR-033 resolution must:
+A package-specific DR-033 selection must:
 
 - follow reconciled asset, liability, restriction, and member-receivable evidence;
 - identify exactly one economically correct equity classification;
@@ -209,7 +209,7 @@ A future DR-033 resolution must:
 - never be inferred from the amount needed to force journal balance;
 - never create retroactive approval for an earlier package version.
 
-Any later package version must independently prove that the decision still applies to its exact facts and bindings. DR-033 remains Pending during this milestone.
+Any later package version must independently prove that the selection still applies to its exact facts and bindings. Policy approval never approves a tenant package.
 
 ## 9. Rollback and reversal authority
 

@@ -31,8 +31,6 @@ final class OpeningBalanceValidationFoundation
         'AUTHORIZATION', 'REVERSAL-READINESS', 'DR-033', 'OTHER-STRUCTURAL',
     ];
 
-    private const EQUITY_CODES = ['OPENING-BALANCE-EQUITY', 'ACCUMULATED-SURPLUS'];
-
     public function __construct(private readonly ApprovedLedgerAccountTemplateCatalog $catalogue) {}
 
     public function validateProposedUnverifiedPackage(
@@ -46,7 +44,6 @@ final class OpeningBalanceValidationFoundation
         $blockers = [];
         $this->block($blockers, 'OPERATIONAL-COLLISION-CHECK-NOT-PERFORMED', 'sourceIdentity');
         $this->block($blockers, 'ACTIVATION-AUTHORIZATION-ABSENT', 'activationAuthorization');
-        $this->block($blockers, 'DR-033-EQUITY-DECISION-PENDING', 'openingEquity');
 
         $positions = $this->positions($request, $definitions, $planItems, $blockers);
         $lines = $this->journalLines($request, $definitions, $planItems, $positions, $blockers);
@@ -54,7 +51,7 @@ final class OpeningBalanceValidationFoundation
         $exceptions = $this->exceptions($request, $blockers);
         $privacy = $this->privacy($request, $blockers);
 
-        if (! array_filter($lines, fn (array $line): bool => in_array($line['account_code'], self::EQUITY_CODES, true))) {
+        if (! array_filter($lines, fn (array $line): bool => $line['account_type'] === LedgerAccount::TYPE_EQUITY)) {
             $this->block($blockers, 'DR-033-EQUITY-LINE-REQUIRED', 'journalLines');
         }
 
@@ -228,9 +225,7 @@ final class OpeningBalanceValidationFoundation
                 $this->block($blockers, 'OPENING-INCOME-ACCOUNT-PROHIBITED', $code);
             } elseif ($definition->accountType === LedgerAccount::TYPE_EXPENSE) {
                 $this->block($blockers, 'OPENING-EXPENSE-ACCOUNT-PROHIBITED', $code);
-            } elseif ($definition->accountType === LedgerAccount::TYPE_EQUITY) {
-                $this->block($blockers, 'DR-033-EQUITY-SELECTION-PROHIBITED', $code);
-            } elseif (! in_array($definition->accountType, [LedgerAccount::TYPE_ASSET, LedgerAccount::TYPE_LIABILITY], true)) {
+            } elseif (! in_array($definition->accountType, [LedgerAccount::TYPE_ASSET, LedgerAccount::TYPE_LIABILITY, LedgerAccount::TYPE_EQUITY], true)) {
                 $this->block($blockers, 'OPENING-ACCOUNT-TYPE-PROHIBITED', $code);
             }
             $evidence = $this->optionalReference($position->evidenceReference);
@@ -308,9 +303,7 @@ final class OpeningBalanceValidationFoundation
                 $this->block($blockers, 'OPENING-INCOME-ACCOUNT-PROHIBITED', $code);
             } elseif ($definition->accountType === LedgerAccount::TYPE_EXPENSE) {
                 $this->block($blockers, 'OPENING-EXPENSE-ACCOUNT-PROHIBITED', $code);
-            } elseif ($definition->accountType === LedgerAccount::TYPE_EQUITY) {
-                $this->block($blockers, 'DR-033-EQUITY-SELECTION-PROHIBITED', $code);
-            } elseif (! in_array($definition->accountType, [LedgerAccount::TYPE_ASSET, LedgerAccount::TYPE_LIABILITY], true)) {
+            } elseif (! in_array($definition->accountType, [LedgerAccount::TYPE_ASSET, LedgerAccount::TYPE_LIABILITY, LedgerAccount::TYPE_EQUITY], true)) {
                 $this->block($blockers, 'OPENING-ACCOUNT-TYPE-PROHIBITED', $code);
             }
             $expectedDirection = $definition->accountType === LedgerAccount::TYPE_ASSET ? 'debit' : 'credit';
@@ -331,6 +324,7 @@ final class OpeningBalanceValidationFoundation
             }
             $lines[$code] = [
                 'account_code' => $code,
+                'account_type' => $definition->accountType,
                 'stable_account_reference' => $stable,
                 'direction' => $direction,
                 'amount_paise' => $amount,

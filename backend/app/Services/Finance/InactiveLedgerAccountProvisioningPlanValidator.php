@@ -25,9 +25,6 @@ final class InactiveLedgerAccountProvisioningPlanValidator
 
     private const REFERENCE_PATTERN = '/\A[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*\z/';
 
-    /** @var list<string> */
-    private const EQUITY_CANDIDATES = ['OPENING-BALANCE-EQUITY', 'ACCUMULATED-SURPLUS'];
-
     public function __construct(private readonly ApprovedLedgerAccountTemplateCatalog $catalogue) {}
 
     public function validateProposedUnverifiedPlan(
@@ -61,9 +58,6 @@ final class InactiveLedgerAccountProvisioningPlanValidator
             $definition = $definitions[$templateCode] ?? null;
             if (! $definition) {
                 throw new InvalidInactiveLedgerAccountPlanException('A selected template is unknown.');
-            }
-            if (in_array($templateCode, self::EQUITY_CANDIDATES, true)) {
-                throw new InvalidInactiveLedgerAccountPlanException('DR-033 remains Pending; equity planning is prohibited.');
             }
 
             $classification = $this->classification($selection->eligibilityClassifications);

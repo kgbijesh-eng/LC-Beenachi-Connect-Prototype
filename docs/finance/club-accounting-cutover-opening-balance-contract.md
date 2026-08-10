@@ -1,10 +1,10 @@
 # Club Accounting Cutover and Opening Balance Contract
 
-**Status:** Proposed validation design only. The current decision register is authoritative: DR-026–DR-032 and DR-034–DR-052 are approved with their recorded qualifications, while DR-033 alone remains **Pending**. Opening values, package-specific evidence, accounting review, approval, posting, and activation remain unapproved. No operational data was inspected.
+**Status:** Proposed validation design only. The current decision register is authoritative, including DR-033's tenant-scoped policy approval. Opening values, tenant account selection, package-specific evidence, accounting review, approval, posting, and activation remain unapproved. No operational data was inspected.
 
-**Pure validation foundation:** package structure `CUTOVER-EVIDENCE-PACKAGE-2026-01` and validation policy `OPENING-BALANCE-VALIDATION-2026-01` produce only deterministic `PROPOSED-UNVERIFIED`, activation-`BLOCKED` structural reports. They fetch no evidence, create no records, and never satisfy independent accounting review. Every report retains DR-033, operational-collision, and activation-authorization blockers. The dry-run fingerprint is a comparison tool, not the approved-package checksum required by DR-044.
+**Pure validation foundation:** package structure `CUTOVER-EVIDENCE-PACKAGE-2026-01` and validation policy `OPENING-BALANCE-VALIDATION-2026-01` produce only deterministic `PROPOSED-UNVERIFIED`, activation-`BLOCKED` structural reports. They fetch no evidence, create no records, and never satisfy independent accounting review. Reports require an explicit equity line and retain operational-collision and activation-authorization blockers. The dry-run fingerprint is a comparison tool, not the approved-package checksum required by DR-044.
 
-**Authorization contract boundary:** `CUTOVER-AUTHORIZATION-CONTRACT-2026-01` distinguishes the 3IIM structural comparison fingerprint, a future final persisted package fingerprint, and the separately controlled DR-044 evidence-package checksum. Any material change invalidates their binding and dependent decisions. A future activation authorization is single-use, exact-package-bound, separately approved, concurrency-protected, revocable before posting, and consumed only with successful creation or exact authorized replay. This is a design contract only; DR-033 remains Pending and no persistence or authorization exists.
+**Authorization contract boundary:** `CUTOVER-AUTHORIZATION-CONTRACT-2026-01` distinguishes the 3IIM structural comparison fingerprint, a future final persisted package fingerprint, and the separately controlled DR-044 evidence-package checksum. Any material change invalidates their binding and dependent decisions. Activation authorization is single-use, exact-package-bound, separately approved, concurrency-protected, revocable before posting, and consumed only with successful creation or exact authorized replay. DR-033 policy approval itself creates no persistence or authority.
 
 ## 1. Approved boundary and cutover alternatives
 
@@ -75,7 +75,7 @@ The current header can store source identity, idempotency, actor IDs, dates, nar
 | Accumulated Surplus/Deficit | Accounting review proves the amount represents cumulative unrestricted results | Meaning may be incorrect where restricted/designated balances exist |
 | Another accountant-approved equity account | Its legal/accounting meaning and reconciliation are documented | Adds catalog complexity and may require fund treatment |
 
-**Recommendation (Pending):** accounting review should choose the economically correct equity account after all assets and liabilities are supported. The offset must never be selected or altered merely to force equality. Every residual difference blocks approval.
+**Approved tenant-scoped policy:** accounting review chooses the economically correct active same-club equity account after all assets and liabilities are supported. The offset must never be selected or altered merely to force equality. Every residual difference blocks approval; no account or amount is globally prescribed.
 
 ## 6. Member receivables control
 
@@ -151,4 +151,4 @@ A fictional package proposes bank 100,000 paise and receivables 25,000 paise but
 
 ## 11. Remaining approval boundary
 
-The decision register records qualified approvals for the target cutover, chart semantics, evidence format, roles, external review requirement, dry-run outcomes, activation authority, rollback policy, historical-backfill prohibition, and provisional privacy retention. Those policy approvals do not approve package-specific evidence, account instances, opening values, mappings, accounting review, posting, or activation. DR-033 remains Pending and prevents selection of any opening-equity account or completion of an activation-ready package.
+The decision register records qualified policy approvals for the target cutover. Those approvals do not approve package-specific evidence, account instances, opening values, mappings, accounting review, posting, or activation. DR-033 permits a tenant-scoped selection only through the controlled package review and never supplies a default or balancing plug.

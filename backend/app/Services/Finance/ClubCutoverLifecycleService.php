@@ -56,12 +56,13 @@ final class ClubCutoverLifecycleService
     {
         return DB::transaction(function () use ($package, $actor, $expectedLockVersion, $classification, $reference, $reviewDate, $rationale): ClubAccountingCutoverReview {
             $locked = $this->lock($package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_INTERNALLY_VERIFIED);
-            if ($locked->dr033_classification !== null || ! in_array($classification, [ClubAccountingCutoverPackage::CLASSIFICATION_OPENING_EQUITY, ClubAccountingCutoverPackage::CLASSIFICATION_ACCUMULATED_SURPLUS], true)) {
+            $classification = strtoupper(trim($classification));
+            if ($locked->dr033_classification !== null || ! preg_match('/\A[A-Z0-9][A-Z0-9._:-]{2,39}\z/', $classification)) {
                 throw new CutoverPackageException('DR-033 may be selected exactly once by the accounting review.');
             }
             $appointment = $this->authority->appointment($locked, $actor, ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA);
             $permission = $this->authority->permission($locked, $actor, 'finance.cutover.package.accounting-review');
-            if (! LedgerAccount::query()->where('club_id', $locked->club_id)->where('code', $classification)->where('account_type', LedgerAccount::TYPE_EQUITY)->where('currency', 'INR')->where('is_active', true)->exists()) {
+            if (! LedgerAccount::query()->where('club_id', $locked->club_id)->where('code', $classification)->where('account_type', LedgerAccount::TYPE_EQUITY)->where('currency', $locked->currency)->where('is_active', true)->exists()) {
                 throw new CutoverPackageException('The selected DR-033 account is unavailable.');
             }
             $locked->status = ClubAccountingCutoverPackage::STATUS_ACCOUNTING_REVIEWED;
