@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\Finance\AccountingIntegrationController;
 use App\Http\Controllers\Api\V1\Finance\ClubAccountStatementController;
 use App\Http\Controllers\Api\V1\Finance\ClubFinanceReportController;
 use App\Http\Controllers\Api\V1\Finance\ClubExpenseController;
+use App\Http\Controllers\Api\V1\Finance\ClubInternalTransferController;
 use App\Http\Controllers\Api\V1\Finance\MemberFinanceSummaryController;
 use App\Http\Controllers\Api\V1\Finance\MemberLedgerBalanceController;
 use App\Http\Controllers\Api\V1\Finance\PaymentController;
@@ -106,6 +107,12 @@ Route::prefix('v1')->group(function (): void {
         });
         Route::post('/clubs/{club}/finance/expenses/{expense}/reversal', [ClubExpenseController::class, 'reverse'])
             ->whereUuid('expense')->middleware('club.permission:finance.club.expenses.reverse,club');
+        Route::middleware('club.permission:finance.club.transfers.create,club')->group(function (): void {
+            Route::get('/clubs/{club}/finance/transfers/options', [ClubInternalTransferController::class, 'options']);
+            Route::get('/clubs/{club}/finance/transfers', [ClubInternalTransferController::class, 'index']);
+            Route::get('/clubs/{club}/finance/transfers/{transfer}', [ClubInternalTransferController::class, 'show'])->whereUuid('transfer');
+            Route::post('/clubs/{club}/finance/transfers', [ClubInternalTransferController::class, 'store']);
+        });
         Route::middleware('club.permission:finance.self.view,club')->group(function (): void {
             Route::get('/clubs/{club}/finance/me/summary', [FinanceReadController::class, 'ownSummary']);
             Route::get('/clubs/{club}/finance/me/charges', [FinanceReadController::class, 'ownCharges']);
