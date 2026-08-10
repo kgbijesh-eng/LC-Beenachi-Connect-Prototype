@@ -1,6 +1,6 @@
 # Club Accounting Source Mapping Register
 
-**Status:** Proposed design register. All mappings are **Pending** unless they restate an approved DR-001–DR-025 rule. No integration or posting is authorized.
+**Status:** Design and policy mapping register. Rows explicitly approved by a later decision remain **approved-not-implemented** until a separate implementation milestone passes its own authorization, concurrency, migration, and release gates. No row in this register alone authorizes posting.
 
 ## 1. Source-truth classes
 
@@ -23,6 +23,7 @@ Cutover contract `CUTOVER-AUTHORIZATION-CONTRACT-2026-01` adds a mandatory seque
 | Payment void | `FinanceWriteService::void`; recorded → voided | Opposite of original payment credit | Opposite of original payment debit | Approved void effective date in open period | `member_payment:{id}:voided:v{lock}` | Existing payment remains; linked reversal; replacement posts independently | Void permission, reason, same-club replacement | Operational void exists; journal link absent | Required with payment integration |
 | Charge cancellation/correction | `FinanceWriteService::cancel` or future correction event | Opposite original charge credit | Opposite `MEMBER-RECEIVABLES` debit | Cancellation/correction date under period policy | `club_charge:{id}:cancelled:v{lock}` | Linked full reversal; paid issued charges remain blocked under current source rules | Finance management approval and club scope | Source cancellation exists; journal semantics Pending | Required with charge integration |
 | Expense payment | No approved authoritative expense-payment source | Approved expense account | Selected real cash/bank asset | Actual approved payment date | Future expense-payment ID/event/idempotency | Linked reversal and corrected payment; no payable accrual initially | Expense authorization, evidence, payee privacy, club scope | Blocked: workflow and hierarchy absent | Excluded |
+| Ordinary non-member income receipt | Future immutable ordinary-receipt source under DR-064 | Selected active same-club cash/bank asset | Selected active same-club eligible income account | Actual receipt/accounting date in an open covered period | Tenant-scoped receipt UUID plus idempotency UUID and canonical payload digest | Source-specific linked full reversal and separate replacement; business refunds remain separately contracted | President/Admin or Treasurer records; same-club account/fund/source validation; President/Admin, Secretary and Treasurer view ordinary non-sensitive history | DR-064 approved; source, permissions, schema, routes, UI and PostgreSQL proof not implemented | Approved-not-implemented; recommended next bounded source |
 | Unrestricted donation | No authoritative donation workflow | Selected real cash/bank asset | `INCOME-DONATION` | Actual receipt date | Future donation receipt event | Linked reversal/refund policy required | Donation approval, donor privacy, club scope | Blocked | Excluded |
 | Restricted donation | No authoritative donation workflow | Selected real cash/bank asset | `LIABILITY-RESTRICTED-DONATION` | Actual receipt date | Future restricted-donation event | Linked reversal; release/use needs separate mapping | Restriction evidence and accounting approval | Blocked | Excluded |
 | Collection Box | No authoritative counted/approved collection event | Selected real cash/bank asset | Pending approved income or restricted liability | Approved count/deposit date, not UI entry time | Future sealed count/approval event | Linked reversal with count correction evidence | Dual count/approval, custody, club scope | Blocked by DR-008 and absent source | Excluded |
@@ -33,7 +34,7 @@ Cutover contract `CUTOVER-AUTHORIZATION-CONTRACT-2026-01` adds a mandatory seque
 | Opening balance | Future approved immutable opening package / activation event | Approved debit opening accounts | Approved credit opening accounts | Exactly approved 1 July | `accounting_opening_package:{package-id}:activated`; package-bound UUID | Linked full reversal and separately approved replacement package | Full cutover gate, manifest, separation of duties, same club | Contract only; approval schema and package absent | One-time, only after activation approval |
 | Manual journal | No source; deliberately absent | N/A | N/A | N/A | N/A | N/A | Separate high-control contract would be mandatory | Recommended prohibited initially | Excluded |
 
-**Source mappings: 15.** Only the charge, payment, allocation, void, and cancellation source domains currently exist. None is connected to the internal journal.
+**Source mappings: 16.** The ordinary non-member income mapping is approved policy under DR-064 but remains unimplemented. Specialized receipt domains remain independently gated.
 
 ## 3. Required mapping controls
 
@@ -79,6 +80,7 @@ All examples are fictional, balanced, integer-paise, and do not imply approval.
 
 - Dynamically combining charges, payments, allocations, receipts, and legacy ledgers into an authoritative statement.
 - Treating a receipt as income or an allocation as a second cash entry.
+- Using the future ordinary-income source for donations, restricted or custodial money, Fellowship, Collection Box, deposits, grants with unresolved terms, refunds/recoveries, asset sales, member payments, or arbitrary credits.
 - Posting unallocated receipts while DR-007 rejects them.
 - Mapping payment mode to a generic bank account without explicit asset identity.
 - Treating Special Collection as ordinary dues, or Voluntary Collection as a receivable.
@@ -87,4 +89,4 @@ All examples are fictional, balanced, integer-paise, and do not imply approval.
 
 ## 5. Pending decisions
 
-Due-category ownership, Special/Voluntary Collection, donation restrictions, Fellowship, expense hierarchy, asset selection, effective-date rules, atomic delivery mechanism, historical backfill, and all initial-release mappings remain Pending.
+DR-064 resolves only the ordinary non-member income source boundary and mapping pattern. Exact tenant account instances and implementation remain future gates. Special/Voluntary Collection, donation restrictions, Fellowship, restricted/liability receipts, grants, refunds/recoveries, asset disposal, deposits/advances, tax-enabled receipts, historical backfill, and their source-specific mappings remain separately pending or excluded.
