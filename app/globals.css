@@ -1277,6 +1277,8 @@ h3 {
 .statementSnapshot { padding: 10px 12px; color: var(--muted); }
 .statementSnapshot summary { cursor: pointer; font-weight: 700; }
 .statementSnapshot code { overflow-wrap: anywhere; }
+.expenseForm { align-items: end; }
+.expenseForm label { min-width: min(100%, 190px); }
 .statementState-forbidden,
 .statementState-not-activated,
 .statementState-integrity,

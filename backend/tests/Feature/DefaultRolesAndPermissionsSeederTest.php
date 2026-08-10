@@ -17,8 +17,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 48);
-        $this->assertDatabaseCount('role_permissions', 93);
+        $this->assertDatabaseCount('permissions', 49);
+        $this->assertDatabaseCount('role_permissions', 96);
 
         $president = Role::where('slug', 'president-admin')->firstOrFail();
         $secretary = Role::where('slug', 'secretary')->firstOrFail();
@@ -28,9 +28,9 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertSame('President/Admin', $president->name);
         $this->assertTrue($president->is_system);
 
-        $this->assertSame(37, $president->permissions()->count());
-        $this->assertSame(30, $secretary->permissions()->count());
-        $this->assertSame(17, $treasurer->permissions()->count());
+        $this->assertSame(38, $president->permissions()->count());
+        $this->assertSame(31, $secretary->permissions()->count());
+        $this->assertSame(18, $treasurer->permissions()->count());
         $this->assertSame(9, $member->permissions()->count());
 
         $this->assertTrue($president->permissions->contains('slug', 'club.manage'));
@@ -115,6 +115,11 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertNotNull(Permission::where('slug', 'finance.self.view')->first());
         $this->assertNotNull(Permission::where('slug', 'finance.club.view')->first());
         $this->assertNotNull(Permission::where('slug', 'finance.club.statement.view')->first());
+        $this->assertNotNull(Permission::where('slug', 'finance.club.expenses.create')->first());
+        foreach ([$president, $secretary, $treasurer] as $role) {
+            $this->assertTrue($role->permissions->contains('slug', 'finance.club.expenses.create'));
+        }
+        $this->assertFalse($member->permissions->contains('slug', 'finance.club.expenses.create'));
         $this->assertNotNull(Permission::where('slug', 'finance.manage')->first());
         $this->assertNotNull(Permission::where('slug', 'finance.void')->first());
         $this->assertNotNull(Permission::where('slug', 'finance.accounting.integration.configure')->first());
@@ -141,8 +146,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 48);
-        $this->assertDatabaseCount('role_permissions', 93);
+        $this->assertDatabaseCount('permissions', 49);
+        $this->assertDatabaseCount('role_permissions', 96);
     }
 
     public function test_database_seeder_calls_default_roles_and_permissions_seeder(): void
