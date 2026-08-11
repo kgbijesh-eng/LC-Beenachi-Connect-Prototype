@@ -70,6 +70,32 @@ class Milestone3iizvClubExpenseRecordingTest extends TestCase
         $this->assertDatabaseCount('club_expenses', 2);
     }
 
+    public function test_exact_replay_rejects_material_persisted_expense_provenance_corruption(): void
+    {
+        $f = $this->fixture('C'); Sanctum::actingAs($f['officer']); $payload = $this->payload($f);
+        $this->postJson($this->endpoint($f), $payload)->assertCreated();
+        $expense = ClubExpense::query()->where('club_id', $f['club']->id)->firstOrFail();
+        $journal = DB::table('club_journal_entries')->where('id', $expense->journal_entry_id)->first();
+        $debit = DB::table('club_journal_lines')->where('journal_entry_id', $expense->journal_entry_id)->where('direction', 'debit')->first();
+        $cases = [
+            [['journal_entry_id' => null], ['journal_entry_id' => $expense->journal_entry_id], 'club_expenses'],
+            [['source_type' => 'corrupt'], ['source_type' => $journal->source_type], 'club_journal_entries'],
+            [['source_id' => (string) Str::uuid()], ['source_id' => $journal->source_id], 'club_journal_entries'],
+            [['source_event' => 'corrupt'], ['source_event' => $journal->source_event], 'club_journal_entries'],
+            [['idempotency_key' => (string) Str::uuid()], ['idempotency_key' => $journal->idempotency_key], 'club_journal_entries'],
+            [['ledger_account_id' => $expense->payment_account_id], ['ledger_account_id' => $debit->ledger_account_id], 'club_journal_lines'],
+            [['direction' => 'credit'], ['direction' => $debit->direction], 'club_journal_lines'],
+            [['amount_paise' => $expense->amount_paise + 1], ['amount_paise' => $debit->amount_paise], 'club_journal_lines'],
+            [['fund_code' => 'GENERAL_CLUB_FUND'], ['fund_code' => $debit->fund_code], 'club_journal_lines'],
+        ];
+        foreach ($cases as [$corrupt, $restore, $table]) {
+            $id = $table === 'club_expenses' ? $expense->id : ($table === 'club_journal_entries' ? $expense->journal_entry_id : $debit->id);
+            DB::table($table)->where('id', $id)->update($corrupt);
+            $this->postJson($this->endpoint($f), $payload)->assertConflict()->assertJsonPath('code', 'EXPENSE_IDEMPOTENCY_CONFLICT');
+            DB::table($table)->where('id', $id)->update($restore);
+        }
+    }
+
     public function test_permission_membership_account_period_amount_and_options_contracts_fail_closed(): void
     {
         $f = $this->fixture('A'); Sanctum::actingAs($f['officer']);

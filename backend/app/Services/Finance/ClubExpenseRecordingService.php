@@ -8,6 +8,7 @@ use App\Models\Club;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingPeriod;
 use App\Models\ClubExpense;
+use App\Models\ClubJournalEntry;
 use App\Models\ClubJournalLine;
 use App\Models\LedgerAccount;
 use App\Models\User;
@@ -33,7 +34,10 @@ final class ClubExpenseRecordingService
                 if (! hash_equals($existing->request_digest, $canonical['request_digest'])) {
                     throw new ClubExpenseConflictException('The expense idempotency key conflicts with a changed request.');
                 }
-                return $this->loaded($existing);
+                $loaded = $this->loaded($existing);
+                $this->assertReplayProvenance($loaded, $canonical);
+
+                return $loaded;
             }
 
             $period = ClubAccountingPeriod::query()->where('club_id', $lockedClub->id)->where('start_date', '<=', $canonical['accounting_date'])->where('end_date', '>=', $canonical['accounting_date'])->lockForUpdate()->first();
@@ -121,6 +125,67 @@ final class ClubExpenseRecordingService
         if (! $payment->is_active || $payment->currency !== LedgerAccount::CURRENCY_INR || $payment->account_type !== LedgerAccount::TYPE_ASSET || $payment->statement_classification !== StatementClassification::CASH_AND_BANK->value) throw new ClubExpenseException('The selected payment account is not eligible.');
     }
 
+    private function assertReplayProvenance(ClubExpense $expense, array $canonical): void
+    {
+        $journal = $expense->journalEntry;
+        $lines = $journal?->lines?->sortBy('line_number')->values();
+        $validStatus = $journal?->status === ClubJournalEntry::STATUS_POSTED;
+
+        if ($journal?->status === ClubJournalEntry::STATUS_REVERSED) {
+            $reversal = $expense->reversal;
+            $reversalJournal = $reversal?->journalEntry;
+            $reversalLines = $reversalJournal?->lines?->sortBy('line_number')->values();
+            $validStatus = $reversalJournal
+                && $reversal->club_expense_id === $expense->id
+                && $reversal->reversal_journal_entry_id === $reversalJournal->id
+                && $reversalJournal->club_id === $expense->club_id
+                && $reversalJournal->reversal_of_entry_id === $journal->id
+                && $reversalJournal->source_type === ClubExpenseReversalService::SOURCE_TYPE
+                && $reversalJournal->source_id === $expense->public_id
+                && $reversalJournal->source_event === 'reversed'
+                && strtolower((string) $reversalJournal->idempotency_key) === strtolower((string) $reversal->idempotency_key)
+                && $reversalJournal->status === ClubJournalEntry::STATUS_POSTED
+                && $reversalJournal->currency === LedgerAccount::CURRENCY_INR
+                && $reversalLines?->count() === 2
+                && $reversalLines[0]->club_id === $expense->club_id
+                && $reversalLines[1]->club_id === $expense->club_id
+                && $reversalLines[0]->ledger_account_id === $expense->expense_account_id
+                && $reversalLines[0]->direction === ClubJournalLine::DIRECTION_CREDIT
+                && $reversalLines[1]->ledger_account_id === $expense->payment_account_id
+                && $reversalLines[1]->direction === ClubJournalLine::DIRECTION_DEBIT
+                && $reversalLines[0]->amount_paise === $expense->amount_paise
+                && $reversalLines[1]->amount_paise === $expense->amount_paise
+                && $reversalLines[0]->fund_code === $expense->fund_code
+                && $reversalLines[1]->fund_code === $expense->fund_code;
+        }
+
+        $valid = $journal
+            && $expense->journal_entry_id === $journal->id
+            && $journal->club_id === $expense->club_id
+            && $journal->source_type === self::SOURCE_TYPE
+            && $journal->source_id === $expense->public_id
+            && $journal->source_event === 'recorded'
+            && strtolower((string) $journal->idempotency_key) === $canonical['idempotency_key']
+            && $validStatus
+            && $journal->currency === LedgerAccount::CURRENCY_INR
+            && $expense->currency === LedgerAccount::CURRENCY_INR
+            && $lines?->count() === 2
+            && $lines[0]->club_id === $expense->club_id
+            && $lines[1]->club_id === $expense->club_id
+            && $lines[0]->ledger_account_id === $expense->expense_account_id
+            && $lines[0]->direction === ClubJournalLine::DIRECTION_DEBIT
+            && $lines[1]->ledger_account_id === $expense->payment_account_id
+            && $lines[1]->direction === ClubJournalLine::DIRECTION_CREDIT
+            && $lines[0]->amount_paise === $expense->amount_paise
+            && $lines[1]->amount_paise === $expense->amount_paise
+            && $lines[0]->fund_code === $expense->fund_code
+            && $lines[1]->fund_code === $expense->fund_code;
+
+        if (! $valid) {
+            throw new ClubExpenseConflictException('The stored expense journal provenance is invalid.');
+        }
+    }
+
     private function account(LedgerAccount $account): array { return ['id' => $account->public_id, 'code' => $account->code, 'name' => $account->name]; }
-    private function loaded(ClubExpense $expense): ClubExpense { return $expense->fresh()->load(['expenseAccount', 'paymentAccount', 'journalEntry', 'reversal.journalEntry', 'correctedReplacement.journalEntry', 'correctedFrom']); }
+    private function loaded(ClubExpense $expense): ClubExpense { return $expense->fresh()->load(['expenseAccount', 'paymentAccount', 'journalEntry.lines', 'reversal.journalEntry.lines', 'correctedReplacement.journalEntry', 'correctedFrom']); }
 }

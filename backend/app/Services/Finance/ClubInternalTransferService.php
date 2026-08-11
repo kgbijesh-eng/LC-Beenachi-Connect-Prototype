@@ -3,7 +3,7 @@
 declare(strict_types=1);
 namespace App\Services\Finance;
 
-use App\Models\{Club, ClubAccountingCutoverPackage, ClubAccountingPeriod, ClubInternalTransfer, ClubJournalLine, LedgerAccount, User};
+use App\Models\{Club, ClubAccountingCutoverPackage, ClubAccountingPeriod, ClubInternalTransfer, ClubJournalEntry, ClubJournalLine, LedgerAccount, User};
 use App\Services\Finance\Exceptions\{ClubInternalTransferConflictException, ClubInternalTransferException};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,7 +21,9 @@ final class ClubInternalTransferService
             $existing = ClubInternalTransfer::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();
             if ($existing) {
                 if (! hash_equals($existing->request_digest, $canonical['request_digest'])) throw new ClubInternalTransferConflictException('The transfer idempotency key conflicts with a changed request.');
-                return $this->loaded($existing);
+                $loaded = $this->loaded($existing);
+                $this->assertReplayProvenance($loaded, $canonical);
+                return $loaded;
             }
             $period = ClubAccountingPeriod::query()->where('club_id', $lockedClub->id)->where('start_date', '<=', $canonical['accounting_date'])->where('end_date', '>=', $canonical['accounting_date'])->lockForUpdate()->first();
             if (! $period || $period->status !== ClubAccountingPeriod::STATUS_OPEN) throw new ClubInternalTransferException('The transfer date must belong to an open accounting period.');
@@ -50,6 +52,33 @@ final class ClubInternalTransferService
         $canonical = ['accounting_date' => $input['accounting_date'], 'source_account' => strtolower(trim((string) $input['source_account'])), 'destination_account' => strtolower(trim((string) $input['destination_account'])), 'fund_code' => $input['fund'], 'amount_paise' => (int) $input['amount_paise'], 'description' => trim((string) $input['description']), 'external_reference' => ($v = trim((string) ($input['external_reference'] ?? ''))) === '' ? null : $v, 'idempotency_key' => strtolower(trim((string) $input['idempotency_key']))];
         if (! Str::isUuid($canonical['source_account']) || ! Str::isUuid($canonical['destination_account']) || ! Str::isUuid($canonical['idempotency_key']) || $canonical['source_account'] === $canonical['destination_account'] || ! FundCode::tryFrom($canonical['fund_code']) || $canonical['amount_paise'] < 1) throw new ClubInternalTransferException('The transfer request is invalid.');
         $canonical['request_digest'] = hash('sha256', json_encode($canonical, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)); return $canonical;
+    }
+    private function assertReplayProvenance(ClubInternalTransfer $transfer, array $canonical): void
+    {
+        $journal = $transfer->journalEntry;
+        $lines = $journal?->lines?->sortBy('line_number')->values();
+        $valid = $journal
+            && $transfer->journal_entry_id === $journal->id
+            && $journal->club_id === $transfer->club_id
+            && $journal->source_type === self::SOURCE_TYPE
+            && $journal->source_id === $transfer->public_id
+            && $journal->source_event === 'recorded'
+            && strtolower((string) $journal->idempotency_key) === $canonical['idempotency_key']
+            && $journal->status === ClubJournalEntry::STATUS_POSTED
+            && $journal->currency === LedgerAccount::CURRENCY_INR
+            && $transfer->currency === LedgerAccount::CURRENCY_INR
+            && $lines?->count() === 2
+            && $lines[0]->club_id === $transfer->club_id
+            && $lines[1]->club_id === $transfer->club_id
+            && $lines[0]->ledger_account_id === $transfer->destination_account_id
+            && $lines[0]->direction === ClubJournalLine::DIRECTION_DEBIT
+            && $lines[1]->ledger_account_id === $transfer->source_account_id
+            && $lines[1]->direction === ClubJournalLine::DIRECTION_CREDIT
+            && $lines[0]->amount_paise === $transfer->amount_paise
+            && $lines[1]->amount_paise === $transfer->amount_paise
+            && $lines[0]->fund_code === $transfer->fund_code
+            && $lines[1]->fund_code === $transfer->fund_code;
+        if (! $valid) throw new ClubInternalTransferConflictException('The stored transfer journal provenance is invalid.');
     }
     private function loaded(ClubInternalTransfer $transfer): ClubInternalTransfer { return $transfer->fresh()->load(['sourceAccount', 'destinationAccount', 'journalEntry.lines.ledgerAccount', 'creator']); }
 }
