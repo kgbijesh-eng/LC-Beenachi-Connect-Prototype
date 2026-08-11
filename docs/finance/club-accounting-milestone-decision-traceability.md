@@ -76,3 +76,9 @@ Work that may continue without resolving DR-033 is limited to fail-closed, non-a
 5. Independent Chartered Accountant classification and rationale.
 6. President/business approval referencing the same immutable package/chart version.
 7. Updated DR-033 row containing option, rationale, approvers, dates, compatibility effect, historical-data effect, and bound document versions.
+
+## 6. Later ordinary-income correction trace
+
+Milestone 3IJAD is a documentation-only application of existing approved decisions; it does not assign a new DR number or alter the cutover boundary above. DR-013 requires immutable correction by linked reversal and corrected posting, DR-021 requires a later open period when the original period is closed, DR-023 keeps original and reversal visible, DR-062 preserves original account/fund/amount attribution while inverting direction, and DR-064 limits the source to bounded ordinary non-member income and keeps business refunds separate.
+
+3IJAD resolves future source-specific architecture as follows: President/Admin and Treasurer may independently post one full reversal under a narrow ordinary-income reversal permission; Secretary retains view-only correction provenance; reversal-only is allowed; one optional replacement may be created atomically but remains a new ordinary-income source and journal under normal validation; exact replay returns one canonical correction; changed replay and competing reversals conflict; and corrupt or cross-tenant provenance fails closed. Correction implementation, migration, permission seeding, service, API, UI, tests, production authorization, and refund/payment-out remain absent.
