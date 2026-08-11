@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint app",
-    "test:frontend": "vitest run"
+    "test:frontend": "vitest run",
+    "verify:finance-release-gate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-finance-release-gate.ps1"
   },
   "dependencies": {
     "next": "^16.3.0",
