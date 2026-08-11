@@ -21,16 +21,16 @@ use App\Services\Finance\JournalLineInput;
 use App\Services\Finance\JournalPostingRequest;
 use App\Services\Finance\JournalReversalRequest;
 use App\Services\Finance\JournalReversalService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
+use Tests\Support\RefreshesDatabaseWithoutTransactions;
 
 class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshesDatabaseWithoutTransactions;
 
     public function test_stable_get_route_controller_and_contract_are_active(): void
     {
@@ -49,6 +49,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
 
     public function test_successful_get_is_read_only_and_deterministic(): void
     {
+        $this->assertSame(0, DB::transactionLevel());
         $fixture = $this->fixture();
         Sanctum::actingAs($fixture['officer']);
         $before = $this->accountingCounts();

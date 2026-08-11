@@ -18,10 +18,13 @@ use App\Services\Finance\JournalPostingRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
+use Tests\Support\RefreshesDatabaseWithoutTransactions;
 use Tests\TestCase;
 
 final class Milestone3iiztPostgresStatementSnapshotConcurrencyTest extends TestCase
 {
+    use RefreshesDatabaseWithoutTransactions;
+
     public function test_posting_committed_during_projection_cannot_create_a_mixed_snapshot(): void
     {
         $this->requireExplicitDisposablePostgres();

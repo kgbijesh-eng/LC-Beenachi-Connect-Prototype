@@ -122,6 +122,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/clubs/{club}/finance/ordinary-income-receipts/options', [ClubOrdinaryIncomeReceiptController::class, 'options']);
             Route::post('/clubs/{club}/finance/ordinary-income-receipts', [ClubOrdinaryIncomeReceiptController::class, 'store']);
         });
+        Route::post('/clubs/{club}/finance/ordinary-income-receipts/{receipt}/correction', [ClubOrdinaryIncomeReceiptController::class, 'correct'])
+            ->whereUuid('receipt')->middleware('club.permission:finance.club.ordinary_income_receipts.reverse,club');
         Route::middleware('club.permission:finance.self.view,club')->group(function (): void {
             Route::get('/clubs/{club}/finance/me/summary', [FinanceReadController::class, 'ownSummary']);
             Route::get('/clubs/{club}/finance/me/charges', [FinanceReadController::class, 'ownCharges']);

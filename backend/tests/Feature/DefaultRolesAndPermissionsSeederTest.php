@@ -17,8 +17,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 54);
-        $this->assertDatabaseCount('role_permissions', 108);
+        $this->assertDatabaseCount('permissions', 55);
+        $this->assertDatabaseCount('role_permissions', 110);
 
         $president = Role::where('slug', 'president-admin')->firstOrFail();
         $secretary = Role::where('slug', 'secretary')->firstOrFail();
@@ -28,9 +28,9 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertSame('President/Admin', $president->name);
         $this->assertTrue($president->is_system);
 
-        $this->assertSame(43, $president->permissions()->count());
+        $this->assertSame(44, $president->permissions()->count());
         $this->assertSame(33, $secretary->permissions()->count());
-        $this->assertSame(23, $treasurer->permissions()->count());
+        $this->assertSame(24, $treasurer->permissions()->count());
         $this->assertSame(9, $member->permissions()->count());
 
         $this->assertTrue($president->permissions->contains('slug', 'club.manage'));
@@ -140,6 +140,11 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->assertTrue($treasurer->permissions->contains('slug', 'finance.club.ordinary_income_receipts.view'));
         $this->assertFalse($member->permissions->contains('slug', 'finance.club.ordinary_income_receipts.create'));
         $this->assertFalse($member->permissions->contains('slug', 'finance.club.ordinary_income_receipts.view'));
+        $this->assertNotNull(Permission::where('slug', 'finance.club.ordinary_income_receipts.reverse')->first());
+        $this->assertTrue($president->permissions->contains('slug', 'finance.club.ordinary_income_receipts.reverse'));
+        $this->assertFalse($secretary->permissions->contains('slug', 'finance.club.ordinary_income_receipts.reverse'));
+        $this->assertTrue($treasurer->permissions->contains('slug', 'finance.club.ordinary_income_receipts.reverse'));
+        $this->assertFalse($member->permissions->contains('slug', 'finance.club.ordinary_income_receipts.reverse'));
         $this->assertNotNull(Permission::where('slug', 'finance.manage')->first());
         $this->assertNotNull(Permission::where('slug', 'finance.void')->first());
         $this->assertNotNull(Permission::where('slug', 'finance.accounting.integration.configure')->first());
@@ -166,8 +171,8 @@ class DefaultRolesAndPermissionsSeederTest extends TestCase
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
 
         $this->assertDatabaseCount('roles', 4);
-        $this->assertDatabaseCount('permissions', 54);
-        $this->assertDatabaseCount('role_permissions', 108);
+        $this->assertDatabaseCount('permissions', 55);
+        $this->assertDatabaseCount('role_permissions', 110);
     }
 
     public function test_database_seeder_calls_default_roles_and_permissions_seeder(): void

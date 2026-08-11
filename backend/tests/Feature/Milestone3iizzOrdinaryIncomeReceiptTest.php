@@ -3,17 +3,17 @@
 declare(strict_types=1);
 namespace Tests\Feature;
 
-use App\Models\{Club, ClubAccountingCutoverPackage, ClubAccountingCutoverScheduleRow, ClubAccountingPeriod, ClubMembership, ClubOrdinaryIncomeReceipt, LedgerAccount, Permission, Role, User};
+use App\Models\{Club, ClubAccountingCutoverPackage, ClubAccountingCutoverScheduleRow, ClubAccountingPeriod, ClubJournalEntry, ClubMembership, ClubOrdinaryIncomeReceipt, ClubOrdinaryIncomeReceiptCorrection, LedgerAccount, Permission, Role, User};
 use App\Services\Finance\{ClubJournalPostingService, ClubOrdinaryIncomeReceiptService, JournalLineInput, JournalPostingRequest};
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
+use Tests\Support\RefreshesDatabaseWithoutTransactions;
 
 final class Milestone3iizzOrdinaryIncomeReceiptTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshesDatabaseWithoutTransactions;
 
     public function test_receipt_posts_exact_same_fund_income_replays_and_changes_statement(): void
     {
@@ -50,9 +50,11 @@ final class Milestone3iizzOrdinaryIncomeReceiptTest extends TestCase
 
     public function test_controlled_journal_failure_rolls_back_source_and_journal(): void
     {
-        $f = $this->fixture('G'); DB::unprepared("CREATE TRIGGER reject_ordinary_income_journal BEFORE INSERT ON club_journal_entries WHEN NEW.source_type = 'club_ordinary_income_receipt' BEGIN SELECT RAISE(ABORT, 'controlled ordinary income failure'); END");
-        try { app(ClubOrdinaryIncomeReceiptService::class)->record($f['club'], $f['actor'], $this->payload($f, (string) Str::uuid())); $this->fail('Controlled journal failure must propagate.'); } catch (\Throwable) {}
-        $this->assertSame(0, ClubOrdinaryIncomeReceipt::query()->where('club_id', $f['club']->id)->count()); $this->assertSame(0, DB::table('club_journal_entries')->where('club_id', $f['club']->id)->where('source_type', ClubOrdinaryIncomeReceiptService::SOURCE_TYPE)->count());
+        $f = $this->fixture('G'); $suffix = Str::lower(Str::random(12)); $trigger = "reject_ordinary_income_journal_{$suffix}"; $function = "reject_ordinary_income_journal_fn_{$suffix}"; $driver = DB::connection()->getDriverName(); $journalCount = DB::table('club_journal_entries')->where('club_id', $f['club']->id)->count(); $lineCount = DB::table('club_journal_lines')->where('club_id', $f['club']->id)->count();
+        $thrown = null;
+        try { if ($driver === 'pgsql') { DB::unprepared("CREATE FUNCTION {$function}() RETURNS trigger LANGUAGE plpgsql AS \$trigger\$ BEGIN IF NEW.source_type = 'club_ordinary_income_receipt' THEN RAISE EXCEPTION 'controlled ordinary income failure'; END IF; RETURN NEW; END; \$trigger\$"); DB::unprepared("CREATE TRIGGER {$trigger} BEFORE INSERT ON club_journal_entries FOR EACH ROW EXECUTE FUNCTION {$function}()"); } else { DB::unprepared("CREATE TRIGGER {$trigger} BEFORE INSERT ON club_journal_entries WHEN NEW.source_type = 'club_ordinary_income_receipt' BEGIN SELECT RAISE(ABORT, 'controlled ordinary income failure'); END"); } try { app(ClubOrdinaryIncomeReceiptService::class)->record($f['club'], $f['actor'], $this->payload($f, (string) Str::uuid())); } catch (\Throwable $exception) { $thrown = $exception; } }
+        finally { if ($driver === 'pgsql') { DB::unprepared("DROP TRIGGER IF EXISTS {$trigger} ON club_journal_entries"); DB::unprepared("DROP FUNCTION IF EXISTS {$function}()"); } else { DB::unprepared("DROP TRIGGER IF EXISTS {$trigger}"); } }
+        $this->assertNotNull($thrown, 'Controlled journal failure must propagate.'); $this->assertSame(0, ClubOrdinaryIncomeReceipt::query()->where('club_id', $f['club']->id)->count()); $this->assertSame(0, DB::table('club_journal_entries')->where('club_id', $f['club']->id)->where('source_type', ClubOrdinaryIncomeReceiptService::SOURCE_TYPE)->count()); $this->assertSame($journalCount, DB::table('club_journal_entries')->where('club_id', $f['club']->id)->count()); $this->assertSame($lineCount, DB::table('club_journal_lines')->where('club_id', $f['club']->id)->count());
     }
 
     public function test_exact_replay_fails_closed_when_persisted_journal_provenance_is_corrupt(): void
@@ -61,6 +63,17 @@ final class Milestone3iizzOrdinaryIncomeReceiptTest extends TestCase
         $receipt = ClubOrdinaryIncomeReceipt::firstOrFail(); DB::table('club_journal_entries')->where('id', $receipt->journal_entry_id)->update(['source_id' => (string) Str::uuid()]);
         $this->postJson($this->endpoint($f), $payload)->assertConflict()->assertJsonPath('code', 'ORDINARY_INCOME_RECEIPT_IDEMPOTENCY_CONFLICT');
         $this->assertSame(1, ClubOrdinaryIncomeReceipt::count()); $this->assertSame(1, DB::table('club_journal_entries')->where('source_type', ClubOrdinaryIncomeReceiptService::SOURCE_TYPE)->count());
+    }
+
+    public function test_linked_correction_is_exact_idempotent_and_supports_atomic_replacement(): void
+    {
+        $f = $this->fixture('J'); $permission = Permission::firstOrCreate(['slug' => 'finance.club.ordinary_income_receipts.reverse'], ['name' => 'Reverse ordinary income', 'group' => 'finance', 'description' => 'Reverse']); ClubMembership::where('club_id', $f['club']->id)->where('user_id', $f['actor']->id)->firstOrFail()->role->permissions()->syncWithoutDetaching([$permission->id]); Sanctum::actingAs($f['actor']);
+        $created = $this->postJson($this->endpoint($f), $this->payload($f, (string) Str::uuid()))->assertCreated()->json('data'); $original = ClubOrdinaryIncomeReceipt::firstOrFail(); $facts = $original->getAttributes(); $originalLines = DB::table('club_journal_lines')->where('journal_entry_id', $original->journal_entry_id)->orderBy('line_number')->get(); $key = (string) Str::uuid(); $payload = ['accounting_date' => '2027-08-12', 'reason' => 'Incorrect amount', 'idempotency_key' => $key];
+        $first = $this->postJson($this->endpoint($f).'/'.$created['id'].'/correction', $payload)->assertOk()->assertJsonPath('data.status', 'reversed'); $replay = $this->postJson($this->endpoint($f).'/'.$created['id'].'/correction', $payload)->assertOk(); $this->assertSame($first->json('data.correction.id'), $replay->json('data.correction.id'));
+        $correction = ClubOrdinaryIncomeReceiptCorrection::firstOrFail(); $reversal = ClubJournalEntry::with('lines')->findOrFail($correction->reversal_journal_entry_id); $this->assertSame(['credit', 'debit'], $reversal->lines->pluck('direction')->all()); $this->assertSame($originalLines->pluck('ledger_account_id')->all(), $reversal->lines->pluck('ledger_account_id')->all()); $this->assertSame($originalLines->pluck('amount_paise')->all(), $reversal->lines->pluck('amount_paise')->all()); $this->assertSame($originalLines->pluck('fund_code')->all(), $reversal->lines->pluck('fund_code')->all()); $this->assertSame($facts, ClubOrdinaryIncomeReceipt::findOrFail($original->id)->getAttributes()); $this->postJson($this->endpoint($f).'/'.$created['id'].'/correction', [...$payload, 'reason' => 'Changed'])->assertConflict();
+
+        $g = $this->fixture('K'); ClubMembership::where('club_id', $g['club']->id)->where('user_id', $g['actor']->id)->firstOrFail()->role->permissions()->syncWithoutDetaching([$permission->id]); Sanctum::actingAs($g['actor']); $source = $this->postJson($this->endpoint($g), $this->payload($g, (string) Str::uuid()))->assertCreated()->json('data'); $replacement = $this->payload($g, (string) Str::uuid()); unset($replacement['idempotency_key']); $replacement['amount_paise'] = 2400000;
+        $this->postJson($this->endpoint($g).'/'.$source['id'].'/correction', ['accounting_date' => '2027-08-12', 'reason' => 'Wrong amount', 'idempotency_key' => (string) Str::uuid(), 'replacement' => $replacement])->assertOk()->assertJsonPath('data.status', 'replaced'); $this->getJson($this->endpoint($g).'?status=replaced')->assertOk()->assertJsonPath('meta.total', 1);
     }
 
     private function fixture(string $suffix, string $roleSlug = 'treasurer', bool $create = true, bool $view = true): array
