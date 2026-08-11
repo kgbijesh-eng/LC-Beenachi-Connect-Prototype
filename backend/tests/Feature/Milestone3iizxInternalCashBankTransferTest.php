@@ -32,6 +32,22 @@ final class Milestone3iizxInternalCashBankTransferTest extends TestCase
         try { app(ClubInternalTransferService::class)->record($f['club'],$f['actor'],$this->payload($f,(string)Str::uuid())); $this->fail('Controlled journal failure must propagate.'); } catch (\Throwable) { $this->assertSame(0,ClubInternalTransfer::query()->where('club_id',$f['club']->id)->count()); }
         $this->assertSame(0,DB::table('club_journal_entries')->where('club_id',$f['club']->id)->where('source_type',ClubInternalTransferService::SOURCE_TYPE)->count());
     }
+    public function test_exact_replay_rejects_material_persisted_transfer_provenance_corruption():void
+    {
+        $f=$this->fixture('C');Sanctum::actingAs($f['actor']);$key=(string)Str::uuid();$payload=$this->payload($f,$key);$this->postJson($this->endpoint($f),$payload)->assertCreated();$transfer=ClubInternalTransfer::where('club_id',$f['club']->id)->firstOrFail();$journal=DB::table('club_journal_entries')->where('id',$transfer->journal_entry_id)->first();$debit=DB::table('club_journal_lines')->where('journal_entry_id',$transfer->journal_entry_id)->where('direction','debit')->first();
+        $cases=[
+            [['journal_entry_id'=>null],['journal_entry_id'=>$transfer->journal_entry_id],'club_internal_transfers'],
+            [['source_type'=>'corrupt'],['source_type'=>$journal->source_type],'club_journal_entries'],
+            [['source_id'=>(string)Str::uuid()],['source_id'=>$journal->source_id],'club_journal_entries'],
+            [['source_event'=>'corrupt'],['source_event'=>$journal->source_event],'club_journal_entries'],
+            [['idempotency_key'=>(string)Str::uuid()],['idempotency_key'=>$journal->idempotency_key],'club_journal_entries'],
+            [['ledger_account_id'=>$transfer->source_account_id],['ledger_account_id'=>$debit->ledger_account_id],'club_journal_lines'],
+            [['direction'=>'credit'],['direction'=>$debit->direction],'club_journal_lines'],
+            [['amount_paise'=>$transfer->amount_paise+1],['amount_paise'=>$debit->amount_paise],'club_journal_lines'],
+            [['fund_code'=>'SERVICE_ACTIVITY_FUND'],['fund_code'=>$debit->fund_code],'club_journal_lines'],
+        ];
+        foreach($cases as [$corrupt,$restore,$table]){$id=$table==='club_internal_transfers'?$transfer->id:($table==='club_journal_entries'?$transfer->journal_entry_id:$debit->id);DB::table($table)->where('id',$id)->update($corrupt);$this->postJson($this->endpoint($f),$payload)->assertConflict()->assertJsonPath('code','TRANSFER_IDEMPOTENCY_CONFLICT');DB::table($table)->where('id',$id)->update($restore);}
+    }
     public function test_invalid_accounts_self_transfer_period_and_authority_fail_closed(): void
     {
         $f=$this->fixture('C'); Sanctum::actingAs($f['actor']);

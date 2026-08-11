@@ -12,6 +12,8 @@ use App\Models\ClubExpense;
 use App\Models\LedgerAccount;
 use App\Models\User;
 use App\Services\Finance\ClubExpenseRecordingService;
+use App\Services\Finance\ClubExpenseReversalService;
+use App\Services\Finance\Exceptions\ClubExpenseConflictException;
 use App\Services\Finance\Exceptions\ClubExpenseException;
 use App\Services\Finance\ClubJournalPostingService;
 use App\Services\Finance\JournalLineInput;
@@ -62,11 +64,31 @@ final class Milestone3iizvPostgresExpenseConcurrencyTest extends TestCase
         $this->assertSame(0, DB::table('club_journal_lines')->join('club_journal_entries', 'club_journal_entries.id', '=', 'club_journal_lines.journal_entry_id')->where('club_journal_entries.club_id', $atomic['club']->id)->where('club_journal_entries.source_type', ClubExpenseRecordingService::SOURCE_TYPE)->count());
     }
 
+    public function test_persisted_corruption_fails_closed_and_canonical_linked_reversal_remains_replayable_on_postgres(): void
+    {
+        $this->requireDisposablePostgres();
+        $corrupt = $this->fixture('CORRUPT'); $key = (string) Str::uuid(); $payload = $this->payload($corrupt, $key, 505);
+        $expense = app(ClubExpenseRecordingService::class)->record($corrupt['club'], $corrupt['actor'], $payload);
+        DB::table('club_expenses')->where('id', $expense->id)->update(['journal_entry_id' => null]);
+        try { app(ClubExpenseRecordingService::class)->record($corrupt['club'], $corrupt['actor'], $payload); $this->fail('Missing persisted expense journal binding must fail closed.'); }
+        catch (ClubExpenseConflictException) { $this->assertTrue(true); }
+
+        $reversed = $this->fixture('REVERSED'); $replayKey = (string) Str::uuid(); $replayPayload = $this->payload($reversed, $replayKey, 606);
+        $source = app(ClubExpenseRecordingService::class)->record($reversed['club'], $reversed['actor'], $replayPayload);
+        app(ClubExpenseReversalService::class)->reverse($reversed['club'], $source->public_id, $reversed['actor'], ['accounting_date' => '2027-08-12', 'reason' => 'PostgreSQL canonical reversal', 'idempotency_key' => (string) Str::uuid()]);
+        $replay = app(ClubExpenseRecordingService::class)->record($reversed['club'], $reversed['actor'], $replayPayload);
+        $this->assertSame($source->public_id, $replay->public_id);
+        $this->assertSame('reversed', $replay->journalEntry->status);
+        $this->assertSame(1, $replay->journalEntry->reversals()->count());
+    }
+
     private function requireDisposablePostgres(): void
     {
-        $this->assertSame('1', env('RUN_3IIZV_POSTGRES_CONCURRENCY'));
+        $legacy = env('RUN_3IIZV_POSTGRES_CONCURRENCY') === '1';
+        $hardening = env('RUN_3IJAB_POSTGRES_CONCURRENCY') === '1';
+        $this->assertTrue($legacy || $hardening);
         $this->assertSame('pgsql', DB::connection()->getDriverName());
-        $this->assertSame('lcb_3iizv_expense_concurrency_test', DB::connection()->getDatabaseName());
+        $this->assertSame($hardening ? 'lcb_3ijab_replay_provenance_hardening_test' : 'lcb_3iizv_expense_concurrency_test', DB::connection()->getDatabaseName());
         $this->assertNotSame('lc_beenachi_connect_reconstructed_20260727', DB::connection()->getDatabaseName());
     }
 
