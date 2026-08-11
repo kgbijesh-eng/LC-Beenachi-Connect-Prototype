@@ -7,6 +7,7 @@ param(
     [string]$DatabaseAdministratorUsername,
     [string]$PhpPath,
     [string]$ReportPath,
+    [switch]$Preflight,
     [switch]$EnvironmentRestorationProbe,
     [switch]$ForceProbeFailure
 )
@@ -209,6 +210,48 @@ Assert-ReportLocation $ReportPath
 Set-Location $Repository
 
 try {
+    if ($Preflight) {
+        if ($SkipPostgres -or $CreateDisposableDatabase -or $AllowFreshExistingDisposableDatabase -or
+            -not [string]::IsNullOrWhiteSpace($DatabaseName) -or
+            -not [string]::IsNullOrWhiteSpace($DatabaseAdministratorUsername) -or
+            -not [string]::IsNullOrWhiteSpace($PhpPath) -or
+            $EnvironmentRestorationProbe -or $ForceProbeFailure) {
+            throw 'Preflight cannot be combined with database, runtime, or environment-probe options.'
+        }
+
+        Assert-DisposableDatabase 'lcb_3ijae_finance_ci_preflight'
+        Assert-DisposableDatabase $SnapshotDatabase -Snapshot
+        foreach ($RejectedDatabase in @(
+            'lc_beenachi_connect',
+            'lc_beenachi_connect_reconstructed_20260727',
+            'production',
+            'lcb_3ijae_finance_unsafe-name'
+        )) {
+            $Rejected = $false
+            try {
+                Assert-DisposableDatabase $RejectedDatabase
+            } catch {
+                $Rejected = $true
+            }
+            if (-not $Rejected) { throw "Preflight expected database '$RejectedDatabase' to be rejected." }
+        }
+
+        Add-Result 'non-destructive verifier preflight' 'PASS' @{
+            database_connections = 0
+            databases_created = 0
+            databases_dropped = 0
+            credentials_read = $false
+            accepted_disposable_names = @('lcb_3ijae_finance_ci_preflight', $SnapshotDatabase)
+            rejected_database_names = @(
+                'lc_beenachi_connect',
+                'lc_beenachi_connect_reconstructed_20260727',
+                'production',
+                'lcb_3ijae_finance_unsafe-name'
+            )
+        }
+        return
+    }
+
     if ($EnvironmentRestorationProbe) {
         foreach ($Name in $EnvironmentNames) { Set-Item "Env:$Name" "finance-probe-$Name" }
         Add-Result 'environment restoration probe' 'PASS' @{ forced_failure = [bool]$ForceProbeFailure }
