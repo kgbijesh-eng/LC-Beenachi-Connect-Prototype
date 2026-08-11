@@ -11,6 +11,7 @@ class CorrectClubOrdinaryIncomeReceiptRequest extends FormRequest
 {
     private const NEVER_CALLER_SUPPLIED = [
         'amount_paise', 'fund', 'currency', 'club_id', 'status', 'public_id', 'request_digest', 'created_by_user_id',
+        'receiving_account', 'income_account',
         'journal', 'journal_id', 'journal_entry_id', 'journal_lines', 'lines', 'accounts', 'debit', 'credit',
         'original_receipt_id', 'original_journal_entry_id', 'reversal_journal', 'reversal_journal_id', 'reversal_journal_entry_id',
         'replacement_receipt_id', 'corrected_from_receipt', 'partial_amount_paise', 'reversal_amount_paise',

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 namespace Tests\Feature;
 
-use App\Models\{ClubAccountingPeriod, ClubJournalEntry, ClubOrdinaryIncomeReceipt, ClubOrdinaryIncomeReceiptCorrection, Permission, Role, User, ClubMembership};
+use App\Models\{AuditLog, ClubAccountingPeriod, ClubJournalEntry, ClubOrdinaryIncomeReceipt, ClubOrdinaryIncomeReceiptCorrection, Permission, Role, User, ClubMembership};
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -70,6 +70,24 @@ final class Milestone3ijaeOrdinaryIncomeReceiptCorrectionTest extends TestCase
         $replacement = $this->receiptPayload3ijae($f); unset($replacement['idempotency_key']); foreach ([null, [], ['line' => 'forbidden']] as $nestedLines) $this->postJson($endpoint, [...$this->correctionPayload3ijae(replacement: $replacement), 'replacement' => [...$replacement, 'journal_lines' => $nestedLines]])->assertUnprocessable()->assertJsonValidationErrors('replacement.journal_lines');
         $this->postJson($endpoint, $this->correctionPayload3ijae($receiptPayload['idempotency_key']))->assertUnprocessable()->assertJsonPath('code', 'ORDINARY_INCOME_RECEIPT_CORRECTION_POSTING_FAILED');
         $this->assertDatabaseCount('club_ordinary_income_receipt_corrections', 0);
+    }
+
+    public function test_caller_supplied_reversal_accounts_are_presence_sensitively_rejected_without_mutation(): void
+    {
+        $f = $this->fixture3ijae('ACCOUNT-OVERRIDE'); Sanctum::actingAs($f['actor']); $id = $this->postJson($this->receiptEndpoint3ijae($f), $this->receiptPayload3ijae($f))->assertCreated()->json('data.id'); $receipt = ClubOrdinaryIncomeReceipt::where('public_id', $id)->firstOrFail(); $journal = $receipt->journalEntry()->with('lines')->firstOrFail();
+        $before = ['receipts' => ClubOrdinaryIncomeReceipt::where('club_id', $f['club']->id)->count(), 'corrections' => ClubOrdinaryIncomeReceiptCorrection::where('club_id', $f['club']->id)->count(), 'journals' => ClubJournalEntry::where('club_id', $f['club']->id)->count(), 'lines' => DB::table('club_journal_lines')->where('club_id', $f['club']->id)->count(), 'audits' => AuditLog::where('club_id', $f['club']->id)->count(), 'receipt' => $receipt->getAttributes(), 'journal' => $journal->getAttributes(), 'journal_lines' => $journal->lines->map->getAttributes()];
+        foreach ([['receiving_account', (string) Str::uuid()], ['receiving_account', null], ['income_account', (string) Str::uuid()], ['income_account', null]] as [$field, $value]) {
+            $this->postJson($this->receiptEndpoint3ijae($f)."/{$id}/correction", [...$this->correctionPayload3ijae(), $field => $value])->assertUnprocessable()->assertJsonValidationErrors($field);
+            $this->assertSame($before['receipts'], ClubOrdinaryIncomeReceipt::where('club_id', $f['club']->id)->count()); $this->assertSame($before['corrections'], ClubOrdinaryIncomeReceiptCorrection::where('club_id', $f['club']->id)->count()); $this->assertSame($before['journals'], ClubJournalEntry::where('club_id', $f['club']->id)->count()); $this->assertSame($before['lines'], DB::table('club_journal_lines')->where('club_id', $f['club']->id)->count()); $this->assertSame($before['audits'], AuditLog::where('club_id', $f['club']->id)->count()); $this->assertSame($before['receipt'], $receipt->fresh()->getAttributes()); $this->assertSame($before['journal'], $journal->fresh()->getAttributes()); $this->assertEquals($before['journal_lines'], $journal->fresh()->lines->map->getAttributes()); $this->assertFalse($receipt->fresh()->correction()->exists()); $this->assertFalse($receipt->fresh()->correctedReplacement()->exists()); $this->assertFalse($journal->fresh()->reversals()->exists());
+        }
+    }
+
+    public function test_replacement_stage_coverage_failure_rolls_back_the_already_created_reversal_atomically(): void
+    {
+        $f = $this->fixture3ijae('REPLACEMENT-ROLLBACK', includePriorPeriod: true); Sanctum::actingAs($f['actor']); $id = $this->postJson($this->receiptEndpoint3ijae($f), $this->receiptPayload3ijae($f))->assertCreated()->json('data.id'); $receipt = ClubOrdinaryIncomeReceipt::where('public_id', $id)->firstOrFail(); $journal = $receipt->journalEntry()->with('lines')->firstOrFail(); $replacement = [...$this->receiptPayload3ijae($f), 'accounting_date' => '2027-06-30']; unset($replacement['idempotency_key']);
+        $before = ['receipts' => ClubOrdinaryIncomeReceipt::where('club_id', $f['club']->id)->count(), 'corrections' => ClubOrdinaryIncomeReceiptCorrection::where('club_id', $f['club']->id)->count(), 'journals' => ClubJournalEntry::where('club_id', $f['club']->id)->count(), 'lines' => DB::table('club_journal_lines')->where('club_id', $f['club']->id)->count(), 'audits' => AuditLog::where('club_id', $f['club']->id)->count(), 'receipt' => $receipt->getAttributes(), 'journal' => $journal->getAttributes(), 'journal_lines' => $journal->lines->map->getAttributes()];
+        $this->assertSame('open', $f['priorPeriod']->status); $this->postJson($this->receiptEndpoint3ijae($f)."/{$id}/correction", $this->correctionPayload3ijae(replacement: $replacement))->assertUnprocessable()->assertJsonPath('code', 'ORDINARY_INCOME_RECEIPT_CORRECTION_INVALID_REPLACEMENT');
+        $this->assertSame($before['receipts'], ClubOrdinaryIncomeReceipt::where('club_id', $f['club']->id)->count()); $this->assertSame($before['corrections'], ClubOrdinaryIncomeReceiptCorrection::where('club_id', $f['club']->id)->count()); $this->assertSame($before['journals'], ClubJournalEntry::where('club_id', $f['club']->id)->count()); $this->assertSame($before['lines'], DB::table('club_journal_lines')->where('club_id', $f['club']->id)->count()); $this->assertSame($before['audits'], AuditLog::where('club_id', $f['club']->id)->count()); $this->assertSame($before['receipt'], $receipt->fresh()->getAttributes()); $this->assertSame($before['journal'], $journal->fresh()->getAttributes()); $this->assertEquals($before['journal_lines'], $journal->fresh()->lines->map->getAttributes()); $this->assertSame(ClubJournalEntry::STATUS_POSTED, $journal->fresh()->status); $this->assertNull($journal->fresh()->reversed_by_user_id); $this->assertFalse($journal->fresh()->reversals()->exists()); $this->assertFalse($receipt->fresh()->correction()->exists()); $this->assertFalse($receipt->fresh()->correctedReplacement()->exists()); $this->assertSame(0, ClubJournalEntry::where('club_id', $f['club']->id)->where('source_type', 'club_ordinary_income_receipt_correction')->count()); $this->assertSame(0, ClubOrdinaryIncomeReceipt::where('club_id', $f['club']->id)->whereNotNull('corrected_from_receipt_id')->count());
     }
 
     public function test_each_replacement_fact_and_mode_is_owned_by_the_correction_digest(): void
