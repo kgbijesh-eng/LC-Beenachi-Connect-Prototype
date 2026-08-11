@@ -28,9 +28,14 @@ final class ClubOrdinaryIncomeReceiptService
                 $this->assertReplayProvenance($loaded, $canonical);
                 return $loaded;
             }
-            $period = ClubAccountingPeriod::query()->where('club_id', $lockedClub->id)->where('start_date', '<=', $canonical['accounting_date'])->where('end_date', '>=', $canonical['accounting_date'])->lockForUpdate()->first();
+            ['period' => $period, 'covered' => $covered] = $this->lockedPostingWindow($lockedClub, $canonical['accounting_date']);
             if (! $period || $period->status !== ClubAccountingPeriod::STATUS_OPEN) throw new ClubOrdinaryIncomeReceiptException('The receipt date must belong to an open accounting period.');
-            if (! ClubAccountingCutoverPackage::query()->where('club_id', $lockedClub->id)->where('status', 'posted')->whereNotNull('opening_journal_entry_id')->where('cutover_date', '<=', $canonical['accounting_date'])->lockForUpdate()->exists()) throw new ClubOrdinaryIncomeReceiptException('Authoritative accounting is not active for the selected date.');
+            if (! $covered) throw new ClubOrdinaryIncomeReceiptException('Authoritative accounting is not active for the selected date.');
+            $correctedFrom = null;
+            if ($canonical['corrected_from_receipt'] ?? null) {
+                $correctedFrom = ClubOrdinaryIncomeReceipt::query()->where('club_id', $lockedClub->id)->where('public_id', $canonical['corrected_from_receipt'])->lockForUpdate()->first();
+                if (! $correctedFrom || ! $correctedFrom->correction()->exists() || $correctedFrom->correctedReplacement()->exists()) throw new ClubOrdinaryIncomeReceiptConflictException('The corrected ordinary income receipt is unavailable or already has a replacement.');
+            }
             $accounts = LedgerAccount::query()->whereIn('public_id', [$canonical['receiving_account'], $canonical['income_account']])->lockForUpdate()->get()->keyBy(fn ($account) => strtolower($account->public_id));
             $receiving = $accounts->get($canonical['receiving_account']); $income = $accounts->get($canonical['income_account']);
             $this->validateAccounts($lockedClub, $receiving, $income);
@@ -39,7 +44,7 @@ final class ClubOrdinaryIncomeReceiptService
                 'receiving_account_id' => $receiving->id, 'income_account_id' => $income->id, 'fund_code' => $canonical['fund_code'],
                 'amount_paise' => $canonical['amount_paise'], 'currency' => LedgerAccount::CURRENCY_INR, 'description' => $canonical['description'],
                 'payer_name' => $canonical['payer_name'], 'external_reference' => $canonical['external_reference'], 'event_label' => $canonical['event_label'],
-                'idempotency_key' => $canonical['idempotency_key'], 'request_digest' => $canonical['request_digest'], 'created_by_user_id' => $actor->id,
+                'idempotency_key' => $canonical['idempotency_key'], 'request_digest' => $canonical['request_digest'], 'created_by_user_id' => $actor->id, 'corrected_from_receipt_id' => $correctedFrom?->id,
             ]);
             $journal = $this->journals->post(new JournalPostingRequest(
                 clubId: $lockedClub->id, accountingPeriodId: $period->id, effectiveDate: $canonical['accounting_date'], description: $canonical['description'], currency: LedgerAccount::CURRENCY_INR,
@@ -62,11 +67,35 @@ final class ClubOrdinaryIncomeReceiptService
         return ['subtypes' => self::SUBTYPES, 'receiving_accounts' => $accounts->where('account_type', LedgerAccount::TYPE_ASSET)->where('statement_classification', StatementClassification::CASH_AND_BANK->value)->map($map)->values()->all(), 'income_accounts' => $accounts->where('account_type', LedgerAccount::TYPE_INCOME)->where('statement_classification', StatementClassification::INCOME->value)->map($map)->values()->all(), 'funds' => array_map(fn (FundCode $fund) => $fund->value, FundCode::cases()), 'currency' => LedgerAccount::CURRENCY_INR, 'qualification' => 'Use this only for earned, unrestricted, non-refundable club income.'];
     }
 
+    /** @return array{period: ?ClubAccountingPeriod, covered: bool} */
+    public function lockedPostingWindow(Club $club, string $accountingDate): array
+    {
+        $period = ClubAccountingPeriod::query()->where('club_id', $club->id)->where('start_date', '<=', $accountingDate)->where('end_date', '>=', $accountingDate)->lockForUpdate()->first();
+        $covered = ClubAccountingCutoverPackage::query()->where('club_id', $club->id)->where('status', 'posted')->whereNotNull('opening_journal_entry_id')->where('cutover_date', '<=', $accountingDate)->lockForUpdate()->exists();
+        return compact('period', 'covered');
+    }
+
+    public function assertPersistedProvenance(ClubOrdinaryIncomeReceipt $receipt): void
+    {
+        $canonical = $this->assertPersistedRequestProvenance($receipt);
+        $this->assertReplayProvenance($receipt, $canonical);
+    }
+
+    public function assertPersistedRequestProvenance(ClubOrdinaryIncomeReceipt $receipt): array
+    {
+        $input = ['subtype' => $receipt->subtype, 'accounting_date' => $receipt->accounting_date->format('Y-m-d'), 'receiving_account' => $receipt->receivingAccount->public_id, 'income_account' => $receipt->incomeAccount->public_id, 'fund' => $receipt->fund_code, 'amount_paise' => $receipt->amount_paise, 'description' => $receipt->description, 'payer_name' => $receipt->payer_name, 'external_reference' => $receipt->external_reference, 'event_label' => $receipt->event_label, 'idempotency_key' => $receipt->idempotency_key, 'corrected_from_receipt' => $receipt->correctedFrom?->public_id];
+        $canonical = $this->canonical($input);
+        if (! hash_equals($receipt->request_digest, $canonical['request_digest'])) throw new ClubOrdinaryIncomeReceiptConflictException('The stored ordinary income receipt request provenance is invalid.');
+        return $canonical;
+    }
+
     private function canonical(array $input): array
     {
         $nullable = fn (string $key) => ($value = trim((string) ($input[$key] ?? ''))) === '' ? null : $value;
+        $correctedFrom = strtolower(trim((string) ($input['corrected_from_receipt'] ?? '')));
         $canonical = ['subtype' => strtolower(trim((string) $input['subtype'])), 'accounting_date' => $input['accounting_date'], 'receiving_account' => strtolower(trim((string) $input['receiving_account'])), 'income_account' => strtolower(trim((string) $input['income_account'])), 'fund_code' => $input['fund'], 'amount_paise' => (int) $input['amount_paise'], 'description' => trim((string) $input['description']), 'payer_name' => $nullable('payer_name'), 'external_reference' => $nullable('external_reference'), 'event_label' => $nullable('event_label'), 'idempotency_key' => strtolower(trim((string) $input['idempotency_key']))];
-        if (! in_array($canonical['subtype'], self::SUBTYPES, true) || ! Str::isUuid($canonical['receiving_account']) || ! Str::isUuid($canonical['income_account']) || ! Str::isUuid($canonical['idempotency_key']) || ! FundCode::tryFrom($canonical['fund_code']) || $canonical['amount_paise'] < 1 || $canonical['description'] === '') throw new ClubOrdinaryIncomeReceiptException('The ordinary income receipt request is invalid.');
+        if ($correctedFrom !== '') $canonical['corrected_from_receipt'] = $correctedFrom;
+        if (! in_array($canonical['subtype'], self::SUBTYPES, true) || ! Str::isUuid($canonical['receiving_account']) || ! Str::isUuid($canonical['income_account']) || ! Str::isUuid($canonical['idempotency_key']) || (isset($canonical['corrected_from_receipt']) && ! Str::isUuid($canonical['corrected_from_receipt'])) || ! FundCode::tryFrom($canonical['fund_code']) || $canonical['amount_paise'] < 1 || $canonical['description'] === '') throw new ClubOrdinaryIncomeReceiptException('The ordinary income receipt request is invalid.');
         if (in_array($canonical['subtype'], ['sponsorship', 'advertising', 'facility_income'], true) && $canonical['payer_name'] === null) throw new ClubOrdinaryIncomeReceiptException('Payer or source name is required for this receipt subtype.');
         $canonical['request_digest'] = hash('sha256', json_encode($canonical, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
         return $canonical;
@@ -104,5 +133,5 @@ final class ClubOrdinaryIncomeReceiptService
         if (! $valid) throw new ClubOrdinaryIncomeReceiptConflictException('The stored ordinary income receipt journal provenance is invalid.');
     }
 
-    private function loaded(ClubOrdinaryIncomeReceipt $receipt): ClubOrdinaryIncomeReceipt { return $receipt->fresh()->load(['receivingAccount', 'incomeAccount', 'journalEntry.lines.ledgerAccount', 'creator']); }
+    private function loaded(ClubOrdinaryIncomeReceipt $receipt): ClubOrdinaryIncomeReceipt { return $receipt->fresh()->load(['receivingAccount', 'incomeAccount', 'journalEntry.lines.ledgerAccount', 'creator', 'correction.reversalJournal.lines.ledgerAccount', 'correction.creator', 'correction.replacementReceipt.journalEntry', 'correctedFrom']); }
 }

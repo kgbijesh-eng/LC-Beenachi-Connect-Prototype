@@ -19,15 +19,15 @@ use App\Services\Finance\JournalLineInput;
 use App\Services\Finance\JournalPostingRequest;
 use App\Services\Finance\JournalReversalRequest;
 use App\Services\Finance\JournalReversalService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
+use Tests\Support\RefreshesDatabaseWithoutTransactions;
 
 class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshesDatabaseWithoutTransactions;
 
     public function test_authorized_same_club_officer_receives_balanced_canonical_statement(): void
     {
