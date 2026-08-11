@@ -1,0 +1,50 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
+use LogicException;
+
+class ClubCharge extends Model
+{
+    public const CATEGORIES = [
+        'membership_dues', 'installation_contribution', 'service_project_contribution',
+        'general_club_event_contribution', 'fellowship_member_activity_contribution',
+        'event_contribution', 'other_contribution',
+    ];
+
+    public const STATUSES = ['draft', 'issued', 'closed', 'cancelled'];
+
+    protected $guarded = [];
+
+    protected function casts(): array
+    {
+        return ['amount_paise' => 'integer', 'due_date' => 'date', 'assignment_member_ids' => 'array', 'issued_at' => 'datetime', 'closed_at' => 'datetime', 'cancelled_at' => 'datetime', 'lock_version' => 'integer'];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(fn (self $m) => $m->public_id ??= (string) Str::orderedUuid());
+        static::updating(function (self $m): void {
+            if ($m->isDirty('public_id')) {
+                throw new LogicException('Charge public identity is immutable.');
+            }
+            if ($m->getOriginal('issued_at') !== null && ($m->isDirty('category') || $m->isDirty('fund_code'))) {
+                throw new LogicException('Issued charge category and fund are immutable.');
+            }
+        });
+    }
+
+    public function club(): BelongsTo
+    {
+        return $this->belongsTo(Club::class);
+    }
+
+    public function memberCharges(): HasMany
+    {
+        return $this->hasMany(MemberCharge::class);
+    }
+}

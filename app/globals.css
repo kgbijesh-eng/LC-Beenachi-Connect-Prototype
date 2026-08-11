@@ -361,6 +361,215 @@ h3 {
   gap: 16px;
 }
 
+.announcementWorkspace {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.announcementWorkspaceHeader,
+.announcementFilters,
+.announcementActions,
+.announcementPagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.announcementFilters,
+.announcementDetailPanel,
+.announcementFormPanel {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 1rem;
+}
+
+.announcementFilters label,
+.announcementFormPanel label {
+  display: grid;
+  gap: 0.4rem;
+  min-width: min(100%, 12rem);
+}
+
+.announcementFilters input,
+.announcementFilters select,
+.announcementFormPanel input,
+.announcementFormPanel select,
+.announcementFormPanel textarea {
+  width: 100%;
+}
+
+.announcementFormPanel textarea {
+  min-height: 10rem;
+  resize: vertical;
+}
+
+.announcementSplit {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.85fr) minmax(0, 1.4fr);
+  gap: 1rem;
+  min-width: 0;
+}
+
+.announcementBackendList {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.announcementBackendCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.6rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.9rem;
+  text-align: left;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.announcementBackendCard.selected {
+  border-color: var(--blue-700);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue-700) 16%, transparent);
+}
+
+.announcementBackendCard > span:first-child {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.announcementBackendCard small {
+  color: var(--muted);
+}
+
+.announcementDetailPanel {
+  min-height: 18rem;
+  min-width: 0;
+}
+
+.announcementBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+
+.announcementMetadata {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.announcementMetadata div {
+  padding: 0.75rem;
+  background: var(--page);
+  border-radius: 12px;
+}
+
+.announcementMetadata dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.announcementMetadata dd {
+  margin: 0.25rem 0 0;
+}
+
+.announcementActions {
+  justify-content: flex-start;
+  margin-top: 1rem;
+}
+
+.announcementFormGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.fieldError {
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 760px) {
+  .announcementSplit,
+  .announcementFormGrid,
+  .announcementMetadata {
+    grid-template-columns: 1fr;
+  }
+
+  .announcementFilters,
+  .announcementFilters label,
+  .announcementActions button,
+  .announcementFormPanel button {
+    width: 100%;
+  }
+
+  .announcementBackendCard {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+.loginPage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(20px, 5vw, 64px);
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at top left, var(--blue-100), transparent 42%),
+    var(--page);
+}
+
+.loginCard {
+  width: min(100%, 480px);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.loginCard .loginPanel {
+  width: 100%;
+  min-height: 0;
+  padding: clamp(24px, 5vw, 40px);
+  box-shadow: 0 18px 50px rgb(15 47 102 / 12%);
+}
+
+.loginBrand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.loginBrand > div {
+  display: grid;
+  gap: 5px;
+}
+
+.loginIntro {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.loginForm {
+  display: grid;
+  gap: 12px;
+}
+
+.loginForm button {
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 18px;
+}
+
 .loginPanel,
 .profilePanel,
 .fieldsPanel,
@@ -991,6 +1200,97 @@ h3 {
 .statementSectionPanel {
   display: grid;
   gap: 12px;
+}
+
+.statementFilters,
+.statementMeta,
+.statementTotals,
+.statementReconciliation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+
+.statementFilters {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.statementFilters label {
+  display: grid;
+  gap: 5px;
+  min-width: 160px;
+  font-weight: 700;
+}
+
+.statementMeta > span,
+.statementTotals > span,
+.statementReconciliation > span {
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.statementFunds,
+.statementAccounts,
+.statementJournals {
+  display: grid;
+  gap: 14px;
+}
+
+.statementFund {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.statementFund > header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.statementClassification { display: grid; gap: 8px; }
+.statementAccounts { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.statementAccounts > article { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.statementAccounts > article > div { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.statementAccounts dl,
+.statementJournals dl { display: grid; gap: 6px; margin: 0; }
+.statementAccounts dl > div,
+.statementJournals dl > div { display: flex; justify-content: space-between; gap: 12px; }
+.statementAccounts dt,
+.statementJournals dt { color: var(--muted); }
+.statementAccounts dd,
+.statementJournals dd { margin: 0; font-weight: 800; overflow-wrap: anywhere; }
+.statementJournals details { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.statementJournals summary { cursor: pointer; overflow-wrap: anywhere; }
+.statementProvenance { display: grid; gap: 8px; margin-top: 12px; }
+.statementProvenance > div { display: grid; gap: 4px; padding: 9px 11px; border-radius: 10px; background: var(--page); overflow-wrap: anywhere; }
+.statementSnapshot { padding: 10px 12px; color: var(--muted); }
+.statementSnapshot summary { cursor: pointer; font-weight: 700; }
+.statementSnapshot code { overflow-wrap: anywhere; }
+.expenseForm { align-items: end; }
+.expenseHistory textarea { min-height: 7rem; resize: vertical; }
+.reversalSummary { border-left: 4px solid #8a5a00; }
+.reversalForm { display: grid; gap: 1rem; }
+.expenseForm label { min-width: min(100%, 190px); }
+.statementState-forbidden,
+.statementState-not-activated,
+.statementState-integrity,
+.statementState-error { border-left-color: #a12b2b; }
+
+@media (max-width: 640px) {
+  .statementFilters > *, .statementFilters label { width: 100%; }
+  .statementAccounts { grid-template-columns: 1fr; }
+  .statementTotals > span, .statementMeta > span { flex: 1 1 140px; }
 }
 
 .fundSummaryCard {
@@ -1672,6 +1972,15 @@ h3 {
 }
 
 @media (max-width: 640px) {
+  .loginPage {
+    place-items: start center;
+    padding: 18px;
+  }
+
+  .loginCard .loginPanel {
+    padding: 24px 20px;
+  }
+
   .workspace,
   .sidebar {
     padding: 14px;

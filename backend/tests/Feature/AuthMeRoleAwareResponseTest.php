@@ -1,0 +1,115 @@
+<?php
+
+namespace Tests\Feature;
+
+use Database\Seeders\DatabaseSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class AuthMeRoleAwareResponseTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_me_endpoint_returns_user_club_role_and_permissions(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $loginResponse = $this->postJson('/api/v1/auth/login', [
+            'email' => 'president@lcbeenachi.test',
+            'password' => 'password',
+        ]);
+
+        $token = $loginResponse->json('token');
+
+        $response = $this
+            ->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/v1/auth/me');
+
+        $response->assertOk()
+            ->assertJsonPath('user.email', 'president@lcbeenachi.test')
+            ->assertJsonPath('user.name', 'LC Beenachi President')
+            ->assertJsonPath('club_memberships.0.status', 'active')
+            ->assertJsonPath('club_memberships.0.club.name', 'Lions Club Beenachi')
+            ->assertJsonPath('club_memberships.0.club.code', 'LCB')
+            ->assertJsonPath('club_memberships.0.club.district', '318E')
+            ->assertJsonPath('club_memberships.0.role.name', 'President/Admin')
+            ->assertJsonPath('club_memberships.0.role.slug', 'president-admin')
+            ->assertJsonFragment([
+                'slug' => 'club.view',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'club.manage',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'users.manage',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'members.view',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'members.manage',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'audit_logs.view',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'payments.record',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'finance.club.statement.view',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'announcements.view',
+            ])
+            ->assertJsonFragment([
+                'slug' => 'announcements.management.view',
+            ]);
+
+        $actualPermissions = collect($response->json('club_memberships.0.permissions'))
+            ->pluck('slug')
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame([
+            'announcements.approve',
+            'announcements.archive',
+            'announcements.drafts.manage',
+            'announcements.management.view',
+            'announcements.publish',
+            'announcements.replace',
+            'announcements.view',
+            'announcements.withdraw',
+            'audit_logs.view',
+            'club.manage',
+            'club.view',
+            'events.manage',
+            'events.view',
+            'finance.club.statement.view',
+            'finance.club.view',
+            'finance.manage',
+            'finance.self.view',
+            'finance.void',
+            'members.account_activation.issue',
+            'members.manage',
+            'members.view',
+            'memberships.manage',
+            'memberships.view',
+            'payments.record',
+            'permissions.view',
+            'profile_updates.approve',
+            'profile_updates.review',
+            'profile_updates.self.submit',
+            'profile_updates.self.view',
+            'projects.manage',
+            'projects.view',
+            'reminders.manage',
+            'reminders.view',
+            'reports.view',
+            'roles.manage',
+            'roles.view',
+            'users.manage',
+            'users.view',
+        ], $actualPermissions);
+    }
+}

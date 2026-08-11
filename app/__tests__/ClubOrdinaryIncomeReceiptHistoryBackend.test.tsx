@@ -1,0 +1,10 @@
+import React from "react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const auth = vi.hoisted(() => ({ session: { membership: { club: { id: 7 } } }, authenticatedFetch: vi.fn() })); vi.mock("../DevAuthSession", () => ({ useDevAuth: () => auth }));
+import ClubOrdinaryIncomeReceiptHistoryBackend from "../ClubOrdinaryIncomeReceiptHistoryBackend";
+const row = { id: "11111111-1111-4111-8111-111111111111", subtype: "interest", accounting_date: "2027-08-10", amount_paise: 12345, fund: "GENERAL_CLUB_FUND", receiving_account: { id: "a", code: "BANK", name: "Bank" }, income_account: { id: "b", code: "INTEREST", name: "Interest" }, description: "Bank interest", payer_name: null, external_reference: "BANK-1", event_label: null, journal: { reference: "JRN-3" }, created_by: { name: "Treasurer" }, created_at: "2027-08-10T00:00:00Z" }; const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
+describe("Ordinary income history frontend", () => { beforeEach(() => auth.authenticatedFetch.mockReset()); afterEach(cleanup);
+  it("allows Secretary history and read-only detail", async () => { auth.authenticatedFetch.mockImplementationOnce(() => json({ data: [row], meta: { current_page: 1, last_page: 1, total: 1 } })).mockImplementationOnce(() => json({ data: row })); render(<ClubOrdinaryIncomeReceiptHistoryBackend role="secretary" />); expect(await screen.findByText("₹123.45")).toBeInTheDocument(); fireEvent.click(screen.getByRole("button", { name: "View receipt" })); expect(await screen.findByText(/Posted receipts are read-only/)).toBeInTheDocument(); expect(screen.getByText(/JRN-3/)).toBeInTheDocument(); });
+  it("blocks normal members without a request", () => { render(<ClubOrdinaryIncomeReceiptHistoryBackend role="member" />); expect(screen.getByText(/not authorized/)).toBeInTheDocument(); expect(auth.authenticatedFetch).not.toHaveBeenCalled(); });
+});

@@ -1,0 +1,4 @@
+<?php
+namespace App\Models;
+use Illuminate\Database\Eloquent\Model;use Illuminate\Database\Eloquent\Relations\{BelongsTo,HasMany};
+class ProfileUpdateRequest extends Model{public const STATUSES=['pending','approved','rejected','withdrawn'];protected $guarded=[];protected function casts():array{return ['source_member_updated_at'=>'datetime','submitted_at'=>'datetime','decided_at'=>'datetime','lock_version'=>'integer','pending_guard'=>'integer'];}public function club():BelongsTo{return $this->belongsTo(Club::class);}public function member():BelongsTo{return $this->belongsTo(Member::class);}public function requester():BelongsTo{return $this->belongsTo(User::class,'requester_user_id');}public function reviewer():BelongsTo{return $this->belongsTo(User::class,'reviewer_user_id');}public function changes():HasMany{return $this->hasMany(ProfileUpdateRequestChange::class);}}
