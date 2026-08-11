@@ -71,8 +71,8 @@ For an original receipt of INR 10,000.00:
 |---|---|---:|---:|---|
 | Original | Bound receiving cash/bank | INR 10,000.00 | — | Original fund |
 | Original | Bound ordinary-income account | — | INR 10,000.00 | Original fund |
-| Reversal | Bound ordinary-income account | INR 10,000.00 | — | Original fund |
 | Reversal | Bound receiving cash/bank | — | INR 10,000.00 | Original fund |
+| Reversal | Bound ordinary-income account | INR 10,000.00 | — | Original fund |
 
 The reversal copies each original line's account, amount, currency, fund, and ordering while reversing direction under DR-062. It uses a new journal identity and source event specific to ordinary-income correction.
 
