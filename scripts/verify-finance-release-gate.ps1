@@ -280,11 +280,46 @@ try {
 
     Write-Host "`n===== Composer locked dependency audit ====="
     $ComposerAudit = Invoke-Captured { Push-Location $Backend; try { & $Composer audit --locked --format=json } finally { Pop-Location } }
-    $ComposerJson = ($ComposerAudit.output -join "`n") | ConvertFrom-Json
-    $ComposerPackages = @($ComposerJson.advisories.PSObject.Properties)
+    $ComposerOutput = ($ComposerAudit.output -join "`n").Trim()
+    if (-not $ComposerOutput.StartsWith('{')) {
+        throw 'Composer audit returned an invalid JSON report.'
+    }
+    # Windows PowerShell also accepts unquoted JSON keys. Check strict JSON before inspecting its shape.
+    $ComposerOutput | & node -e "try { JSON.parse(require('node:fs').readFileSync(0, 'utf8')) } catch { process.exitCode = 1 }"
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Composer audit returned invalid JSON.'
+    }
+    $ComposerJson = ConvertFrom-Json -InputObject $ComposerOutput -ErrorAction Stop
+    if ($ComposerJson -isnot [pscustomobject]) {
+        throw 'Composer audit returned an invalid JSON report.'
+    }
+    $ComposerPackageNamePattern = '\A[a-z0-9](?:[_.-]?[a-z0-9]+)*/[a-z0-9](?:(?:[_.]|-{1,2})?[a-z0-9]+)*\z'
+    $Abandoned = $ComposerJson.abandoned
+    if ($Abandoned -is [pscustomobject]) {
+        foreach ($Package in $Abandoned.PSObject.Properties) {
+            if ($Package.Name -cnotmatch $ComposerPackageNamePattern -or
+                ($null -ne $Package.Value -and ($Package.Value -isnot [string] -or $Package.Value -cnotmatch $ComposerPackageNamePattern))) {
+                throw 'Composer audit returned an invalid abandoned package entry.'
+            }
+        }
+    } elseif ($Abandoned -isnot [array] -or $Abandoned.Count -ne 0) {
+        throw 'Composer audit abandoned packages must be a package map or an empty array.'
+    }
+    if ($ComposerJson.advisories -is [pscustomobject]) {
+        $ComposerPackages = @($ComposerJson.advisories.PSObject.Properties)
+    } elseif ($ComposerJson.advisories -is [array] -and $ComposerJson.advisories.Count -eq 0) {
+        $ComposerPackages = @()
+    } else {
+        throw 'Composer audit advisories must be a package map or an empty array.'
+    }
+    foreach ($Package in $ComposerPackages) {
+        if ($Package.Name -cnotmatch $ComposerPackageNamePattern -or $Package.Value -isnot [array] -or $Package.Value.Count -eq 0) {
+            throw "Composer audit returned an invalid advisory list for '$($Package.Name)'."
+        }
+    }
     $ComposerAdvisories = @($ComposerPackages | ForEach-Object { $Package = $_.Name; @($_.Value | ForEach-Object { @{ package = $Package; advisory_id = $_.advisoryId; severity = $_.severity; affected_versions = $_.affectedVersions; title = $_.title; cve = $_.cve } }) })
     $ComposerSeverity = @{}; foreach ($Item in $ComposerAdvisories) { $Key = if ($Item.severity) { $Item.severity } else { 'unknown' }; $ComposerSeverity[$Key] = 1 + [int]$ComposerSeverity[$Key] }
-    Add-Result 'Composer locked dependency audit' $(if ($ComposerAudit.exit_code -eq 0) { 'PASS' } else { 'FAIL' }) @{ exit_code = $ComposerAudit.exit_code; advisory_count = $ComposerAdvisories.Count; package_count = $ComposerPackages.Count; severity = $ComposerSeverity; advisories = $ComposerAdvisories; abandoned = @($ComposerJson.abandoned) }
+    Add-Result 'Composer locked dependency audit' $(if ($ComposerAudit.exit_code -eq 0 -and $ComposerAdvisories.Count -eq 0) { 'PASS' } else { 'FAIL' }) @{ exit_code = $ComposerAudit.exit_code; advisory_count = $ComposerAdvisories.Count; package_count = $ComposerPackages.Count; severity = $ComposerSeverity; advisories = $ComposerAdvisories; abandoned = @($ComposerJson.abandoned) }
 
     Write-Host "`n===== root npm locked dependency audit ====="
     $NpmAudit = Invoke-Captured { & $Npm audit --json }
