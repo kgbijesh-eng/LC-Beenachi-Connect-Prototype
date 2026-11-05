@@ -32,7 +32,7 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
     public function test_empty_valid_range_returns_truthful_identity_zero_movement_and_no_balance_contract(): void
     {
         $fixture = $this->fixture();
-        $result = $this->query($fixture);
+        $result = $this->queryActivity($fixture);
 
         $this->assertInstanceOf(JournalAccountActivityResult::class, $result);
         $this->assertSame($fixture['club']->id, $result->clubId);
@@ -71,7 +71,7 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
             [$fixture['other'], 'credit', 300, null],
         ]);
 
-        $result = $this->query($fixture);
+        $result = $this->queryActivity($fixture);
 
         $this->assertSame([$earlier->public_id, $earlier->public_id, $later->public_id], array_column($result->rows, 'journalEntryPublicId'));
         $this->assertSame([1, 2, 1], array_column($result->rows, 'lineNumber'));
@@ -104,8 +104,8 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
             [$fixture['other'], 'credit', 200, null],
         ]);
 
-        $first = $this->query($fixture);
-        $repeated = $this->query($fixture);
+        $first = $this->queryActivity($fixture);
+        $repeated = $this->queryActivity($fixture);
         $expectedEntries = [
             $sequenceEarlier->public_id,
             $sequenceLater->public_id,
@@ -131,7 +131,7 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         $this->entry($fixture, 3, '2026-07-15', null, [[$fixture['account'], 'debit', 999, null], [$fixture['other'], 'credit', 999, null]], ClubJournalEntry::STATUS_DRAFT);
         $this->entry($fixture, 4, '2026-08-01', '2026-07-15 10:00:00', [[$fixture['account'], 'debit', 888, null], [$fixture['other'], 'credit', 888, null]]);
 
-        $result = $this->query($fixture);
+        $result = $this->queryActivity($fixture);
 
         $this->assertCount(2, $result->rows);
         $this->assertSame([100, 40], array_column($result->rows, 'amountPaise'));
@@ -160,7 +160,7 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
             postingDate: '2026-07-15',
         );
 
-        $result = $this->query($fixture);
+        $result = $this->queryActivity($fixture);
 
         $this->assertCount(1, $result->rows);
         $this->assertSame($included->public_id, $result->rows[0]->journalEntryPublicId);
@@ -175,7 +175,7 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         $original = $this->entry($fixture, 1, '2026-07-10', '2026-07-10 10:00:00', [[$fixture['account'], 'debit', 500, null], [$fixture['other'], 'credit', 500, null]], ClubJournalEntry::STATUS_REVERSED);
         $reversal = $this->entry($fixture, 2, '2026-07-11', '2026-07-11 10:00:00', [[$fixture['account'], 'credit', 500, null], [$fixture['other'], 'debit', 500, null]], ClubJournalEntry::STATUS_POSTED, $original->id);
 
-        $result = $this->query($fixture);
+        $result = $this->queryActivity($fixture);
 
         $this->assertCount(2, $result->rows);
         $this->assertNull($result->rows[0]->reversalOfEntryPublicId);
@@ -204,7 +204,7 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         $before = $this->rawJournalState();
 
         try {
-            $this->query($fixture);
+            $this->queryActivity($fixture);
             $this->fail('Duplicate posted reversals must fail before returning activity or movement totals.');
         } catch (JournalActivityIntegrityException $exception) {
             $this->assertSame('The journal activity is malformed.', $exception->getMessage());
@@ -228,9 +228,9 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
             ]);
         }
 
-        $first = $this->query($fixture, pageSize: 2);
-        $second = $this->query($fixture, pageSize: 2, cursor: $first->nextCursor);
-        $third = $this->query($fixture, pageSize: 2, cursor: $second->nextCursor);
+        $first = $this->queryActivity($fixture, pageSize: 2);
+        $second = $this->queryActivity($fixture, pageSize: 2, cursor: $first->nextCursor);
+        $third = $this->queryActivity($fixture, pageSize: 2, cursor: $second->nextCursor);
         $ids = [...array_column($first->rows, 'journalLinePublicId'), ...array_column($second->rows, 'journalLinePublicId'), ...array_column($third->rows, 'journalLinePublicId')];
 
         $this->assertSame($ids, array_values(array_unique($ids)));
@@ -303,7 +303,7 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         DB::statement('DROP TRIGGER ledger_account_currency_check_update');
         DB::table('ledger_accounts')->where('id', $fixture['account']->id)->update(['currency' => 'USD']);
         $this->expectException(UnsupportedJournalActivityCurrencyException::class);
-        $this->query($fixture);
+        $this->queryActivity($fixture);
     }
 
     public function test_malformed_selected_activity_fails_instead_of_being_omitted(): void
@@ -314,7 +314,7 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         DB::table('club_journal_lines')->where('journal_entry_id', $entry->id)->where('ledger_account_id', $fixture['account']->id)->update(['direction' => 'broken']);
 
         $this->expectException(JournalActivityIntegrityException::class);
-        $this->query($fixture);
+        $this->queryActivity($fixture);
     }
 
     public function test_query_is_read_only_and_introduces_no_runtime_or_schema_surface(): void
@@ -324,7 +324,7 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         $tables = ['ledger_accounts', 'club_accounting_periods', 'club_journal_entries', 'club_journal_lines'];
         $before = collect($tables)->mapWithKeys(fn (string $table) => [$table => DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all()])->all();
 
-        $this->query($fixture);
+        $this->queryActivity($fixture);
 
         $after = collect($tables)->mapWithKeys(fn (string $table) => [$table => DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all()])->all();
         $this->assertSame($before, $after);
@@ -337,7 +337,7 @@ class Milestone3iigInternalJournalAccountActivityQueryTest extends TestCase
         return app(ClubJournalAccountActivityService::class);
     }
 
-    private function query(array $fixture, int $pageSize = 50, ?string $cursor = null): JournalAccountActivityResult
+    private function queryActivity(array $fixture, int $pageSize = 50, ?string $cursor = null): JournalAccountActivityResult
     {
         return $this->service()->query($this->request($fixture, pageSize: $pageSize, cursor: $cursor));
     }
