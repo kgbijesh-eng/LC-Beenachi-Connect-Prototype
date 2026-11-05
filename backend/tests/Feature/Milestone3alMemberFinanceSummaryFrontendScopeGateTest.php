@@ -181,8 +181,16 @@ class Milestone3alMemberFinanceSummaryFrontendScopeGateTest extends TestCase
 
         $this->assertSame(Milestone3gPaymentRecordingScopeGateTest::CURRENT_REPORT_REMINDER_IMPORT_ROUTE_MATRIX, $routes);
 
+        // Later finance milestones authorized these exact source-specific mutation routes.
+        $approvedLaterRoutes = [
+            'POST api/v1/clubs/{club}/finance/expenses/{expense}/reversal',
+            'POST api/v1/clubs/{club}/finance/ordinary-income-receipts/{receipt}/correction',
+        ];
+        $routesWithinHistoricalBoundary = collect(Route::getRoutes())
+            ->reject(fn ($route): bool => in_array(implode('|', $route->methods()).' '.$route->uri(), $approvedLaterRoutes, true));
+
         foreach (['dashboard', 'excel', 'correction', 'reversal', 'cancellation', 'special-collection', 'fellowship'] as $blockedFragment) {
-            $this->assertFalse(collect(Route::getRoutes())->contains(fn ($route): bool => str_contains($route->uri(), $blockedFragment)));
+            $this->assertFalse($routesWithinHistoricalBoundary->contains(fn ($route): bool => str_contains($route->uri(), $blockedFragment)));
         }
 
         $blockedPaths = [

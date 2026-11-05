@@ -169,6 +169,11 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCas
             ->all();
 
         $this->assertSame([
+            'POST api/v1/clubs/{club}/finance/expenses',
+            'POST api/v1/clubs/{club}/finance/expenses/{expense}/reversal',
+            'POST api/v1/clubs/{club}/finance/transfers',
+            'POST api/v1/clubs/{club}/finance/ordinary-income-receipts',
+            'POST api/v1/clubs/{club}/finance/ordinary-income-receipts/{receipt}/correction',
             'POST api/v1/clubs/{club}/finance/charges',
             'PATCH api/v1/clubs/{club}/finance/charges/{charge}',
             'POST api/v1/clubs/{club}/finance/charges/{charge}/issue',
@@ -187,6 +192,11 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCas
         ], $mutationRoutes);
 
         $expectedPermissions = [
+            'api/v1/clubs/{club}/finance/expenses' => 'finance.club.expenses.create',
+            'api/v1/clubs/{club}/finance/expenses/{expense}/reversal' => 'finance.club.expenses.reverse',
+            'api/v1/clubs/{club}/finance/transfers' => 'finance.club.transfers.create',
+            'api/v1/clubs/{club}/finance/ordinary-income-receipts' => 'finance.club.ordinary_income_receipts.create',
+            'api/v1/clubs/{club}/finance/ordinary-income-receipts/{receipt}/correction' => 'finance.club.ordinary_income_receipts.reverse',
             'api/v1/clubs/{club}/finance/charges' => 'finance.manage',
             'api/v1/clubs/{club}/finance/charges/{charge}' => 'finance.manage',
             'api/v1/clubs/{club}/finance/charges/{charge}/issue' => 'finance.manage',
