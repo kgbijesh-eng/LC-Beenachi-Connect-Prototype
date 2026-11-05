@@ -41,7 +41,9 @@ class Milestone3bhClubFinanceReportsBalanceSheetFrontendDisplayNarrowImplementat
         $page = $this->frontendPage();
         $financeModule = $this->extractPageSection($page, 'function FinanceModule(', 'function ClubFinanceReportsPanel');
 
-        $this->assertStringContainsString('type FinanceSection = "Club Account Statement" | "Member Ledger / Dues" | "Payments / Receipts" | "Club Finance Reports" | "Balance Sheet Summary"', $page);
+        foreach (['"Club Account Statement"', '"Member Ledger / Dues"', '"Payments / Receipts"', '"Club Finance Reports"', '"Balance Sheet Summary"'] as $requiredSection) {
+            $this->assertStringContainsString($requiredSection, $this->extractPageSection($page, 'type FinanceSection =', ';'));
+        }
         $this->assertStringContainsString('{ label: "Club Finance Reports", screen: "finance-module", financeSection: "Club Finance Reports" }', $page);
         $this->assertStringContainsString('{ label: "Balance Sheet Summary", screen: "finance-module", financeSection: "Balance Sheet Summary" }', $page);
         $this->assertStringContainsString('{section === "Club Finance Reports" && <ClubFinanceReportsPanel role={role} displayMode="reports" />}', $financeModule);
