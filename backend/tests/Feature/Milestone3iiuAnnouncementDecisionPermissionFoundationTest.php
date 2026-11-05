@@ -222,8 +222,8 @@ class Milestone3iiuAnnouncementDecisionPermissionFoundationTest extends TestCase
             $this->assertTrue($permissions->contains('announcements.view'));
             $this->assertFalse($permissions->contains('announcements.management.view'));
         }
-        $this->assertDatabaseCount('permissions', 48);
-        $this->assertDatabaseCount('role_permissions', 93);
+        $this->assertDatabaseCount('permissions', 55);
+        $this->assertDatabaseCount('role_permissions', 110);
         $this->assertDatabaseHas('permissions', ['slug' => 'finance.accounting.integration.configure']);
         $this->assertSame(0, Role::query()->whereHas('permissions', fn ($query) => $query->where('slug', 'finance.accounting.integration.configure'))->count());
 

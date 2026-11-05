@@ -247,6 +247,11 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends TestCa
             'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
             'GET|HEAD api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt/pdf',
             'GET|HEAD api/v1/clubs/{club}/finance/receipts/{receipt}',
+            'GET|HEAD api/v1/clubs/{club}/finance/ordinary-income-receipts',
+            'GET|HEAD api/v1/clubs/{club}/finance/ordinary-income-receipts/{receipt}',
+            'GET|HEAD api/v1/clubs/{club}/finance/ordinary-income-receipts/options',
+            'POST api/v1/clubs/{club}/finance/ordinary-income-receipts',
+            'POST api/v1/clubs/{club}/finance/ordinary-income-receipts/{receipt}/correction',
             'POST api/v1/clubs/{club}/members/{member}/payments/{payment}/receipt',
         ], $routes);
 

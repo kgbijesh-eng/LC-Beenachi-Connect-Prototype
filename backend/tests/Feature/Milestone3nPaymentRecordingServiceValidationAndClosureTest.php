@@ -169,6 +169,11 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCas
             ->all();
 
         $this->assertSame([
+            'POST api/v1/clubs/{club}/finance/expenses',
+            'POST api/v1/clubs/{club}/finance/expenses/{expense}/reversal',
+            'POST api/v1/clubs/{club}/finance/transfers',
+            'POST api/v1/clubs/{club}/finance/ordinary-income-receipts',
+            'POST api/v1/clubs/{club}/finance/ordinary-income-receipts/{receipt}/correction',
             'POST api/v1/clubs/{club}/finance/charges',
             'PATCH api/v1/clubs/{club}/finance/charges/{charge}',
             'POST api/v1/clubs/{club}/finance/charges/{charge}/issue',
@@ -176,11 +181,6 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCas
             'POST api/v1/clubs/{club}/finance/charges/{charge}/cancel',
             'POST api/v1/clubs/{club}/finance/members/{member}/payments',
             'POST api/v1/clubs/{club}/finance/payments/{payment}/void',
-            'POST api/v1/clubs/{club}/finance/expenses',
-            'POST api/v1/clubs/{club}/finance/expenses/{expense}/reversal',
-            'POST api/v1/clubs/{club}/finance/transfers',
-            'POST api/v1/clubs/{club}/finance/ordinary-income-receipts',
-            'POST api/v1/clubs/{club}/finance/ordinary-income-receipts/{receipt}/correction',
             'POST api/v1/clubs/{club}/finance/accounting/integration/mapping-proposals',
             'POST api/v1/clubs/{club}/finance/accounting/integration/activation-proposals',
             'POST api/v1/clubs/{club}/finance/accounting/integration/revocation-proposals',
