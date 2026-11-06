@@ -3,27 +3,31 @@
 namespace App\Http\Middleware;
 
 use App\Models\Club;
-use App\Services\Access\InstanceOrganisation;
+use App\Services\Access\OrganisationAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 final class EnsureInstanceOrganisation
 {
+    public function __construct(private readonly OrganisationAccess $access) {}
+
     public function handle(Request $request, Closure $next): Response
     {
         $route = $request->route();
-        $club = $route?->parameter('club');
-        if (! $route?->hasParameter('club') && ! $request->is('api/v1/auth/login', 'api/v1/auth/me', 'api/v1/auth/activate')) {
+        // The API group is protected by default, including future routes without
+        // a club parameter. Exempt only these exact route/method combinations.
+        if (($route?->uri() === 'api/v1/health' && in_array($request->method(), ['GET', 'HEAD'], true))
+            || ($route?->uri() === 'api/v1/auth/logout' && $request->isMethod('POST'))) {
             return $next($request);
         }
 
-        $organisation = app(InstanceOrganisation::class)->resolve();
+        $club = $route?->parameter('club');
+        $clubId = $route?->hasParameter('club')
+            ? (string) ($club instanceof Club ? $club->getKey() : $club)
+            : null;
+        $organisation = $this->access->resolve($clubId);
         $request->attributes->set('instance_organisation', $organisation);
-        if ($route->hasParameter('club')) {
-            $clubId = $club instanceof Club ? (string) $club->getKey() : (string) $club;
-            abort_unless($clubId === (string) $organisation->getKey(), 404, 'Not found.');
-        }
 
         return $next($request);
     }
