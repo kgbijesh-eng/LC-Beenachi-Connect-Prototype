@@ -18,6 +18,8 @@ trait InteractsWithCutoverGovernance
 {
     protected function bootstrapCutoverPackage(Club $club, User $preparer, User $president, User $secretary, string $reference, int $version = 1): ClubAccountingCutoverPackage
     {
+        // Explicit synthetic instance assignment, never an application request resolver.
+        config(['instance.organisation_code' => $club->code]);
         $service = app(ClubCutoverPackageBootstrapService::class);
         $operation = $service->request($club, $preparer, $version, $reference, $secretary);
         $service->approve($operation, $president, $reference.'-P');

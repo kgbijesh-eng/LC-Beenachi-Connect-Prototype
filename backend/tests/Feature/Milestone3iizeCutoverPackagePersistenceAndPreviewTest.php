@@ -18,15 +18,14 @@ use App\Services\Finance\ClubCutoverLifecycleService;
 use App\Services\Finance\Exceptions\CutoverPackageException;
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\InteractsWithCutoverGovernance;
-use Tests\TestCase;
+use Tests\Support\CutoverPostgresTestCase;
 
-class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends TestCase
+class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends CutoverPostgresTestCase
 {
-    use InteractsWithCutoverGovernance, RefreshDatabase;
+    use InteractsWithCutoverGovernance;
 
     public function test_draft_identity_is_persisted_club_scoped_audited_and_dr033_has_no_default(): void
     {

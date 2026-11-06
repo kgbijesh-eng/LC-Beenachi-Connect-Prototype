@@ -18,20 +18,20 @@ use App\Services\Finance\Exceptions\CutoverAuthorizationException;
 use App\Services\Finance\Exceptions\CutoverPackageException;
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\InteractsWithCutoverGovernance;
-use Tests\TestCase;
+use Tests\Support\CutoverPostgresTestCase;
 
-class Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest extends TestCase
+class Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest extends CutoverPostgresTestCase
 {
-    use InteractsWithCutoverGovernance, RefreshDatabase;
+    use InteractsWithCutoverGovernance;
 
     public function test_package_bootstrap_requires_both_distinct_governance_officers_and_is_atomic_and_replay_safe(): void
     {
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
         $club = Club::create(['name' => 'Bootstrap Club', 'code' => 'BST']);
+        config(['instance.organisation_code' => 'BST']);
         foreach (['president', 'secretary', 'preparer'] as $key) {
             $$key = User::factory()->create();
         }
@@ -62,6 +62,7 @@ class Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest exten
     {
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
         $club = Club::create(['name' => 'Bootstrap Revalidation', 'code' => 'BSR']);
+        config(['instance.organisation_code' => 'BSR']);
         foreach (['president', 'secretary', 'preparer', 'outsider'] as $key) {
             $$key = User::factory()->create();
         }
