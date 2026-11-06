@@ -39,6 +39,7 @@ class Milestone3iizwExpenseHistoryCorrectionTest extends TestCase
         Sanctum::actingAs($b['officer']); $foreign = $this->record($b, ['payee' => 'Foreign']);
         Sanctum::actingAs($a['officer']);
 
+        config(['instance.organisation_code' => $a['club']->code]);
         $this->getJson($this->endpoint($a).'?per_page=1')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('meta.total', 2);
         $this->getJson($this->endpoint($a).'?search=Alpha&date_from=2027-08-10&date_to=2027-08-10&fund=SERVICE_ACTIVITY_FUND')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $first['id']);
         $this->getJson($this->endpoint($a).'?date_from=2027-01-01&date_to=2028-01-03')->assertUnprocessable()->assertJsonValidationErrors('date_to');
@@ -51,6 +52,7 @@ class Milestone3iizwExpenseHistoryCorrectionTest extends TestCase
     public function test_full_reversal_is_exact_immutable_idempotent_and_changes_statement_fingerprint(): void
     {
         $f = $this->fixture('REV'); Sanctum::actingAs($f['officer']); $created = $this->record($f);
+        config(['instance.organisation_code' => $f['club']->code]);
         $before = $this->getJson($this->statement($f))->assertOk()->json('data.snapshot_fingerprint'); $payload = $this->reversalPayload();
         $response = $this->postJson($this->endpoint($f).'/'.$created['id'].'/reversal', $payload)->assertOk()->assertJsonPath('data.status', 'reversed')->assertJsonPath('data.reversal.reason', 'Incorrect amount');
         $replay = $this->postJson($this->endpoint($f).'/'.$created['id'].'/reversal', $payload)->assertOk(); $this->assertSame($response->json('data.reversal.id'), $replay->json('data.reversal.id'));
@@ -66,6 +68,7 @@ class Milestone3iizwExpenseHistoryCorrectionTest extends TestCase
         $this->getJson($this->endpoint($f).'/'.$created['id'])->assertOk()->assertJsonPath('data.corrected_expense.id', $replacement->json('data.id'));
         $afterReplacement = $this->getJson($this->statement($f))->assertOk(); $this->assertNotSame($after->json('data.snapshot_fingerprint'), $afterReplacement->json('data.snapshot_fingerprint')); $this->assertCount(4, $afterReplacement->json('data.traceability.journals'));
         try { $expense->update(['description' => 'rewrite']); $this->fail('Expense mutation must fail.'); } catch (LogicException) { $this->addToAssertionCount(1); }
+        config(['instance.organisation_code' => $f['club']->code]);
         $this->postJson($this->endpoint($f).'/'.$created['id'].'/reversal', [...$payload, 'reason' => 'Changed'])->assertConflict()->assertJsonPath('code', 'EXPENSE_REVERSAL_CONFLICT');
         $this->postJson($this->endpoint($f).'/'.$created['id'].'/reversal', [...$payload, 'idempotency_key' => (string) Str::uuid()])->assertConflict();
         DB::table('club_journal_entries')->where('id', $reversal->id)->update(['source_id' => 'corrupt-replay']);
@@ -76,6 +79,7 @@ class Milestone3iizwExpenseHistoryCorrectionTest extends TestCase
     {
         $f = $this->fixture('CLOSE'); Sanctum::actingAs($f['officer']); $created = $this->record($f);
         DB::table('club_accounting_periods')->where('id', $f['period']->id)->update(['status' => 'closed', 'closed_at' => now(), 'closed_by_user_id' => $f['officer']->id]);
+        config(['instance.organisation_code' => $f['club']->code]);
         $this->postJson($this->endpoint($f).'/'.$created['id'].'/reversal', $this->reversalPayload())->assertUnprocessable();
         $next = ClubAccountingPeriod::create(['club_id' => $f['club']->id, 'lions_year' => '2028-29', 'start_date' => '2028-07-01', 'end_date' => '2029-06-30', 'status' => 'open', 'created_by_user_id' => $f['officer']->id]);
         $payload = $this->reversalPayload(['accounting_date' => '2028-07-02', 'idempotency_key' => (string) Str::uuid()]);
@@ -87,6 +91,7 @@ class Milestone3iizwExpenseHistoryCorrectionTest extends TestCase
     {
         $f = $this->fixture('SAFE'); Sanctum::actingAs($f['officer']); $created = $this->record($f);
         DB::table('club_memberships')->where('club_id', $f['club']->id)->where('user_id', $f['officer']->id)->update(['status' => 'inactive']);
+        config(['instance.organisation_code' => $f['club']->code]);
         $this->getJson($this->endpoint($f))->assertForbidden(); $this->postJson($this->endpoint($f).'/'.$created['id'].'/reversal', $this->reversalPayload())->assertForbidden();
         DB::table('club_memberships')->where('club_id', $f['club']->id)->where('user_id', $f['officer']->id)->update(['status' => 'active']);
         $member = User::factory()->create(); Sanctum::actingAs($member); $this->getJson($this->endpoint($f))->assertForbidden();
@@ -115,7 +120,7 @@ class Milestone3iizwExpenseHistoryCorrectionTest extends TestCase
     private function account(Club $club, User $actor, string $code, string $type, string $normal, string $classification): LedgerAccount { return LedgerAccount::create(['club_id' => $club->id, 'code' => $code, 'name' => $code, 'account_type' => $type, 'normal_balance' => $normal, 'currency' => 'INR', 'is_active' => true, 'created_by_user_id' => $actor->id, 'origin_kind' => 'custom', 'statement_classification' => $classification]); }
     private function endpoint(array $f): string { return "/api/v1/clubs/{$f['club']->id}/finance/expenses"; }
     private function statement(array $f): string { return "/api/v1/clubs/{$f['club']->id}/finance/account-statement?lions_year=2027-28"; }
-    private function record(array $f, array $changes = []): array { return $this->postJson($this->endpoint($f), $this->expensePayload($f, $changes))->assertCreated()->json('data'); }
+    private function record(array $f, array $changes = []): array { config(['instance.organisation_code' => $f['club']->code]); return $this->postJson($this->endpoint($f), $this->expensePayload($f, $changes))->assertCreated()->json('data'); }
     private function expensePayload(array $f, array $changes = []): array { return [...['accounting_date' => '2027-08-10', 'expense_account' => $f['expense']->public_id, 'payment_account' => $f['bank']->public_id, 'fund' => 'SERVICE_ACTIVITY_FUND', 'amount_paise' => 450000, 'payee' => 'Tenant Printer', 'description' => 'Programme printing', 'external_reference' => 'INV-42', 'idempotency_key' => (string) Str::uuid()], ...$changes]; }
     private function reversalPayload(array $changes = []): array { return [...['accounting_date' => '2027-08-12', 'reason' => 'Incorrect amount', 'idempotency_key' => (string) Str::uuid()], ...$changes]; }
 }

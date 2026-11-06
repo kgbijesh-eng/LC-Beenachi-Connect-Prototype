@@ -37,6 +37,7 @@ class Milestone3ibEventsMeetingsReportingConsistencyTest extends TestCase
         $ongoing = $this->event($club, 'Ongoing Event', '2026-07-05 09:00:00', '2026-07-05 11:00:00');
         $ended = $this->event($club, 'Ended Meeting', '2026-07-05 08:00:00', '2026-07-05 09:00:00', 'meeting');
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/events?scope=upcoming")
             ->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.id', $ongoing->id);
         $this->getJson("/api/v1/clubs/{$club->id}/events?scope=past")
@@ -56,6 +57,7 @@ class Milestone3ibEventsMeetingsReportingConsistencyTest extends TestCase
         ClubMembership::create(['club_id' => $club->id, 'user_id' => $user->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active', 'joined_at' => now()]);
         Sanctum::actingAs($user);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/reports/events-register?scope=tomorrow")->assertUnprocessable();
     }
 

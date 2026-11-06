@@ -31,6 +31,7 @@ class Milestone3gqFinanceDatabaseReadApiFoundationTest extends TestCase {
         $receipt=PaymentReceipt::create(['club_id'=>$club->id,'member_payment_id'=>$payment->id,'receipt_number'=>'A/2026-27/RCP/0001','receipt_date'=>'2026-07-10','financial_year'=>'2026-27','status'=>'issued','issued_by_user_id'=>$manager->id]);
         ClubCharge::create(['club_id'=>$other->id,'title'=>'Duplicate Charge','category'=>'membership_dues','amount_paise'=>999999,'due_date'=>'2026-07-31','financial_year'=>'2026-27','status'=>'issued','assignment_member_ids'=>[$otherMember->id],'created_by_user_id'=>$manager->id]);
         Sanctum::actingAs($manager);
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/finance/members/{$member->id}/summary")->assertOk()->assertJsonPath('data.assessed_paise',125050)->assertJsonPath('data.paid_paise',25025)->assertJsonPath('data.outstanding_paise',100025)->assertJsonPath('data.outstanding_display','1000.25');
         $this->getJson("/api/v1/clubs/{$club->id}/finance/charges?category=membership_dues")->assertOk()->assertJsonPath('meta.total',1)->assertJsonPath('data.0.id',$charge->id);
         $this->getJson("/api/v1/clubs/{$club->id}/finance/payments/{$payment->id}")->assertOk()->assertJsonPath('data.receipt.id',$receipt->id)->assertJsonPath('data.idempotency_key','11111111-1111-4111-8111-111111111111');
@@ -47,6 +48,7 @@ class Milestone3gqFinanceDatabaseReadApiFoundationTest extends TestCase {
         $p=MemberPayment::create(['club_id'=>$club->id,'member_id'=>$member->id,'amount_paise'=>10000,'payment_date'=>'2026-07-10','payment_mode'=>'cash','idempotency_key'=>'22222222-2222-4222-8222-222222222222','request_hash'=>str_repeat('b',64),'status'=>'voided','recorded_by_user_id'=>$manager->id]);
         PaymentAllocation::create(['club_id'=>$club->id,'member_payment_id'=>$p->id,'member_charge_id'=>$mc->id,'amount_paise'=>10000]);
         Sanctum::actingAs($manager);
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/finance/members/{$member->id}/summary")->assertJsonPath('data.paid_paise',0)->assertJsonPath('data.outstanding_paise',10000);
         $this->getJson("/api/v1/clubs/{$club->id}/finance/charges?not_a_filter=x")->assertUnprocessable();
     }

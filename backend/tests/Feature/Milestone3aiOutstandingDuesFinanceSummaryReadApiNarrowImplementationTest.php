@@ -91,6 +91,7 @@ class Milestone3aiOutstandingDuesFinanceSummaryReadApiNarrowImplementationTest e
 
         Sanctum::actingAs($normalUser);
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->getJson("/api/v1/clubs/{$club->id}/finance/member-summary");
 
         $response->assertOk()
@@ -127,6 +128,7 @@ class Milestone3aiOutstandingDuesFinanceSummaryReadApiNarrowImplementationTest e
 
         Sanctum::actingAs($normalUser);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$ownMember->id}/finance-summary")
             ->assertForbidden();
 
@@ -145,6 +147,7 @@ class Milestone3aiOutstandingDuesFinanceSummaryReadApiNarrowImplementationTest e
 
             Sanctum::actingAs($user);
 
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/finance-summary")
                 ->assertOk()
                 ->assertJsonPath('finance_summary.member_id', $member->id)
@@ -164,6 +167,7 @@ class Milestone3aiOutstandingDuesFinanceSummaryReadApiNarrowImplementationTest e
 
         Sanctum::actingAs($treasurer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$otherClubMember->id}/finance-summary")
             ->assertNotFound()
             ->assertJson([
@@ -176,6 +180,7 @@ class Milestone3aiOutstandingDuesFinanceSummaryReadApiNarrowImplementationTest e
         $club = $this->createClub();
         $member = $this->createMember($club, null, 'MEM-3AI-PUBLIC');
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/finance/member-summary")
             ->assertUnauthorized();
 
@@ -195,6 +200,7 @@ class Milestone3aiOutstandingDuesFinanceSummaryReadApiNarrowImplementationTest e
 
         Sanctum::actingAs($normalUser);
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->getJson("/api/v1/clubs/{$club->id}/finance/member-summary?include_pending_items=false&include_last_payment=false&include_receipt_status=false");
 
         $response->assertOk()

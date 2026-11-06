@@ -65,6 +65,7 @@ class Milestone3iizbAnnouncementReadStateFoundationTest extends TestCase
         $announcement = $this->announcement($club, $this->published());
         Sanctum::actingAs($member);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/announcements")
             ->assertOk()
             ->assertJsonPath('data.0.id', $announcement->id)
@@ -85,6 +86,7 @@ class Milestone3iizbAnnouncementReadStateFoundationTest extends TestCase
         $announcement = $this->announcement($club, $this->published());
         Sanctum::actingAs($member);
 
+        config(['instance.organisation_code' => $club->code]);
         $first = $this->putJson("/api/v1/clubs/{$club->id}/announcements/{$announcement->id}/read")
             ->assertOk()
             ->assertExactJson([
@@ -127,6 +129,7 @@ class Milestone3iizbAnnouncementReadStateFoundationTest extends TestCase
         $other = $this->announcement($otherClub, $this->published(['title' => 'Other club']));
 
         Sanctum::actingAs($firstUser);
+        config(['instance.organisation_code' => $club->code]);
         $this->putJson("/api/v1/clubs/{$club->id}/announcements/{$first->id}/read")->assertOk();
 
         Sanctum::actingAs($secondUser);
@@ -151,6 +154,7 @@ class Milestone3iizbAnnouncementReadStateFoundationTest extends TestCase
             $members = $this->announcement($club, $this->published(['audience' => 'club-members']));
             $officers = $this->announcement($club, $this->published(['audience' => 'officers']));
             Sanctum::actingAs($user);
+            config(['instance.organisation_code' => $club->code]);
             $this->putJson("/api/v1/clubs/{$club->id}/announcements/{$members->id}/read")->assertOk();
             $this->putJson("/api/v1/clubs/{$club->id}/announcements/{$officers->id}/read")->assertOk();
         }
@@ -160,6 +164,7 @@ class Milestone3iizbAnnouncementReadStateFoundationTest extends TestCase
         $members = $this->announcement($memberClub, $this->published(['audience' => 'club-members']));
         $officers = $this->announcement($memberClub, $this->published(['audience' => 'officers']));
         Sanctum::actingAs($member);
+        config(['instance.organisation_code' => $memberClub->code]);
         $this->putJson("/api/v1/clubs/{$memberClub->id}/announcements/{$members->id}/read")->assertOk();
         $this->putJson("/api/v1/clubs/{$memberClub->id}/announcements/{$officers->id}/read")->assertNotFound();
 
@@ -168,6 +173,7 @@ class Milestone3iizbAnnouncementReadStateFoundationTest extends TestCase
         $secretary = $this->actor($managementClub, 'secretary');
         $published = $this->announcement($managementClub, $this->published());
         Sanctum::actingAs($president);
+        config(['instance.organisation_code' => $managementClub->code]);
         $this->putJson("/api/v1/clubs/{$managementClub->id}/announcements/{$published->id}/read")->assertOk();
         Sanctum::actingAs($secretary);
         $this->getJson("/api/v1/clubs/{$managementClub->id}/announcements/{$published->id}")
@@ -193,17 +199,21 @@ class Milestone3iizbAnnouncementReadStateFoundationTest extends TestCase
         $invalid = $this->announcement($club, $this->published());
         DB::table('club_announcements')->where('id', $invalid->id)->update(['audience' => 'invalid']);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->putJson("/api/v1/clubs/{$club->id}/announcements/{$foreign->id}/read")->assertUnauthorized();
         Sanctum::actingAs($president);
         foreach ([$draft, $withdrawn, $archived, $expired, $invalid] as $concealed) {
+            config(['instance.organisation_code' => $club->code]);
             $this->putJson("/api/v1/clubs/{$club->id}/announcements/{$concealed->id}/read")->assertNotFound();
         }
+        config(['instance.organisation_code' => $otherClub->code]);
         $this->putJson("/api/v1/clubs/{$otherClub->id}/announcements/{$foreign->id}/read")->assertNotFound();
 
         $inactiveClub = $this->club('DENY-INACTIVE');
         $inactive = $this->actor($inactiveClub, 'member', 'inactive');
         $published = $this->announcement($inactiveClub, $this->published());
         Sanctum::actingAs($inactive);
+        config(['instance.organisation_code' => $inactiveClub->code]);
         $this->putJson("/api/v1/clubs/{$inactiveClub->id}/announcements/{$published->id}/read")->assertForbidden();
 
         $this->assertDatabaseCount('club_announcement_reads', 0);
@@ -220,6 +230,7 @@ class Milestone3iizbAnnouncementReadStateFoundationTest extends TestCase
         ]));
         Sanctum::actingAs($treasurer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/announcements/{$predecessor->id}")->assertOk();
         $this->putJson("/api/v1/clubs/{$club->id}/announcements/{$predecessor->id}/read")->assertOk();
         $this->putJson("/api/v1/clubs/{$club->id}/announcements/{$replacement->id}/read")->assertOk();

@@ -110,6 +110,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
         foreach (['president-admin', 'secretary', 'treasurer'] as $roleSlug) {
             $user = $this->userForRole($club, $roleSlug);
 
+            config(['instance.organisation_code' => $club->code]);
             $response = $this
                 ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
                 ->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [
@@ -140,6 +141,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
         $club = Club::where('code', 'LCB')->firstOrFail();
         $user = $this->userForRole($club, 'member');
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [
@@ -158,6 +160,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
 
         $club = Club::where('code', 'LCB')->firstOrFail();
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [
             'rows' => [[
                 'Member Code' => 'MEM-UNAUTH',
@@ -180,6 +183,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
         ]);
         $user = $this->userForRole($club, 'president-admin');
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$otherClub->id}/members/import-preview", [
@@ -199,6 +203,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
         $club = Club::where('code', 'LCB')->firstOrFail();
         $user = $this->userForRole($club, 'president-admin');
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [
@@ -242,6 +247,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
         $club = Club::where('code', 'LCB')->firstOrFail();
         $user = $this->userForRole($club, 'secretary');
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [
@@ -288,6 +294,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
 
         $beforeMembers = Member::query()->count();
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [
@@ -329,6 +336,7 @@ class Milestone3byMemberDataImportApiNarrowImplementationTest extends TestCase
             'receipts' => Receipt::query()->count(),
         ];
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [

@@ -57,6 +57,7 @@ class Milestone3bcClubFinanceReportsBalanceSheetReadApiNarrowImplementationTest 
         foreach (['president-admin', 'secretary', 'treasurer'] as $roleSlug) {
             $user = $this->userWithRole($club, $roleSlug);
 
+            config(['instance.organisation_code' => $club->code]);
             $this->actingAs($user)
                 ->getJson("/api/v1/clubs/{$club->id}/finance/reports")
                 ->assertOk()
@@ -78,6 +79,7 @@ class Milestone3bcClubFinanceReportsBalanceSheetReadApiNarrowImplementationTest 
         foreach (['president-admin', 'secretary', 'treasurer'] as $roleSlug) {
             $user = $this->userWithRole($club, $roleSlug);
 
+            config(['instance.organisation_code' => $club->code]);
             $this->actingAs($user)
                 ->getJson("/api/v1/clubs/{$club->id}/finance/balance-sheet")
                 ->assertOk()
@@ -96,6 +98,7 @@ class Milestone3bcClubFinanceReportsBalanceSheetReadApiNarrowImplementationTest 
         [$club] = $this->clubWithFinanceData();
         $user = $this->userWithRole($club, 'member');
 
+        config(['instance.organisation_code' => $club->code]);
         $this->actingAs($user)
             ->getJson("/api/v1/clubs/{$club->id}/finance/reports")
             ->assertForbidden();
@@ -109,6 +112,7 @@ class Milestone3bcClubFinanceReportsBalanceSheetReadApiNarrowImplementationTest 
     {
         [$club] = $this->clubWithFinanceData();
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/finance/reports")
             ->assertUnauthorized();
 
@@ -122,6 +126,7 @@ class Milestone3bcClubFinanceReportsBalanceSheetReadApiNarrowImplementationTest 
         $otherClub = $this->createClub('Other Finance Club');
         $user = $this->userWithRole($club, 'treasurer');
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $this->actingAs($user)
             ->getJson("/api/v1/clubs/{$otherClub->id}/finance/reports")
             ->assertForbidden();

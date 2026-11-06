@@ -33,11 +33,13 @@ class Milestone3gjReportsCatalogSharedQueryFoundationTest extends TestCase
         $club = Club::where('code','LCB')->firstOrFail();
         foreach (['president-admin','secretary','treasurer'] as $slug) {
             $user=$this->user($club,$slug); Sanctum::actingAs($user);
+            config(['instance.organisation_code' => $club->code]);
             $response=$this->getJson("/api/v1/clubs/{$club->id}/reports")->assertOk()->assertJsonCount(9,'data');
             $keys=array_column($response->json('data'),'key');
             $this->assertSame(self::REPORT_KEYS,$keys);
         }
         Sanctum::actingAs($this->user($club,'member'));
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/reports")->assertForbidden();
         Sanctum::actingAs($this->user($club,'president-admin'));
         $this->getJson("/api/v1/clubs/{$club->id}/reports/unknown")->assertNotFound();
@@ -47,6 +49,7 @@ class Milestone3gjReportsCatalogSharedQueryFoundationTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class);
         $club=Club::where('code','LCB')->firstOrFail();
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/reports")->assertUnauthorized();
         Sanctum::actingAs($this->user($club,'president-admin','inactive'));
         $this->getJson("/api/v1/clubs/{$club->id}/reports")->assertForbidden();

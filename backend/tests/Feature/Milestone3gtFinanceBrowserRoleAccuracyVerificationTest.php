@@ -10,8 +10,9 @@ class Milestone3gtFinanceBrowserRoleAccuracyVerificationTest extends TestCase {
  use RefreshDatabase;
  public function test_every_role_and_exact_paise_workflow_remains_enforced():void {
   $this->seed(DatabaseSeeder::class);$club=Club::create(['name'=>'GT','code'=>'GT','timezone'=>'Asia/Kolkata','is_active'=>true]);$memberUser=User::factory()->create();$member=$this->member($club,$memberUser,'DUP');$other=$this->member($club,null,'DUP');
-  foreach(['president-admin','secretary','treasurer'] as $role){$u=$this->actor($club,$role);Sanctum::actingAs($u);$this->getJson("/api/v1/clubs/{$club->id}/finance/charges")->assertOk();}
+  foreach(['president-admin','secretary','treasurer'] as $role){$u=$this->actor($club,$role);Sanctum::actingAs($u);config(['instance.organisation_code' => $club->code]); $this->getJson("/api/v1/clubs/{$club->id}/finance/charges")->assertOk();}
   $president=$this->actor($club,'president-admin');Sanctum::actingAs($president);
+  config(['instance.organisation_code' => $club->code]);
   $draft=$this->postJson("/api/v1/clubs/{$club->id}/finance/charges",['title'=>'Duplicate','category'=>'membership_dues','amount_paise'=>100001,'due_date'=>'2026-07-31','financial_year'=>'2026-27','member_ids'=>[$member->id],'assign_all_active_members'=>false])->assertCreated()->json('data');
   $this->postJson("/api/v1/clubs/{$club->id}/finance/charges/{$draft['id']}/issue",['lock_version'=>$draft['lock_version']])->assertOk();
   $mc=MemberCharge::firstOrFail();$payload=['payment_date'=>'2026-07-10','payment_mode'=>'cash','amount_paise'=>33334,'allocations'=>[['member_charge_id'=>$mc->id,'amount_paise'=>33334]],'idempotency_key'=>'99999999-9999-4999-8999-999999999999'];

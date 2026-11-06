@@ -74,6 +74,7 @@ class Milestone3bmPaymentHistoryReadOnlyNarrowImplementationTest extends TestCas
 
         Sanctum::actingAs($normalUser);
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->getJson("/api/v1/clubs/{$club->id}/members/me/payments/history");
 
         $response->assertOk()
@@ -110,6 +111,7 @@ class Milestone3bmPaymentHistoryReadOnlyNarrowImplementationTest extends TestCas
 
         Sanctum::actingAs($normalUser);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$ownMember->id}/payments/history")
             ->assertForbidden();
 
@@ -127,6 +129,7 @@ class Milestone3bmPaymentHistoryReadOnlyNarrowImplementationTest extends TestCas
 
             Sanctum::actingAs($officer);
 
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/history")
                 ->assertOk()
                 ->assertJsonPath('payment_history.0.payment_id', $payment->id)
@@ -148,6 +151,7 @@ class Milestone3bmPaymentHistoryReadOnlyNarrowImplementationTest extends TestCas
 
         Sanctum::actingAs($treasurer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$otherMember->id}/payments/history")
             ->assertNotFound()
             ->assertJson([
@@ -166,6 +170,7 @@ class Milestone3bmPaymentHistoryReadOnlyNarrowImplementationTest extends TestCas
 
         Sanctum::actingAs($viewer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/history")
             ->assertForbidden();
     }
@@ -175,6 +180,7 @@ class Milestone3bmPaymentHistoryReadOnlyNarrowImplementationTest extends TestCas
         $club = $this->createClub();
         $member = $this->createMember($club, null, 'MEM-3BM-PUBLIC');
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/me/payments/history")
             ->assertUnauthorized();
 
@@ -194,6 +200,7 @@ class Milestone3bmPaymentHistoryReadOnlyNarrowImplementationTest extends TestCas
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/history?per_page=100")
             ->assertOk()
             ->assertJsonCount(25, 'payment_history')
@@ -216,6 +223,7 @@ class Milestone3bmPaymentHistoryReadOnlyNarrowImplementationTest extends TestCas
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/history")
             ->assertOk();
 

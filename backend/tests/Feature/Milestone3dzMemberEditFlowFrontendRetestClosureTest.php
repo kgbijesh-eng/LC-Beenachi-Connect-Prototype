@@ -126,6 +126,7 @@ class Milestone3dzMemberEditFlowFrontendRetestClosureTest extends TestCase
         $president = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
         $token = $president->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         // 1. Create a synthetic member
         $createResponse = $this
             ->withHeader('Authorization', 'Bearer '.$token)

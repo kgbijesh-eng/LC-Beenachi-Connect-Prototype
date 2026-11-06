@@ -28,6 +28,7 @@ class Milestone3grFinanceCollectionsReceiptsWorkflowsTest extends TestCase
         $m1 = $this->member($club, 'M1');
         $m2 = $this->member($club, 'M2');
         Sanctum::actingAs($president);
+        config(['instance.organisation_code' => $club->code]);
         $draft = $this->postJson("/api/v1/clubs/{$club->id}/finance/charges", ['title' => 'Duplicate Charge', 'category' => 'membership_dues', 'amount_paise' => 100050, 'due_date' => '2026-07-31', 'financial_year' => '2026-27', 'member_ids' => [$m1->id, $m2->id], 'assign_all_active_members' => false])->assertCreated()->json('data');
         $this->assertSame('draft', $draft['status']);
         $this->assertSame(100050, $draft['amount_paise']);
@@ -70,16 +71,20 @@ class Milestone3grFinanceCollectionsReceiptsWorkflowsTest extends TestCase
         Sanctum::actingAs($treasurer);
         $ids = [];
         foreach ([30000, 20000] as $i => $amount) {
+            config(['instance.organisation_code' => $club->code]);
             $d = $this->postJson("/api/v1/clubs/{$club->id}/finance/charges", ['title' => 'Same', 'category' => 'general_club_event_contribution', 'amount_paise' => $amount, 'due_date' => '2026-08-01', 'financial_year' => '2026-27', 'member_ids' => [$m->id], 'assign_all_active_members' => false])->assertCreated()->json('data');
             $this->postJson("/api/v1/clubs/{$club->id}/finance/charges/{$d['id']}/issue", ['lock_version' => $d['lock_version'] ?? -1])->assertOk();
             $ids[] = MemberCharge::where('club_charge_id', $d['id'])->value('id');
         }
+        config(['instance.organisation_code' => $club->code]);
         $pay = $this->postJson("/api/v1/clubs/{$club->id}/finance/members/{$m->id}/payments", ['payment_date' => '2026-07-11', 'payment_mode' => 'cash', 'amount_paise' => 50000, 'allocations' => [['member_charge_id' => $ids[0], 'amount_paise' => 30000], ['member_charge_id' => $ids[1], 'amount_paise' => 20000]], 'idempotency_key' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'])->assertCreated()->json('data');
         $this->getJson("/api/v1/clubs/{$club->id}/finance/members/{$m->id}/summary")->assertJsonPath('data.outstanding_paise', 0);
         foreach (MemberCharge::with('charge')->get() as $mc) {
+            config(['instance.organisation_code' => $club->code]);
             $this->postJson("/api/v1/clubs/{$club->id}/finance/charges/{$mc->club_charge_id}/close", ['lock_version' => $mc->charge->lock_version])->assertOk();
         }
         Sanctum::actingAs($secretary);
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/finance/payments/{$pay['id']}/void", ['reason' => 'No permission', 'lock_version' => $pay['lock_version']])->assertForbidden();
         Sanctum::actingAs($treasurer);
         $bad = ['payment_date' => '2026-07-12', 'payment_mode' => 'cash', 'amount_paise' => 1, 'allocations' => [['member_charge_id' => $ids[0], 'amount_paise' => 1]], 'idempotency_key' => 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'];
@@ -96,6 +101,7 @@ class Milestone3grFinanceCollectionsReceiptsWorkflowsTest extends TestCase
         $other = $this->member($b, 'X');
         Sanctum::actingAs($u);
         $base = ['title' => 'X', 'category' => 'bad', 'amount_paise' => 0, 'due_date' => '2026-07-31', 'financial_year' => 'bad', 'member_ids' => [$other->id], 'assign_all_active_members' => false];
+        config(['instance.organisation_code' => $a->code]);
         $this->postJson("/api/v1/clubs/{$a->id}/finance/charges", $base)->assertUnprocessable();
         $this->deleteJson("/api/v1/clubs/{$a->id}/finance/charges/1")->assertMethodNotAllowed();
     }

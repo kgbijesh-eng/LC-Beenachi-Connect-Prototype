@@ -8,10 +8,12 @@ const API = "http://127.0.0.1:8000/api/v1";
 
 function syntheticSession(role: SyntheticRole, name = "Synthetic Officer") {
   return {
+    instance_organisation: { id: 1, code: "LCB", name: "LC Beenachi" },
     user: { id: 700, name, email: `${role}@example.test` },
     club_memberships: [{
       id: 40,
       club_id: 1,
+      status: "active",
       club: { id: 1, code: "LCB", name: "LC Beenachi" },
       role: { slug: role, name: role },
       member: { id: 1, member_code: "1000001", full_name: name }

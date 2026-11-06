@@ -150,6 +150,7 @@ class Milestone3duPaymentRefreshRetestExecutionTest extends TestCase
             'status' => MemberLedgerEntry::STATUS_POSTED,
         ]);
 
+        config(['instance.organisation_code' => 'LCB']);
         $presidentLogin = $this->postJson('/api/v1/auth/login', [
             'email' => 'president@lcbeenachi.test',
             'password' => 'password',
@@ -157,6 +158,7 @@ class Milestone3duPaymentRefreshRetestExecutionTest extends TestCase
         $presidentLogin->assertOk();
         $token = $presidentLogin->json('token');
 
+        config(['instance.organisation_code' => $club->code]);
         $summaryBefore = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/finance-summary");
@@ -217,6 +219,7 @@ class Milestone3duPaymentRefreshRetestExecutionTest extends TestCase
 
         Auth::guard('sanctum')->forgetUser();
 
+        config(['instance.organisation_code' => 'LCB']);
         $normalMemberLogin = $this->postJson('/api/v1/auth/login', [
             'email' => 'local.member@lcbeenachi.test',
             'password' => 'password',
@@ -224,6 +227,7 @@ class Milestone3duPaymentRefreshRetestExecutionTest extends TestCase
         $normalMemberLogin->assertOk();
         $normalToken = $normalMemberLogin->json('token');
 
+        config(['instance.organisation_code' => $club->code]);
         $blockedPayment = $this
             ->withHeader('Authorization', 'Bearer '.$normalToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments", [

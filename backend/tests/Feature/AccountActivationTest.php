@@ -175,6 +175,8 @@ class AccountActivationTest extends TestCase
 
     public function test_login_and_activation_routes_are_rate_limited_generically(): void
     {
+        config(['instance.organisation_code' => 'SYN']);
+        Club::create(['name' => 'Synthetic', 'code' => 'SYN']);
         for ($attempt = 0; $attempt < 5; $attempt++) {
             $this->postJson('/api/v1/auth/login', [
                 'email' => 'nobody@example.test', 'password' => 'Synthetic!Wrong123',
@@ -202,6 +204,7 @@ class AccountActivationTest extends TestCase
 
     private function linkedTarget(): array
     {
+        config(['instance.organisation_code' => 'SYN']);
         $club = Club::query()->create(['name' => 'Synthetic Club', 'code' => 'SYN', 'is_active' => true]);
         $role = Role::query()->create(['name' => 'Member', 'slug' => 'member', 'is_system' => true]);
         $user = User::factory()->create([

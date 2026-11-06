@@ -20,6 +20,7 @@ class Milestone3gmReportsBrowserRoleVerificationTest extends TestCase
 
         foreach (['president-admin', 'secretary', 'treasurer'] as $role) {
             Sanctum::actingAs($this->user($club, $role));
+            config(['instance.organisation_code' => $club->code]);
             $catalog = $this->getJson("/api/v1/clubs/{$club->id}/reports")->assertOk();
             $expected = ['membership-summary', 'events-register', 'projects-register', 'reminders-register'];
             if (str_contains(file_get_contents(app_path('Services/Reports/ReportCatalog.php')), "'collections-summary'")) {
@@ -29,6 +30,7 @@ class Milestone3gmReportsBrowserRoleVerificationTest extends TestCase
         }
 
         Sanctum::actingAs($this->user($club, 'member'));
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/reports")->assertForbidden();
 
         Sanctum::actingAs($this->user($club, 'president-admin'));
@@ -62,6 +64,7 @@ class Milestone3gmReportsBrowserRoleVerificationTest extends TestCase
             'status' => 'published', 'visibility' => 'members', 'lock_version' => 1,
         ]);
 
+        config(['instance.organisation_code' => $club->code]);
         $pageOne = $this->getJson("/api/v1/clubs/{$club->id}/reports/events-register?date_from=2026-07-01&date_to=2026-07-12&per_page=10&page=1")->assertOk();
         $pageOne->assertJsonPath('meta.total', 12)->assertJsonCount(10, 'data.rows');
         $this->assertSame(array_slice($eventIds, 0, 10), array_column($pageOne->json('data.rows'), 'id'));

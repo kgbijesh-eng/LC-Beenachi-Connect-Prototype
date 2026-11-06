@@ -42,7 +42,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
         $this->assertSame('CLUB-ACCOUNT-STATEMENT-2026-01', ClubAccountStatementProjectionService::CONTRACT_VERSION);
 
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
         $this->getJson($this->endpoint($fixture))->assertOk()
             ->assertJsonPath('data.contract_version', 'CLUB-ACCOUNT-STATEMENT-2026-01');
     }
@@ -51,7 +51,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
     {
         $this->assertSame(0, DB::transactionLevel());
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
         $before = $this->accountingCounts();
 
         $first = $this->getJson($this->endpoint($fixture))->assertOk()->json('data');
@@ -68,11 +68,11 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
         $member = User::factory()->create();
         ClubMembership::create(['club_id' => $fixture['club']->id, 'user_id' => $member->id, 'role_id' => $memberRole->id, 'status' => 'active']);
 
-        Sanctum::actingAs($member);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($member);
         $this->getJson($this->endpoint($fixture))->assertForbidden();
 
         ClubMembership::where('club_id', $fixture['club']->id)->where('user_id', $fixture['officer']->id)->update(['status' => 'inactive']);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
         $this->getJson($this->endpoint($fixture))->assertForbidden();
 
         $this->app['auth']->forgetGuards();
@@ -80,7 +80,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
 
         $otherClub = Club::create(['name' => 'Other Club', 'code' => '3IIZL-OTHER', 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
         ClubMembership::where('club_id', $fixture['club']->id)->where('user_id', $fixture['officer']->id)->update(['status' => 'active']);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $otherClub->code]); Sanctum::actingAs($fixture['officer']);
         $this->getJson("/api/v1/clubs/{$otherClub->id}/finance/account-statement?lions_year=2027-28")->assertForbidden();
     }
 
@@ -91,7 +91,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
         $membership = ClubMembership::where('club_id', $fixture['club']->id)->where('user_id', $fixture['officer']->id)->firstOrFail();
         ClubMembership::create(['club_id' => $club->id, 'user_id' => $fixture['officer']->id, 'role_id' => $membership->role_id, 'status' => 'active']);
         ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $fixture['officer']->id]);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $club->code]); Sanctum::actingAs($fixture['officer']);
 
         $this->getJson("/api/v1/clubs/{$club->id}/finance/account-statement?lions_year=2027-28")
             ->assertConflict()->assertJsonPath('code', 'ACCOUNTING_NOT_ACTIVATED');
@@ -103,7 +103,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
         $this->rawJournal($fixture, '2027-06-30', 'posted', 9000);
         $this->rawJournal($fixture, '2027-07-10', 'draft', 8000);
         $this->postJournal($fixture, '2027-09-01', 'future', 7000);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $response = $this->getJson($this->endpoint($fixture).'&from=2027-07-01&to=2027-07-31')->assertOk();
         $this->assertSame(2, $response->json('data.source.journal_count'));
@@ -124,7 +124,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
             new JournalLineInput($expense->id, 'debit', 1500, fundCode: 'GENERAL_CLUB_FUND'),
             new JournalLineInput($fixture['cash']->id, 'credit', 1500, fundCode: 'GENERAL_CLUB_FUND'),
         ]);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $response = $this->getJson($this->endpoint($fixture))->assertOk();
         $journals = $response->json('data.traceability.journals');
@@ -158,7 +158,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
             $fixture['officer']->id, 'Closure validation', '3iizl_reversal', 'movement-reversal',
             'reversed', (string) Str::uuid(),
         ));
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $response = $this->getJson($this->endpoint($fixture))->assertOk();
         $original = collect($response->json('data.traceability.journals'))->firstWhere('journal_id', $fixture['movement']->public_id);
@@ -170,7 +170,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
     public function test_integrity_and_query_defects_fail_closed(): void
     {
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
         $base = "/api/v1/clubs/{$fixture['club']->id}/finance/account-statement";
 
         foreach ([

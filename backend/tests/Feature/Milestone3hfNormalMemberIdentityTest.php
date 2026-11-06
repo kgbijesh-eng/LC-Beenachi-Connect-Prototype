@@ -91,12 +91,14 @@ class Milestone3hfNormalMemberIdentityTest extends TestCase
         $sajithToken = $this->loginToken('sajith.member@lcbeenachi.test');
 
         Auth::forgetGuards();
+        config(['instance.organisation_code' => $this->club->code]);
         $this->withToken($ranjithToken)
             ->getJson("/api/v1/clubs/{$this->club->id}/members/me")
             ->assertOk()
             ->assertJsonPath('member.member_code', '26766860');
 
         Auth::forgetGuards();
+        config(['instance.organisation_code' => 'LCB']);
         $this->withToken($ranjithToken)
             ->postJson('/api/v1/auth/logout')
             ->assertOk();
@@ -107,6 +109,7 @@ class Milestone3hfNormalMemberIdentityTest extends TestCase
             ->assertUnauthorized();
 
         Auth::forgetGuards();
+        config(['instance.organisation_code' => $this->club->code]);
         $this->withToken($sajithToken)
             ->getJson("/api/v1/clubs/{$this->club->id}/members/me")
             ->assertOk()
@@ -164,6 +167,7 @@ class Milestone3hfNormalMemberIdentityTest extends TestCase
         $token = $this->loginToken($email);
         Auth::forgetGuards();
 
+        config(['instance.organisation_code' => 'LCB']);
         return $this->withToken($token)->getJson('/api/v1/auth/me');
     }
 
@@ -172,6 +176,7 @@ class Milestone3hfNormalMemberIdentityTest extends TestCase
         $this->withoutToken();
         Auth::forgetGuards();
 
+        config(['instance.organisation_code' => 'LCB']);
         return (string) $this->postJson('/api/v1/auth/login', [
             'email' => $email,
             'password' => 'password',

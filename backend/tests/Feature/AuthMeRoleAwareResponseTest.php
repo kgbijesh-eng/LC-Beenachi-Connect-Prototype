@@ -12,6 +12,7 @@ class AuthMeRoleAwareResponseTest extends TestCase
 
     public function test_me_endpoint_returns_user_club_role_and_permissions(): void
     {
+        config(['instance.organisation_code' => 'LCB']);
         $this->seed(DatabaseSeeder::class);
 
         $loginResponse = $this->postJson('/api/v1/auth/login', [

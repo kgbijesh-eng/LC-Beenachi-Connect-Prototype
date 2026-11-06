@@ -60,6 +60,7 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
 
             Sanctum::actingAs($actor);
 
+            config(['instance.organisation_code' => $club->code]);
             $this->postJson("/api/v1/clubs/{$club->id}/events", $this->validPayload())
                 ->assertCreated()
                 ->assertJsonPath('data.status', 'draft')
@@ -87,14 +88,17 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
     {
         $club = $this->createClub();
 
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/events", $this->validPayload())->assertUnauthorized();
 
         foreach (['treasurer', 'member'] as $roleSlug) {
             Sanctum::actingAs($this->createUserWithRole($club, $roleSlug));
+            config(['instance.organisation_code' => $club->code]);
             $this->postJson("/api/v1/clubs/{$club->id}/events", $this->validPayload())->assertForbidden();
         }
 
         Sanctum::actingAs($this->createUserWithRole($club, 'president-admin', 'inactive'));
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/events", $this->validPayload())->assertForbidden();
 
 
@@ -117,6 +121,7 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
 
         Sanctum::actingAs($actor);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->patchJson("/api/v1/clubs/{$club->id}/events/{$event->id}", [
             'lock_version' => 1,
             'title' => 'Updated Meeting Title',
@@ -151,6 +156,7 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
 
         Sanctum::actingAs($actor);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->patchJson("/api/v1/clubs/{$club->id}/events/{$completed->id}", [
             'lock_version' => 1,
             'title' => 'Nope',
@@ -173,6 +179,7 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
 
         Sanctum::actingAs($actor);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/events/{$event->id}/publish", ['lock_version' => 1])
             ->assertOk()
             ->assertJsonPath('data.status', 'published')
@@ -196,6 +203,7 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
 
         Sanctum::actingAs($actor);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/events/{$draft->id}/cancel", ['lock_version' => 1])->assertUnprocessable();
         $this->postJson("/api/v1/clubs/{$club->id}/events/{$draft->id}/cancel", ['lock_version' => 1, 'cancellation_reason' => 'Venue closed'])
             ->assertOk()
@@ -234,6 +242,7 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
 
         Sanctum::actingAs($actor);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/events/{$timed->id}/complete", ['lock_version' => 1])->assertConflict();
         Carbon::setTestNow('2026-06-23 11:00:00');
         $this->postJson("/api/v1/clubs/{$club->id}/events/{$timed->id}/complete", ['lock_version' => 1])
@@ -258,11 +267,13 @@ class Milestone3fpEventsMeetingsLifecycleBackendWorkflowTest extends TestCase
 
         foreach (['treasurer', 'member'] as $roleSlug) {
             Sanctum::actingAs($this->createUserWithRole($club, $roleSlug));
+            config(['instance.organisation_code' => $club->code]);
             $this->patchJson("/api/v1/clubs/{$club->id}/events/{$event->id}", ['lock_version' => 1, 'title' => 'No'])->assertForbidden();
             $this->postJson("/api/v1/clubs/{$club->id}/events/{$event->id}/publish", ['lock_version' => 1])->assertForbidden();
         }
 
         Sanctum::actingAs($this->createUserWithRole($otherClub, 'president-admin'));
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/events/{$event->id}/publish", ['lock_version' => 1])->assertForbidden();
 
         $routes = collect(Route::getRoutes())

@@ -2,13 +2,31 @@
 
 namespace Tests\Feature;
 
-use App\Models\User;
+use App\Models\{User, Club, Role, ClubMembership};
+use Database\Seeders\DefaultRolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class AuthApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seed(DefaultRolesAndPermissionsSeeder::class);
+        Club::create(['name' => 'Synthetic instance', 'code' => 'AUTH']);
+        config(['instance.organisation_code' => 'AUTH']);
+    }
+
+    private function createInstanceUser(array $attributes): User
+    {
+        $user = User::factory()->create($attributes);
+        ClubMembership::create(['club_id' => Club::where('code', 'AUTH')->sole()->id,
+            'user_id' => $user->id, 'role_id' => Role::where('slug', 'member')->sole()->id, 'status' => 'active']);
+        return $user;
+    }
+
 
     public function test_health_endpoint_returns_success_response(): void
     {
@@ -27,7 +45,7 @@ class AuthApiTest extends TestCase
 
     public function test_login_rejects_invalid_credentials(): void
     {
-        User::factory()->create([
+        $this->createInstanceUser([
             'email' => 'president@lcbeenachi.test',
             'password' => 'correct-password',
         ]);
@@ -45,7 +63,7 @@ class AuthApiTest extends TestCase
 
     public function test_login_returns_token_and_user_details(): void
     {
-        $user = User::factory()->create([
+        $user = $this->createInstanceUser([
             'name' => 'President User',
             'email' => 'president@lcbeenachi.test',
             'password' => 'correct-password',
@@ -85,7 +103,7 @@ class AuthApiTest extends TestCase
 
     public function test_me_endpoint_returns_authenticated_user(): void
     {
-        $user = User::factory()->create([
+        $user = $this->createInstanceUser([
             'name' => 'Secretary User',
             'email' => 'secretary@lcbeenachi.test',
             'password' => 'correct-password',
@@ -114,7 +132,7 @@ class AuthApiTest extends TestCase
 
     public function test_logout_revokes_current_token(): void
     {
-        User::factory()->create([
+        $this->createInstanceUser([
             'email' => 'treasurer@lcbeenachi.test',
             'password' => 'correct-password',
         ]);

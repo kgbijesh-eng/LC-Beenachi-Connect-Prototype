@@ -94,6 +94,7 @@ class Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest extends 
             $actor = $this->createUserWithRole($club, $roleSlug);
             Sanctum::actingAs($actor);
 
+            config(['instance.organisation_code' => $club->code]);
             $memberships = $this->getJson("/api/v1/auth/me")
                 ->assertOk()
                 ->json('club_memberships');
@@ -103,6 +104,7 @@ class Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest extends 
             $this->assertNotNull($matchingMembership);
             $this->assertSame($roleSlug, $matchingMembership['role']['slug']);
 
+            config(['instance.organisation_code' => $club->code]);
             $events = $this->getJson("/api/v1/clubs/{$club->id}/events?scope=all&per_page=50")
                 ->assertOk()
                 ->json('data');
@@ -132,6 +134,7 @@ class Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest extends 
 
         foreach (['treasurer', 'member'] as $roleSlug) {
             Sanctum::actingAs($this->createUserWithRole($club, $roleSlug));
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/events?per_page=50")->assertOk();
             $this->postJson("/api/v1/clubs/{$club->id}/events", $this->validPayload())->assertForbidden();
             $this->patchJson("/api/v1/clubs/{$club->id}/events/{$event->id}", ['lock_version' => 1, 'title' => 'No'])->assertForbidden();
@@ -139,6 +142,7 @@ class Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest extends 
         }
 
         Sanctum::actingAs($this->createUserWithRole($club, 'secretary', 'inactive'));
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/events?scope=all")->assertForbidden();
         $this->postJson("/api/v1/clubs/{$club->id}/events", $this->validPayload())->assertForbidden();
 
@@ -166,6 +170,7 @@ class Milestone3fpaEventsMeetingsIsolatedBrowserPermissionAlignmentTest extends 
         ]);
 
         Sanctum::actingAs($this->createUserWithRole($club, 'member'));
+        config(['instance.organisation_code' => $club->code]);
         $memberResponse = $this->getJson("/api/v1/clubs/{$club->id}/events?per_page=50")
             ->assertOk()
             ->json('data');

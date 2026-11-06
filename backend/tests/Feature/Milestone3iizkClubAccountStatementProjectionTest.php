@@ -32,7 +32,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     public function test_authorized_same_club_officer_receives_balanced_canonical_statement(): void
     {
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $response = $this->getJson($this->endpoint($fixture));
 
@@ -65,7 +65,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         $member = User::factory()->create();
         ClubMembership::create(['club_id' => $fixture['club']->id, 'user_id' => $member->id, 'role_id' => $memberRole->id, 'status' => 'active']);
 
-        Sanctum::actingAs($member);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($member);
         $this->getJson($this->endpoint($fixture))->assertForbidden();
 
         Sanctum::actingAs(User::factory()->create());
@@ -82,7 +82,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     public function test_filter_contract_rejects_invalid_combinations_and_ranges(): void
     {
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
         $base = "/api/v1/clubs/{$fixture['club']->id}/finance/account-statement";
 
         $this->getJson($base)->assertUnprocessable();
@@ -95,7 +95,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     public function test_custom_range_is_inclusive_and_opening_is_not_double_counted(): void
     {
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $response = $this->getJson($this->endpoint($fixture).'&from=2027-07-01&to=2027-07-15')->assertOk();
 
@@ -107,7 +107,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     public function test_valid_period_filter_uses_owned_period_and_closed_state(): void
     {
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $response = $this->getJson($this->endpoint($fixture).'&period_id='.$fixture['period']->id)->assertOk();
 
@@ -121,7 +121,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     {
         $fixture = $this->fixture();
         ClubMembership::query()->where('club_id', $fixture['club']->id)->where('user_id', $fixture['officer']->id)->update(['status' => 'inactive']);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
         $this->getJson($this->endpoint($fixture))->assertForbidden();
 
         ClubMembership::query()->where('club_id', $fixture['club']->id)->where('user_id', $fixture['officer']->id)->update(['status' => 'active']);
@@ -144,7 +144,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
             new JournalLineInput($expense->id, 'debit', 1500, fundCode: 'GENERAL_CLUB_FUND'),
             new JournalLineInput($fixture['cash']->id, 'credit', 1500, fundCode: 'GENERAL_CLUB_FUND'),
         ]);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $response = $this->getJson($this->endpoint($fixture))->assertOk();
         $cash = collect($response->json('data.funds.0.classifications.0.accounts'))->firstWhere('account_code', 'CASH-ON-HAND');
@@ -162,7 +162,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
             new JournalLineInput($fixture['cash']->id, 'debit', 300, fundCode: 'SERVICE_ACTIVITY_FUND'),
             new JournalLineInput($serviceIncome->id, 'credit', 300, fundCode: 'SERVICE_ACTIVITY_FUND'),
         ]);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $response = $this->getJson($this->endpoint($fixture))->assertOk();
         $generalCash = collect($response->json('data.funds.0.classifications.0.accounts'))->firstWhere('account_code', 'CASH-ON-HAND');
@@ -184,7 +184,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
             'status' => 'draft', 'description' => 'Excluded draft', 'currency' => 'INR',
             'created_by_user_id' => $fixture['officer']->id, 'created_at' => now(), 'updated_at' => now(),
         ]);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $response = $this->getJson($this->endpoint($fixture).'&from=2027-07-01&to=2027-07-14')->assertOk();
 
@@ -195,7 +195,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     public function test_missing_classification_or_fund_fails_closed(): void
     {
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         DB::table('ledger_accounts')->where('id', $fixture['cash']->id)->update(['statement_classification' => null]);
         $this->getJson($this->endpoint($fixture))
@@ -223,7 +223,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
             'club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01',
             'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $fixture['officer']->id,
         ]);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $club->code]); Sanctum::actingAs($fixture['officer']);
 
         $this->getJson("/api/v1/clubs/{$club->id}/finance/account-statement?lions_year=2027-28")
             ->assertConflict()->assertJsonPath('code', 'ACCOUNTING_NOT_ACTIVATED');
@@ -232,7 +232,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     public function test_get_is_read_only_and_deterministic(): void
     {
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
         $before = $this->tableCounts();
 
         $first = $this->getJson($this->endpoint($fixture))->assertOk()->json('data');
@@ -246,7 +246,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     public function test_snapshot_fingerprint_changes_with_statement_state_and_query_scope(): void
     {
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $initial = $this->getJson($this->endpoint($fixture))->assertOk()->json('data.snapshot_fingerprint');
         $range = $this->getJson($this->endpoint($fixture).'&from=2027-07-01&to=2027-07-31')
@@ -266,7 +266,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     {
         $first = $this->fixture('A');
         $second = $this->fixture('B');
-        Sanctum::actingAs($first['officer']);
+        config(['instance.organisation_code' => $first['club']->code]); Sanctum::actingAs($first['officer']);
 
         $before = $this->getJson($this->endpoint($first))->assertOk()->json('data.snapshot_fingerprint');
         User::factory()->create();
@@ -275,7 +275,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
             new JournalLineInput($second['income']->id, 'credit', 75, fundCode: 'GENERAL_CLUB_FUND'),
         ]);
         $after = $this->getJson($this->endpoint($first))->assertOk()->json('data.snapshot_fingerprint');
-        Sanctum::actingAs($second['officer']);
+        config(['instance.organisation_code' => $second['club']->code]); Sanctum::actingAs($second['officer']);
         $other = $this->getJson($this->endpoint($second))->assertOk()->json('data.snapshot_fingerprint');
 
         $this->assertSame($before, $after);
@@ -302,7 +302,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
                 'created_at' => now(), 'updated_at' => now(),
             ]);
         }
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $full = $this->getJson($this->endpoint($fixture))->assertOk();
         $this->assertSame(2, $full->json('data.source.journal_count'));
@@ -319,7 +319,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
             $fixture['officer']->id, 'Correction', 'statement_test_reversal', 'dues-reversal',
             'reversed', (string) Str::uuid(),
         ));
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $before = $this->getJson($this->endpoint($fixture).'&from=2027-07-01&to=2027-07-31')->assertOk();
         $this->assertSame(200, $before->json('data.overall_trial_balance.period_debits_paise'));
@@ -334,7 +334,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     public function test_all_classifications_and_independently_reconciled_subtotals_are_returned(): void
     {
         $fixture = $this->fixture();
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
         $response = $this->getJson($this->endpoint($fixture))->assertOk();
         $expected = ['CASH_AND_BANK', 'RECEIVABLES', 'OTHER_CURRENT_ASSETS', 'PROPERTY_AND_EQUIPMENT', 'LIABILITIES', 'FUND_BALANCE_EQUITY', 'INCOME', 'EXPENSES'];
 
@@ -358,7 +358,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         $duplicate->package_version = 2;
         $duplicate->opening_journal_entry_id = $fixture['movement']->id;
         DB::table('club_accounting_cutover_packages')->insert($duplicate->getAttributes());
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $this->getJson($this->endpoint($fixture))
             ->assertConflict()->assertJsonPath('code', 'STATEMENT_INTEGRITY_FAILURE');
@@ -368,7 +368,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
     {
         $fixture = $this->fixture();
         $payment = $this->paymentTrace($fixture, false);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
 
         $response = $this->getJson($this->endpoint($fixture))->assertOk();
         $journal = collect($response->json('data.traceability.journals'))->firstWhere('journal_id', $payment['journal']->public_id);
@@ -391,7 +391,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         DB::table('club_accounting_periods')->where('id', $fixture['period']->id)->update([
             'status' => 'closed', 'closed_at' => now(), 'closed_by_user_id' => $fixture['officer']->id,
         ]);
-        Sanctum::actingAs($fixture['officer']);
+        config(['instance.organisation_code' => $fixture['club']->code]); Sanctum::actingAs($fixture['officer']);
         $url = $this->endpoint($fixture).'&from=2027-07-01&to=2027-07-31';
 
         $first = $this->getJson($url)->assertOk()->assertJsonPath('data.range.is_closed', true)->json('data');

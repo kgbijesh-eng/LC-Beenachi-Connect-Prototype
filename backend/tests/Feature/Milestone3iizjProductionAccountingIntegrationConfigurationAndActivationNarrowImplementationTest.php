@@ -53,16 +53,20 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
     public function test_only_active_same_club_president_or_treasurer_with_exact_permission_can_read(): void
     {
         $withoutPermission = $this->officer('president-admin', false);
+        config(['instance.organisation_code' => $this->club->code]);
         $this->actingAs($withoutPermission)->getJson($this->base().'/readiness')->assertForbidden();
         foreach (['president-admin', 'treasurer'] as $slug) {
             $actor = $this->officer($slug, true);
+            config(['instance.organisation_code' => $this->club->code]);
             $this->actingAs($actor)->getJson($this->base().'/readiness')->assertOk()->assertJsonPath('data.club.id', $this->club->id)->assertJsonMissing(['member_name' => 'x', 'payment' => 'x', 'receipt' => 'x']);
         }
         foreach (['secretary', 'member'] as $slug) {
             $actor = $this->officer($slug, true);
+            config(['instance.organisation_code' => $this->club->code]);
             $this->actingAs($actor)->getJson($this->base().'/readiness')->assertForbidden();
         }
         $inactive = $this->officer('treasurer', true, 'inactive');
+        config(['instance.organisation_code' => $this->club->code]);
         $this->actingAs($inactive)->getJson($this->base().'/readiness')->assertForbidden();
     }
 
@@ -70,11 +74,13 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
     {
         $actor = $this->officer('president-admin', true);
         $before = [ClubAccountingIntegrationProposal::count(), AuditLog::count()];
+        config(['instance.organisation_code' => $this->club->code]);
         $response = $this->actingAs($actor)->getJson($this->base().'/readiness')->assertOk()
             ->assertJsonPath('data.readiness_code', 'Not ready')->assertJsonPath('data.ready', false);
         foreach (['Ready', 'Not ready', 'Already active', 'Revoked', 'Missing mappings', 'Invalid mappings', 'Unintegrated source inside coverage', 'Reconciliation defect', 'Closed or missing accounting period', 'Opening package not posted'] as $code) {
             $this->assertContains($code, $response->json('data.readiness_codes'));
         }
+        config(['instance.organisation_code' => $this->club->code]);
         $this->actingAs($actor)->getJson($this->base().'/configuration')->assertOk()->assertJsonMissingPath('data.statement');
         $this->assertSame($before, [ClubAccountingIntegrationProposal::count(), AuditLog::count()]);
     }
@@ -84,6 +90,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         $actor = $this->officer('treasurer', true);
         $account = $this->account($this->club, 'DUES-INCOME', LedgerAccount::TYPE_INCOME);
         $payload = $this->mappingPayload($account);
+        config(['instance.organisation_code' => $this->club->code]);
         $first = $this->actingAs($actor)->postJson($this->base().'/mapping-proposals', $payload)->assertCreated();
         $second = $this->actingAs($actor)->postJson($this->base().'/mapping-proposals', $payload)->assertCreated();
         $this->assertSame($first->json('data.id'), $second->json('data.id'));
@@ -100,6 +107,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         $actor = $this->officer('president-admin', true);
         $other = Club::create(['name' => 'Other', 'code' => 'OTH']);
         $foreign = $this->account($other, 'OTHER-INCOME', LedgerAccount::TYPE_INCOME);
+        config(['instance.organisation_code' => $this->club->code]);
         $this->actingAs($actor)->postJson($this->base().'/mapping-proposals', $this->mappingPayload($foreign))->assertUnprocessable();
         $bad = $this->account($this->club, 'BAD-ASSET', LedgerAccount::TYPE_ASSET);
         $this->actingAs($actor)->postJson($this->base().'/mapping-proposals', $this->mappingPayload($bad, (string) Str::uuid()))->assertUnprocessable();
@@ -113,6 +121,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         $proposer = $this->officer('president-admin', true);
         $approver = $this->officer('treasurer', true);
         $account = $this->account($this->club, 'DUES-INCOME', LedgerAccount::TYPE_INCOME);
+        config(['instance.organisation_code' => $this->club->code]);
         $created = $this->actingAs($proposer)->postJson($this->base().'/mapping-proposals', $this->mappingPayload($account))->assertCreated();
         $url = $this->base().'/proposals/'.$created->json('data.id');
         $this->actingAs($proposer)->postJson($url.'/approve', ['lock_version' => 0])->assertForbidden();
@@ -129,6 +138,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
     {
         $proposer = $this->officer('treasurer', true);
         $other = $this->officer('president-admin', true);
+        config(['instance.organisation_code' => $this->club->code]);
         $created = $this->actingAs($proposer)->postJson($this->base().'/mapping-proposals', $this->mappingPayload($this->account($this->club, 'DUES-INCOME', LedgerAccount::TYPE_INCOME)))->assertCreated();
         $url = $this->base().'/proposals/'.$created->json('data.id').'/withdraw';
         $this->actingAs($other)->postJson($url, ['lock_version' => 0])->assertForbidden();
@@ -140,6 +150,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
     {
         $proposer = $this->officer('president-admin', true);
         $approver = $this->officer('treasurer', true);
+        config(['instance.organisation_code' => $this->club->code]);
         $created = $this->actingAs($proposer)->postJson($this->base().'/mapping-proposals', $this->mappingPayload($this->account($this->club, 'DUES-INCOME', LedgerAccount::TYPE_INCOME)))->assertCreated();
         $this->actingAs($approver)->postJson($this->base().'/proposals/'.$created->json('data.id').'/approve', ['lock_version' => 0])->assertOk()->assertJsonPath('data.status', 'approved');
         $this->assertDatabaseCount('club_accounting_source_mappings', 1);
@@ -164,6 +175,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         $account = $this->account($this->club, 'SHAPE-INCOME', LedgerAccount::TYPE_INCOME);
         $mapping = $this->mappingPayload($account);
         $mapping['mapping_id'] = 999;
+        config(['instance.organisation_code' => $this->club->code]);
         $this->actingAs($actor)->postJson($this->base().'/mapping-proposals', $mapping)->assertUnprocessable();
         $activation = ['client_request_id' => (string) Str::uuid(), 'proposal_type' => 'charge_activation', 'source_type' => 'member_charge', 'mapping_version' => 'v1', 'coverage_start_date' => '2027-07-01', 'activation_id' => 1, 'reference' => 'SHAPE-ACT'];
         $this->actingAs($actor)->postJson($this->base().'/activation-proposals', $activation)->assertUnprocessable();
@@ -181,6 +193,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         $payload['proposal_type'] = 'mapping_replace';
         $payload['mapping_id'] = $mapping->id;
         $payload['reference'] = 'TARGET-NEW';
+        config(['instance.organisation_code' => $this->club->code]);
         $created = $this->actingAs($proposer)->postJson($this->base().'/mapping-proposals', $payload)->assertCreated();
         $this->assertSame('current', ClubAccountingIntegrationProposal::firstOrFail()->target_snapshot['lifecycle']);
         app(AccountingIntegrationConfigurationService::class)->revokeMapping($mapping, $proposer, 'TARGET-REVOKE', 'Changed after proposal.');
@@ -194,6 +207,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         $proposer = $this->officer('president-admin', true);
         $approver = $this->officer('treasurer', true);
         $account = $this->account($this->club, 'AUTH-INCOME', LedgerAccount::TYPE_INCOME);
+        config(['instance.organisation_code' => $this->club->code]);
         $this->actingAs($proposer)->postJson($this->base().'/mapping-proposals', $this->mappingPayload($account))->assertCreated();
         Role::where('slug', 'treasurer')->firstOrFail()->permissions()->detach($this->permission->id);
         $this->expectException(AuthorizationException::class);
@@ -248,6 +262,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         $actor = $this->officer('president-admin', true);
         $this->openingFoundation($actor);
         $configuration = app(AccountingIntegrationConfigurationService::class);
+        config(['instance.organisation_code' => $this->club->code]);
         $missing = $this->actingAs($actor)->getJson($this->base().'/readiness')->assertOk();
         $this->assertSame(['Missing mappings', 'Missing mappings'], collect($missing->json('data.sources'))->pluck('readiness_code')->all());
         $income = $this->account($this->club, 'READY-INCOME', LedgerAccount::TYPE_INCOME);
@@ -258,6 +273,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         foreach (MemberPayment::MODES as $i => $key) {
             $configuration->map($this->club->id, 'member_payment', $key, $bank, 'v1', '2027-07-01', 'READY-P-'.$i, $actor);
         }
+        config(['instance.organisation_code' => $this->club->code]);
         $ready = $this->actingAs($actor)->getJson($this->base().'/readiness')->assertOk();
         $ready->assertJsonPath('data.readiness_code', 'Ready')->assertJsonPath('data.ready', true);
         $this->assertSame(['Ready', 'Ready'], collect($ready->json('data.sources'))->pluck('readiness_code')->all());

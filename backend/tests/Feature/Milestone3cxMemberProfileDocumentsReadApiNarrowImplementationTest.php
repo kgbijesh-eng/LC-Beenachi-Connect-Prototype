@@ -193,11 +193,12 @@ class Milestone3cxMemberProfileDocumentsReadApiNarrowImplementationTest extends 
 
         Sanctum::actingAs($crossClubUser);
 
+        // This is now a foreign-instance URL, rejected before club permissions.
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/profile-documents")
-            ->assertForbidden();
+            ->assertNotFound();
 
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/profile-documents/{$document->id}")
-            ->assertForbidden();
+            ->assertNotFound();
     }
 
     public function test_cross_club_member_and_document_mismatches_fail_closed(): void
@@ -345,6 +346,7 @@ class Milestone3cxMemberProfileDocumentsReadApiNarrowImplementationTest extends 
 
     private function createUserWithRole(Club $club, string $roleSlug): User
     {
+        config(['instance.organisation_code' => $club->code]);
         $role = Role::where('slug', $roleSlug)->firstOrFail();
         $user = User::factory()->create();
 

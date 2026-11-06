@@ -24,6 +24,7 @@ class Milestone3gdRemindersLifecycleBackendWorkflowTest extends TestCase
     {
         foreach(['president-admin','secretary'] as $role){
             $club=$this->club($role); $user=$this->user($club,$role); Sanctum::actingAs($user);
+            config(['instance.organisation_code' => $club->code]);
             $response=$this->postJson("/api/v1/clubs/{$club->id}/reminders",[
                 'title'=>'Draft Reminder','description'=>'Synthetic','priority'=>'high','visibility'=>'members',
                 'is_all_day'=>true,'due_date'=>'2026-07-10',
@@ -35,6 +36,7 @@ class Milestone3gdRemindersLifecycleBackendWorkflowTest extends TestCase
             $this->assertDatabaseHas('audit_logs',['action'=>'reminders.updated','auditable_id'=>$id]);
         }
         $club=$this->club('guard'); Sanctum::actingAs($this->user($club,'president-admin'));
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/reminders",[
             'title'=>'Bad','priority'=>'invalid','visibility'=>'members','is_all_day'=>true,
             'due_date'=>'2026-07-10','due_at'=>'2026-07-10T10:00:00+05:30','club_id'=>999,'status'=>'active',
@@ -45,9 +47,10 @@ class Milestone3gdRemindersLifecycleBackendWorkflowTest extends TestCase
     {
         $club=$this->club(); $other=$this->club('other');
         $payload=['title'=>'Blocked','priority'=>'normal','visibility'=>'members','is_all_day'=>true,'due_date'=>'2026-07-10'];
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/reminders",$payload)->assertUnauthorized();
-        foreach(['treasurer','member'] as $role){ Sanctum::actingAs($this->user($club,$role)); $this->postJson("/api/v1/clubs/{$club->id}/reminders",$payload)->assertForbidden(); }
-        Sanctum::actingAs($this->user($club,'president-admin','inactive')); $this->postJson("/api/v1/clubs/{$club->id}/reminders",$payload)->assertForbidden();
+        foreach(['treasurer','member'] as $role){ Sanctum::actingAs($this->user($club,$role)); config(['instance.organisation_code' => $club->code]); $this->postJson("/api/v1/clubs/{$club->id}/reminders",$payload)->assertForbidden(); }
+        Sanctum::actingAs($this->user($club,'president-admin','inactive')); config(['instance.organisation_code' => $club->code]); $this->postJson("/api/v1/clubs/{$club->id}/reminders",$payload)->assertForbidden();
         Sanctum::actingAs($this->user($other,'president-admin')); $this->postJson("/api/v1/clubs/{$club->id}/reminders",$payload)->assertForbidden();
     }
 
@@ -56,6 +59,7 @@ class Milestone3gdRemindersLifecycleBackendWorkflowTest extends TestCase
         Carbon::setTestNow('2026-06-24 12:00:00 UTC');
         $club=$this->club(); $officer=$this->user($club,'president-admin'); $member=$this->user($club,'member');
         $draft=$this->reminder($club); Sanctum::actingAs($officer);
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/reminders/{$draft->id}/activate",['lock_version'=>1])
             ->assertOk()->assertJsonPath('data.status','active')->assertJsonPath('data.lock_version',2);
         $this->postJson("/api/v1/clubs/{$club->id}/reminders/{$draft->id}/activate",['lock_version'=>2])->assertStatus(409);
@@ -82,6 +86,7 @@ class Milestone3gdRemindersLifecycleBackendWorkflowTest extends TestCase
         $club=$this->club(); $other=$this->club('x'); $officer=$this->user($club,'president-admin');
         $draft=$this->reminder($club); $terminal=$this->reminder($club,['status'=>'completed','completed_at'=>now()]);
         $foreign=$this->reminder($other); Sanctum::actingAs($officer);
+        config(['instance.organisation_code' => $club->code]);
         $this->patchJson("/api/v1/clubs/{$club->id}/reminders/{$draft->id}",['lock_version'=>99,'title'=>'Stale'])->assertStatus(409);
         $this->patchJson("/api/v1/clubs/{$club->id}/reminders/{$draft->id}",['lock_version'=>1,'status'=>'active'])->assertUnprocessable();
         $this->patchJson("/api/v1/clubs/{$club->id}/reminders/{$terminal->id}",['lock_version'=>1,'title'=>'No'])->assertStatus(409);

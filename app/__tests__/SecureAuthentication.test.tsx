@@ -6,10 +6,12 @@ import LoginScreen from "../LoginScreen";
 import Prototype from "../page";
 
 const verifiedIdentity = {
+  instance_organisation: { id: 1, code: "LCB", name: "LC Beenachi" },
   user: { id: 7, name: "Test Member", email: "member@example.test" },
   club_memberships: [{
     id: 4,
     club_id: 1,
+    status: "active",
     club: { id: 1, code: "LCB", name: "LC Beenachi" },
     role: { slug: "member", name: "Member" },
     permissions: [{ slug: "announcements.view", name: "View Announcements" }],
@@ -137,9 +139,8 @@ describe("secure frontend authentication", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Load protected" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://127.0.0.1:8000/api/v1/protected", expect.objectContaining({
-      headers: expect.objectContaining({ Authorization: "Bearer fake-bearer-token" })
-    }));
+    expect(fetchMock.mock.calls[2][0]).toBe("http://127.0.0.1:8000/api/v1/protected");
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get("Authorization")).toBe("Bearer fake-bearer-token");
   });
 
   it("adds the verified in-memory bearer token to announcement requests only after /auth/me succeeds", async () => {
@@ -164,9 +165,7 @@ describe("secure frontend authentication", () => {
     }));
     const announcementCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/clubs/1/announcements?"));
     expect(announcementCall).toBeDefined();
-    expect(announcementCall?.[1]).toEqual(expect.objectContaining({
-      headers: expect.objectContaining({ Authorization: "Bearer announcement-session-token" })
-    }));
+    expect(new Headers(announcementCall?.[1]?.headers).get("Authorization")).toBe("Bearer announcement-session-token");
     expect(fetchMock.mock.invocationCallOrder[2]).toBeGreaterThan(fetchMock.mock.invocationCallOrder[1]);
     expect(storageSet).not.toHaveBeenCalled();
   });

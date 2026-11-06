@@ -23,6 +23,7 @@ class Milestone3gkVerifiedReportSetBackendActivationTest extends TestCase
         $project=ClubProject::create(['club_id'=>$club->id,'record_type'=>'project','title'=>'Duplicate','status'=>'planned','visibility'=>'members','planned_start_date'=>'2026-07-02','lock_version'=>1]);
         $reminder=ClubReminder::create(['club_id'=>$club->id,'title'=>'Duplicate','priority'=>'urgent','status'=>'active','visibility'=>'members','is_all_day'=>true,'due_date'=>'2026-07-03','activated_at'=>now(),'lock_version'=>1]);
 
+        config(['instance.organisation_code' => $club->code]);
         $m=$this->getJson("/api/v1/clubs/{$club->id}/reports/membership-summary")->assertOk();
         $m->assertJsonPath('data.summary.total_members',2)->assertJsonPath('data.summary.active_members',1)->assertJsonPath('meta',null);
         $this->getJson("/api/v1/clubs/{$club->id}/reports/events-register?type=meeting")->assertOk()->assertJsonPath('data.rows.0.id',$event->id)->assertJsonPath('meta.total',1);
@@ -30,8 +31,10 @@ class Milestone3gkVerifiedReportSetBackendActivationTest extends TestCase
         $this->getJson("/api/v1/clubs/{$club->id}/reports/reminders-register?priority=urgent")->assertOk()->assertJsonPath('data.rows.0.id',$reminder->id);
         $this->getJson("/api/v1/clubs/{$club->id}/reports/membership-summary?q=Private")->assertUnprocessable();
         if (str_contains(file_get_contents(app_path('Services/Reports/ReportCatalog.php')), "'collections-summary'")) {
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/reports/collections-summary")->assertOk();
         } else {
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/reports/collections-summary")->assertNotFound();
         }
     }
@@ -40,6 +43,7 @@ class Milestone3gkVerifiedReportSetBackendActivationTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class); $club=$this->club('R'); Sanctum::actingAs($this->user($club,'treasurer'));
         Member::create(['club_id'=>$club->id,'member_code'=>'R1','full_name'=>'Read Only','status'=>'active']); $before=Member::where('club_id',$club->id)->count();
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/reports/membership-summary")->assertOk();
         $this->getJson("/api/v1/clubs/{$club->id}/reports/membership-summary")->assertOk();
         $this->assertSame($before,Member::where('club_id',$club->id)->count());

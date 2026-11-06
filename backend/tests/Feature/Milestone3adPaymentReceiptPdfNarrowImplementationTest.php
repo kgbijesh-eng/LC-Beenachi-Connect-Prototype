@@ -63,6 +63,7 @@ class Milestone3adPaymentReceiptPdfNarrowImplementationTest extends TestCase
     public function test_authorized_user_can_download_issued_receipt_pdf(): void
     {
         $club = $this->createClub();
+        config(['instance.organisation_code' => $club->code]);
         $member = $this->createMember($club);
         $user = $this->createUserWithPaymentPermission($club);
 
@@ -110,6 +111,7 @@ class Milestone3adPaymentReceiptPdfNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$payment->id}/receipt/pdf");
@@ -125,6 +127,7 @@ class Milestone3adPaymentReceiptPdfNarrowImplementationTest extends TestCase
     public function test_normal_member_can_download_only_own_issued_receipt_pdf(): void
     {
         $club = $this->createClub();
+        config(['instance.organisation_code' => $club->code]);
         $issuer = $this->createUserWithPaymentPermission($club);
         $normalUser = $this->createUserWithClubViewPermission($club);
 
@@ -155,6 +158,7 @@ class Milestone3adPaymentReceiptPdfNarrowImplementationTest extends TestCase
         $ownResponse->assertOk();
         $this->assertStringContainsString('application/pdf', (string) $ownResponse->headers->get('content-type'));
 
+        config(['instance.organisation_code' => $club->code]);
         $otherResponse = $this
             ->withHeader('Authorization', 'Bearer '.$normalToken)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$otherMember->id}/payments/{$otherPayment->id}/receipt/pdf");
@@ -183,6 +187,7 @@ class Milestone3adPaymentReceiptPdfNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$otherPayment->id}/receipt/pdf");
@@ -207,6 +212,7 @@ class Milestone3adPaymentReceiptPdfNarrowImplementationTest extends TestCase
 
         app(ReceiptGenerationService::class)->generate($user, $payment);
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$payment->id}/receipt/pdf");
 
         $response->assertUnauthorized();

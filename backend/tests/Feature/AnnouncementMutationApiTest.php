@@ -50,6 +50,7 @@ class AnnouncementMutationApiTest extends TestCase
         $treasurer = $this->actor($club, 'treasurer');
 
         Sanctum::actingAs($president);
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/announcements", [])
             ->assertUnprocessable()->assertJsonValidationErrors(['title', 'body', 'priority', 'audience']);
         $created = $this->postJson("/api/v1/clubs/{$club->id}/announcements", $this->draft())
@@ -79,6 +80,7 @@ class AnnouncementMutationApiTest extends TestCase
     public function test_treasurer_member_and_inactive_membership_are_denied_for_every_write_permission(): void
     {
         $club = $this->club('DENY');
+        config(['instance.organisation_code' => $club->code]);
         $owner = $this->actor($club, 'president-admin');
         $draft = ClubAnnouncement::query()->create([
             'club_id' => $club->id,
@@ -134,6 +136,7 @@ class AnnouncementMutationApiTest extends TestCase
         $checker = $this->actor($club, 'secretary');
 
         Sanctum::actingAs($maker);
+        config(['instance.organisation_code' => $club->code]);
         $draft = $this->postJson("/api/v1/clubs/{$club->id}/announcements", $this->draft(['priority' => 'urgent']))
             ->assertCreated()->json('data');
         $this->postJson("/api/v1/clubs/{$club->id}/announcements/{$draft['id']}/publish", ['lock_version' => 1])
@@ -177,6 +180,7 @@ class AnnouncementMutationApiTest extends TestCase
         $checker = $this->actor($club, 'secretary');
 
         Sanctum::actingAs($maker);
+        config(['instance.organisation_code' => $club->code]);
         $rejectedDraft = $this->postJson("/api/v1/clubs/{$club->id}/announcements", $this->draft(['audience' => 'officers']))
             ->assertCreated()->json('data');
         Sanctum::actingAs($checker);
@@ -213,6 +217,7 @@ class AnnouncementMutationApiTest extends TestCase
             'status' => 'active',
             'joined_at' => now(),
         ]);
+        config(['instance.organisation_code' => $other->code]);
         $this->postJson("/api/v1/clubs/{$other->id}/announcements/{$published['id']}/archive", ['lock_version' => 2])
             ->assertNotFound();
     }
@@ -228,6 +233,7 @@ class AnnouncementMutationApiTest extends TestCase
             'created_by_user_id' => $president->id, 'updated_by_user_id' => $president->id, 'lock_version' => 1,
         ]);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->deleteJson("/api/v1/clubs/{$club->id}/announcements/{$announcement->id}")->assertMethodNotAllowed();
         $this->postJson("/api/v1/clubs/{$club->id}/announcements/{$announcement->id}/restore")->assertNotFound();
         $this->patchJson("/api/v1/clubs/{$club->id}/announcements/{$announcement->id}/status", ['status' => 'published'])->assertNotFound();

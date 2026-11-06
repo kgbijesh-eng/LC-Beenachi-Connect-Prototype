@@ -17,21 +17,21 @@ final class Milestone3iizzOrdinaryIncomeReceiptTest extends TestCase
 
     public function test_receipt_posts_exact_same_fund_income_replays_and_changes_statement(): void
     {
-        $f = $this->fixture('A'); $other = $this->fixture('H'); Sanctum::actingAs($other['actor']); $otherBefore = $this->getJson($this->statement($other))->assertOk()->json('data.snapshot_fingerprint'); Sanctum::actingAs($f['actor']); $payload = $this->payload($f, (string) Str::uuid());
+        $f = $this->fixture('A'); $other = $this->fixture('H'); config(['instance.organisation_code' => $other['club']->code]); Sanctum::actingAs($other['actor']); $otherBefore = $this->getJson($this->statement($other))->assertOk()->json('data.snapshot_fingerprint'); config(['instance.organisation_code' => $f['club']->code]); Sanctum::actingAs($f['actor']); $payload = $this->payload($f, (string) Str::uuid());
         $before = $this->getJson($this->statement($f))->assertOk()->json('data.snapshot_fingerprint');
         $created = $this->postJson($this->endpoint($f), $payload)->assertCreated(); $id = $created->json('data.id');
         $this->assertSame($id, $this->postJson($this->endpoint($f), $payload)->assertCreated()->json('data.id'));
         $receipt = ClubOrdinaryIncomeReceipt::firstOrFail(); $lines = DB::table('club_journal_lines')->where('journal_entry_id', $receipt->journal_entry_id)->orderBy('line_number')->get();
         $this->assertSame([$f['bank']->id, $f['income']->id], $lines->pluck('ledger_account_id')->all()); $this->assertSame(['debit', 'credit'], $lines->pluck('direction')->all()); $this->assertSame([2500000, 2500000], $lines->pluck('amount_paise')->all()); $this->assertSame(['GENERAL_CLUB_FUND'], $lines->pluck('fund_code')->unique()->values()->all());
         $statement = $this->getJson($this->statement($f))->assertOk(); $this->assertNotSame($before, $statement->json('data.snapshot_fingerprint')); $classes = collect($statement->json('data.funds'))->flatMap(fn ($fund) => $fund['classifications']); $this->assertSame(2500000, $classes->firstWhere('classification', 'CASH_AND_BANK')['totals']['period_debit_paise']); $this->assertSame(2500000, $classes->firstWhere('classification', 'INCOME')['totals']['period_credit_paise']); $this->assertSame(0, $classes->firstWhere('classification', 'EXPENSES')['totals']['period_debit_paise']); $this->assertSame(0, $classes->firstWhere('classification', 'LIABILITIES')['totals']['period_credit_paise']); $this->assertSame(2500000, $statement->json('data.overall_trial_balance.period_debits_paise')); $this->assertSame(2500000, $statement->json('data.overall_trial_balance.period_credits_paise'));
-        Sanctum::actingAs($other['actor']); $this->assertSame($otherBefore, $this->getJson($this->statement($other))->assertOk()->json('data.snapshot_fingerprint')); Sanctum::actingAs($f['actor']);
+        config(['instance.organisation_code' => $other['club']->code]); Sanctum::actingAs($other['actor']); $this->assertSame($otherBefore, $this->getJson($this->statement($other))->assertOk()->json('data.snapshot_fingerprint')); config(['instance.organisation_code' => $f['club']->code]); Sanctum::actingAs($f['actor']);
         $this->postJson($this->endpoint($f), [...$payload, 'amount_paise' => 2500001])->assertConflict()->assertJsonPath('code', 'ORDINARY_INCOME_RECEIPT_IDEMPOTENCY_CONFLICT');
         $this->getJson($this->endpoint($f))->assertOk()->assertJsonPath('data.0.id', $id); $this->getJson($this->endpoint($f)."/{$id}")->assertOk()->assertJsonMissingPath('data.club_id');
     }
 
     public function test_accounts_subtypes_amount_period_activation_and_tenant_scope_fail_closed(): void
     {
-        $f = $this->fixture('B'); $other = $this->fixture('C'); Sanctum::actingAs($f['actor']);
+        $f = $this->fixture('B'); $other = $this->fixture('C'); config(['instance.organisation_code' => $f['club']->code]); Sanctum::actingAs($f['actor']);
         foreach ([['subtype' => 'donation'], ['receiving_account' => $f['income']->public_id], ['income_account' => $f['bank']->public_id], ['income_account' => $other['income']->public_id], ['amount_paise' => 0]] as $change) $this->postJson($this->endpoint($f), [...$this->payload($f, (string) Str::uuid()), ...$change])->assertUnprocessable();
         DB::table('ledger_accounts')->where('id', $f['income']->id)->update(['is_active' => false]); $this->postJson($this->endpoint($f), $this->payload($f, (string) Str::uuid()))->assertUnprocessable(); DB::table('ledger_accounts')->where('id', $f['income']->id)->update(['is_active' => true]);
         DB::table('club_accounting_periods')->where('id', $f['period']->id)->update(['status' => 'closed', 'closed_at' => now(), 'closed_by_user_id' => $f['actor']->id]); $this->postJson($this->endpoint($f), $this->payload($f, (string) Str::uuid()))->assertUnprocessable();
@@ -41,11 +41,11 @@ final class Milestone3iizzOrdinaryIncomeReceiptTest extends TestCase
     public function test_permission_matrix_and_tenant_scoped_uuid_isolation(): void
     {
         $president = $this->fixture('D', 'president-admin', true, true); $secretary = $this->fixture('E', 'secretary', false, true); $member = $this->fixture('F', 'member', false, false); $key = (string) Str::uuid();
-        Sanctum::actingAs($president['actor']); $this->postJson($this->endpoint($president), $this->payload($president, $key))->assertCreated();
-        Sanctum::actingAs($secretary['actor']); $this->postJson($this->endpoint($secretary), $this->payload($secretary, $key))->assertForbidden(); $this->getJson($this->endpoint($secretary))->assertOk();
-        Sanctum::actingAs($member['actor']); $this->getJson($this->endpoint($member))->assertForbidden();
-        Sanctum::actingAs($secretary['actor']); $this->postJson($this->endpoint($secretary), $this->payload($secretary, (string) Str::uuid()))->assertForbidden();
-        Sanctum::actingAs($president['actor']); $this->postJson($this->endpoint($president), [...$this->payload($president, $key), 'idempotency_key' => $key])->assertCreated();
+        config(['instance.organisation_code' => $president['club']->code]); Sanctum::actingAs($president['actor']); $this->postJson($this->endpoint($president), $this->payload($president, $key))->assertCreated();
+        config(['instance.organisation_code' => $secretary['club']->code]); Sanctum::actingAs($secretary['actor']); $this->postJson($this->endpoint($secretary), $this->payload($secretary, $key))->assertForbidden(); $this->getJson($this->endpoint($secretary))->assertOk();
+        config(['instance.organisation_code' => $member['club']->code]); Sanctum::actingAs($member['actor']); $this->getJson($this->endpoint($member))->assertForbidden();
+        config(['instance.organisation_code' => $secretary['club']->code]); Sanctum::actingAs($secretary['actor']); $this->postJson($this->endpoint($secretary), $this->payload($secretary, (string) Str::uuid()))->assertForbidden();
+        config(['instance.organisation_code' => $president['club']->code]); Sanctum::actingAs($president['actor']); $this->postJson($this->endpoint($president), [...$this->payload($president, $key), 'idempotency_key' => $key])->assertCreated();
     }
 
     public function test_controlled_journal_failure_rolls_back_source_and_journal(): void
@@ -59,7 +59,7 @@ final class Milestone3iizzOrdinaryIncomeReceiptTest extends TestCase
 
     public function test_exact_replay_fails_closed_when_persisted_journal_provenance_is_corrupt(): void
     {
-        $f = $this->fixture('I'); Sanctum::actingAs($f['actor']); $payload = $this->payload($f, (string) Str::uuid()); $this->postJson($this->endpoint($f), $payload)->assertCreated();
+        $f = $this->fixture('I'); config(['instance.organisation_code' => $f['club']->code]); Sanctum::actingAs($f['actor']); $payload = $this->payload($f, (string) Str::uuid()); $this->postJson($this->endpoint($f), $payload)->assertCreated();
         $receipt = ClubOrdinaryIncomeReceipt::firstOrFail(); DB::table('club_journal_entries')->where('id', $receipt->journal_entry_id)->update(['source_id' => (string) Str::uuid()]);
         $this->postJson($this->endpoint($f), $payload)->assertConflict()->assertJsonPath('code', 'ORDINARY_INCOME_RECEIPT_IDEMPOTENCY_CONFLICT');
         $this->assertSame(1, ClubOrdinaryIncomeReceipt::count()); $this->assertSame(1, DB::table('club_journal_entries')->where('source_type', ClubOrdinaryIncomeReceiptService::SOURCE_TYPE)->count());
@@ -67,12 +67,12 @@ final class Milestone3iizzOrdinaryIncomeReceiptTest extends TestCase
 
     public function test_linked_correction_is_exact_idempotent_and_supports_atomic_replacement(): void
     {
-        $f = $this->fixture('J'); $permission = Permission::firstOrCreate(['slug' => 'finance.club.ordinary_income_receipts.reverse'], ['name' => 'Reverse ordinary income', 'group' => 'finance', 'description' => 'Reverse']); ClubMembership::where('club_id', $f['club']->id)->where('user_id', $f['actor']->id)->firstOrFail()->role->permissions()->syncWithoutDetaching([$permission->id]); Sanctum::actingAs($f['actor']);
+        $f = $this->fixture('J'); $permission = Permission::firstOrCreate(['slug' => 'finance.club.ordinary_income_receipts.reverse'], ['name' => 'Reverse ordinary income', 'group' => 'finance', 'description' => 'Reverse']); ClubMembership::where('club_id', $f['club']->id)->where('user_id', $f['actor']->id)->firstOrFail()->role->permissions()->syncWithoutDetaching([$permission->id]); config(['instance.organisation_code' => $f['club']->code]); Sanctum::actingAs($f['actor']);
         $created = $this->postJson($this->endpoint($f), $this->payload($f, (string) Str::uuid()))->assertCreated()->json('data'); $original = ClubOrdinaryIncomeReceipt::firstOrFail(); $facts = $original->getAttributes(); $originalLines = DB::table('club_journal_lines')->where('journal_entry_id', $original->journal_entry_id)->orderBy('line_number')->get(); $key = (string) Str::uuid(); $payload = ['accounting_date' => '2027-08-12', 'reason' => 'Incorrect amount', 'idempotency_key' => $key];
         $first = $this->postJson($this->endpoint($f).'/'.$created['id'].'/correction', $payload)->assertOk()->assertJsonPath('data.status', 'reversed'); $replay = $this->postJson($this->endpoint($f).'/'.$created['id'].'/correction', $payload)->assertOk(); $this->assertSame($first->json('data.correction.id'), $replay->json('data.correction.id'));
         $correction = ClubOrdinaryIncomeReceiptCorrection::firstOrFail(); $reversal = ClubJournalEntry::with('lines')->findOrFail($correction->reversal_journal_entry_id); $this->assertSame(['credit', 'debit'], $reversal->lines->pluck('direction')->all()); $this->assertSame($originalLines->pluck('ledger_account_id')->all(), $reversal->lines->pluck('ledger_account_id')->all()); $this->assertSame($originalLines->pluck('amount_paise')->all(), $reversal->lines->pluck('amount_paise')->all()); $this->assertSame($originalLines->pluck('fund_code')->all(), $reversal->lines->pluck('fund_code')->all()); $this->assertSame($facts, ClubOrdinaryIncomeReceipt::findOrFail($original->id)->getAttributes()); $this->postJson($this->endpoint($f).'/'.$created['id'].'/correction', [...$payload, 'reason' => 'Changed'])->assertConflict();
 
-        $g = $this->fixture('K'); ClubMembership::where('club_id', $g['club']->id)->where('user_id', $g['actor']->id)->firstOrFail()->role->permissions()->syncWithoutDetaching([$permission->id]); Sanctum::actingAs($g['actor']); $source = $this->postJson($this->endpoint($g), $this->payload($g, (string) Str::uuid()))->assertCreated()->json('data'); $replacement = $this->payload($g, (string) Str::uuid()); unset($replacement['idempotency_key']); $replacement['amount_paise'] = 2400000;
+        $g = $this->fixture('K'); ClubMembership::where('club_id', $g['club']->id)->where('user_id', $g['actor']->id)->firstOrFail()->role->permissions()->syncWithoutDetaching([$permission->id]); config(['instance.organisation_code' => $g['club']->code]); Sanctum::actingAs($g['actor']); $source = $this->postJson($this->endpoint($g), $this->payload($g, (string) Str::uuid()))->assertCreated()->json('data'); $replacement = $this->payload($g, (string) Str::uuid()); unset($replacement['idempotency_key']); $replacement['amount_paise'] = 2400000;
         $this->postJson($this->endpoint($g).'/'.$source['id'].'/correction', ['accounting_date' => '2027-08-12', 'reason' => 'Wrong amount', 'idempotency_key' => (string) Str::uuid(), 'replacement' => $replacement])->assertOk()->assertJsonPath('data.status', 'replaced'); $this->getJson($this->endpoint($g).'?status=replaced')->assertOk()->assertJsonPath('meta.total', 1);
     }
 

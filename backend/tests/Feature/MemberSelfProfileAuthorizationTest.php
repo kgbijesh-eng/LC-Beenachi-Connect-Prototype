@@ -24,6 +24,7 @@ class MemberSelfProfileAuthorizationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['instance.organisation_code' => 'LCB']);
         $this->seed(DatabaseSeeder::class);
 
         $this->club = Club::where('code', 'LCB')->firstOrFail();

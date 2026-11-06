@@ -191,6 +191,7 @@ class Milestone3rPaymentRecordingApiValidationAndClosureTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments", [
@@ -261,6 +262,7 @@ class Milestone3rPaymentRecordingApiValidationAndClosureTest extends TestCase
 
         $normalToken = $normalUser->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $this
             ->withHeader('Authorization', 'Bearer '.$normalToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments", [
@@ -320,6 +322,7 @@ class Milestone3rPaymentRecordingApiValidationAndClosureTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments", [
