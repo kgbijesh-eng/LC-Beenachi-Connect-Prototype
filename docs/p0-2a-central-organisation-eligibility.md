@@ -199,7 +199,17 @@ Comparison by file, test name and issue type found no new failure/error identiti
 This is a middleware substitution control in the current worktree, not a claim
 that a second complete pristine-main matrix was run.
 
-Clean-commit rerun of the 19 historical worktree-scope files: pending below.
+Clean-commit rerun of the 19 historical worktree-scope files: **85 tests passed,
+zero failures/errors/skips**, on implementation commit
+`7a78c0d6f85796cfecef160ddfa60f4347286b8a`. This confirms that their initial
+failures were caused by the uncommitted worktree diff, without changing an assertion.
+
+The [complete per-file matrix](p0-2a-backend-test-matrix.md) retains every raw
+outcome and selects the correct PostgreSQL or clean-commit lane for each file.
+Reconciled coverage is **2,143 passing cases and one BLOCKED case**; there are no
+remaining application failures/errors or unexecuted skip cases in that
+reconciliation. This is not a single all-green invocation and does not count the
+blocked expense-reversal lane as passed.
 
 ### Remaining blocked historical lane
 
