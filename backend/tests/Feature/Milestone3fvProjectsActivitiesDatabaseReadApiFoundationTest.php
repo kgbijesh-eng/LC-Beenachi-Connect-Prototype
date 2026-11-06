@@ -160,6 +160,7 @@ class Milestone3fvProjectsActivitiesDatabaseReadApiFoundationTest extends TestCa
 
             Sanctum::actingAs($user);
 
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/projects?scope=all")
                 ->assertOk()
                 ->assertJsonPath('data.0.id', $draft->id)
@@ -186,6 +187,7 @@ class Milestone3fvProjectsActivitiesDatabaseReadApiFoundationTest extends TestCa
 
             Sanctum::actingAs($user);
 
+            config(['instance.organisation_code' => $club->code]);
             $response = $this->getJson("/api/v1/clubs/{$club->id}/projects?scope=all&per_page=50")
                 ->assertOk();
 
@@ -228,6 +230,7 @@ class Milestone3fvProjectsActivitiesDatabaseReadApiFoundationTest extends TestCa
 
         Sanctum::actingAs($member);
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->getJson("/api/v1/clubs/{$club->id}/projects/{$cancelledVisible->id}")
             ->assertOk()
             ->assertJsonPath('data.status', 'cancelled');
@@ -245,6 +248,7 @@ class Milestone3fvProjectsActivitiesDatabaseReadApiFoundationTest extends TestCa
         $otherClub = $this->createClub('PA-B');
         $project = $this->createProject($club);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/projects")
             ->assertUnauthorized();
 
@@ -267,6 +271,7 @@ class Milestone3fvProjectsActivitiesDatabaseReadApiFoundationTest extends TestCa
             'joined_at' => now(),
         ]);
         Sanctum::actingAs($dualOfficer);
+        config(['instance.organisation_code' => $otherClub->code]);
         $this->getJson("/api/v1/clubs/{$otherClub->id}/projects/{$project->id}")
             ->assertNotFound();
     }
@@ -281,6 +286,7 @@ class Milestone3fvProjectsActivitiesDatabaseReadApiFoundationTest extends TestCa
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/projects?record_type=project&service_category=health&q=Duplicate")
             ->assertOk()
             ->assertJsonCount(1, 'data')
@@ -307,6 +313,7 @@ class Milestone3fvProjectsActivitiesDatabaseReadApiFoundationTest extends TestCa
         $member = $this->createUserWithRole($club, 'member');
 
         Sanctum::actingAs($officer);
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/projects")
             ->assertOk()
             ->assertJsonCount(0, 'data')

@@ -197,6 +197,7 @@ class Milestone3iiwAnnouncementMutationServiceFoundationTest extends TestCase
         $this->assertNull($source->fresh()->withdrawn_at);
 
         Sanctum::actingAs($member);
+        config(['instance.organisation_code' => $club->code]);
         $current = $this->getJson("/api/v1/clubs/{$club->id}/announcements?scope=current&per_page=1")->assertOk();
         $current->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.id', $replacement->id)
             ->assertJsonPath('data.0.replaces_announcement_id', $source->id);
@@ -218,6 +219,7 @@ class Milestone3iiwAnnouncementMutationServiceFoundationTest extends TestCase
         $this->published($club, $president, ['audience' => 'officers', 'replaces_announcement_id' => $source->id]);
 
         Sanctum::actingAs($member);
+        config(['instance.organisation_code' => $club->code]);
         $payload = $this->getJson("/api/v1/clubs/{$club->id}/announcements?scope=current")->assertOk()
             ->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $source->id)->json('data.0');
         $this->assertSame('published', $payload['effective_status']);

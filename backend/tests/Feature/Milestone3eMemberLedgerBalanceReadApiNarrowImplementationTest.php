@@ -119,6 +119,7 @@ class Milestone3eMemberLedgerBalanceReadApiNarrowImplementationTest extends Test
 
         Sanctum::actingAs($user);
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->getJson("/api/v1/clubs/{$club->id}/members/me/balance");
 
         $response->assertOk()
@@ -142,6 +143,7 @@ class Milestone3eMemberLedgerBalanceReadApiNarrowImplementationTest extends Test
 
         Sanctum::actingAs($user);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$ownMember->id}/balance")
             ->assertOk()
             ->assertJsonPath('balance.member_id', $ownMember->id);
@@ -160,6 +162,7 @@ class Milestone3eMemberLedgerBalanceReadApiNarrowImplementationTest extends Test
 
         Sanctum::actingAs($treasurer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/balance")
             ->assertOk()
             ->assertJsonPath('balance.member_id', $member->id)
@@ -176,6 +179,7 @@ class Milestone3eMemberLedgerBalanceReadApiNarrowImplementationTest extends Test
 
         Sanctum::actingAs($secretary);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/balance")
             ->assertOk()
             ->assertJsonPath('balance.member_id', $member->id)
@@ -192,6 +196,7 @@ class Milestone3eMemberLedgerBalanceReadApiNarrowImplementationTest extends Test
 
         Sanctum::actingAs($president);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/balance")
             ->assertOk()
             ->assertJsonPath('balance.member_id', $member->id)
@@ -208,6 +213,7 @@ class Milestone3eMemberLedgerBalanceReadApiNarrowImplementationTest extends Test
 
         Sanctum::actingAs($treasurer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$otherClubMember->id}/balance")
             ->assertNotFound();
     }
@@ -217,6 +223,7 @@ class Milestone3eMemberLedgerBalanceReadApiNarrowImplementationTest extends Test
         $club = $this->createClub();
         $member = $this->createMember($club, null, 'MEM-PUBLIC');
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/balance")
             ->assertUnauthorized();
     }

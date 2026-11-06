@@ -130,6 +130,7 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $generateResponse = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$payment->id}/receipt", [
@@ -171,6 +172,7 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$payment->id}/receipt");
@@ -209,6 +211,7 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends TestCase
 
         $normalToken = $normalUser->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $ownView = $this
             ->withHeader('Authorization', 'Bearer '.$normalToken)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$ownMember->id}/payments/{$ownPayment->id}/receipt");
@@ -257,6 +260,7 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $duplicateResponse = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$payment->id}/receipt");

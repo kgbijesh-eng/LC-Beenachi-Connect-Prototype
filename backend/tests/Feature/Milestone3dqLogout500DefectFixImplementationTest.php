@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Models\Club;
+use App\Models\ClubMembership;
+use App\Models\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -14,11 +17,15 @@ class Milestone3dqLogout500DefectFixImplementationTest extends TestCase
 
     public function test_logged_out_token_follow_up_auth_me_returns_401_not_500(): void
     {
-        User::factory()->create([
+        $user = User::factory()->create([
             'name' => '3DQ Auth Test User',
             'email' => '3dq.auth@example.test',
             'password' => 'correct-password',
         ]);
+        $club = Club::create(['name' => 'Synthetic logout instance', 'code' => 'SYN-3DQ', 'is_active' => true]);
+        $role = Role::create(['name' => 'Member', 'slug' => 'member', 'is_system' => true]);
+        ClubMembership::create(['club_id' => $club->id, 'user_id' => $user->id, 'role_id' => $role->id, 'status' => 'active']);
+        config(['instance.organisation_code' => $club->code]);
 
         $loginResponse = $this->postJson('/api/v1/auth/login', [
             'email' => '3dq.auth@example.test',

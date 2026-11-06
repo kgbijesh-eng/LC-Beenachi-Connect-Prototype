@@ -14,7 +14,7 @@ final class Milestone3iizxInternalCashBankTransferTest extends TestCase
     use RefreshDatabase;
     public function test_authorized_transfer_posts_exact_asset_movement_replays_and_is_tenant_scoped(): void
     {
-        $f=$this->fixture('A'); Sanctum::actingAs($f['actor']); $key=(string)Str::uuid(); $payload=$this->payload($f,$key); $before=$this->getJson($this->statement($f))->assertOk()->json('data.snapshot_fingerprint');
+        $f=$this->fixture('A'); Sanctum::actingAs($f['actor']); $key=(string)Str::uuid(); $payload=$this->payload($f,$key); config(['instance.organisation_code' => $f['club']->code]); $before=$this->getJson($this->statement($f))->assertOk()->json('data.snapshot_fingerprint');
         $response=$this->postJson($this->endpoint($f),$payload)->assertCreated(); $id=$response->json('data.id');
         $this->assertSame($id,$this->postJson($this->endpoint($f),$payload)->assertCreated()->json('data.id'));
         $lines=DB::table('club_journal_lines')->where('journal_entry_id',ClubInternalTransfer::firstOrFail()->journal_entry_id)->orderBy('line_number')->get();
@@ -22,8 +22,10 @@ final class Milestone3iizxInternalCashBankTransferTest extends TestCase
         $this->assertDatabaseCount('club_internal_transfers',1); $this->assertDatabaseCount('club_journal_entries',2);
         $statement=$this->getJson($this->statement($f))->assertOk(); $this->assertNotSame($before,$statement->json('data.snapshot_fingerprint')); $this->assertSame(500000,$statement->json('data.overall_trial_balance.period_debits_paise')); $this->assertSame(500000,$statement->json('data.overall_trial_balance.period_credits_paise'));
         $classes=collect($statement->json('data.funds'))->flatMap(fn($fund)=>$fund['classifications']);$accounts=$classes->flatMap(fn($class)=>$class['accounts']);$this->assertSame(500000,$accounts->firstWhere('account_code',$f['source']->code)['closing_balance_paise']);$this->assertSame(500000,$accounts->firstWhere('account_code',$f['destination']->code)['closing_balance_paise']);foreach(['INCOME','EXPENSES'] as $classification){$totals=$classes->firstWhere('classification',$classification)['totals'];$this->assertSame(0,$totals['period_debit_paise']);$this->assertSame(0,$totals['period_credit_paise']);}
+        config(['instance.organisation_code' => $f['club']->code]);
         $this->postJson($this->endpoint($f),[...$payload,'amount_paise'=>500001])->assertConflict()->assertJsonPath('code','TRANSFER_IDEMPOTENCY_CONFLICT');
         $b=$this->fixture('B'); $this->postJson($this->endpoint($f),[...$payload,'idempotency_key'=>(string)Str::uuid(),'destination_account'=>$b['destination']->public_id])->assertUnprocessable();
+        config(['instance.organisation_code' => $b['club']->code]);
         $this->getJson("/api/v1/clubs/{$b['club']->id}/finance/transfers/{$id}")->assertForbidden();
     }
     public function test_failure_after_source_creation_rolls_back_source_and_journal(): void
@@ -34,7 +36,7 @@ final class Milestone3iizxInternalCashBankTransferTest extends TestCase
     }
     public function test_exact_replay_rejects_material_persisted_transfer_provenance_corruption():void
     {
-        $f=$this->fixture('C');Sanctum::actingAs($f['actor']);$key=(string)Str::uuid();$payload=$this->payload($f,$key);$this->postJson($this->endpoint($f),$payload)->assertCreated();$transfer=ClubInternalTransfer::where('club_id',$f['club']->id)->firstOrFail();$journal=DB::table('club_journal_entries')->where('id',$transfer->journal_entry_id)->first();$debit=DB::table('club_journal_lines')->where('journal_entry_id',$transfer->journal_entry_id)->where('direction','debit')->first();
+        $f=$this->fixture('C');Sanctum::actingAs($f['actor']);$key=(string)Str::uuid();$payload=$this->payload($f,$key);config(['instance.organisation_code' => $f['club']->code]); $this->postJson($this->endpoint($f),$payload)->assertCreated();$transfer=ClubInternalTransfer::where('club_id',$f['club']->id)->firstOrFail();$journal=DB::table('club_journal_entries')->where('id',$transfer->journal_entry_id)->first();$debit=DB::table('club_journal_lines')->where('journal_entry_id',$transfer->journal_entry_id)->where('direction','debit')->first();
         $cases=[
             [['journal_entry_id'=>null],['journal_entry_id'=>$transfer->journal_entry_id],'club_internal_transfers'],
             [['source_type'=>'corrupt'],['source_type'=>$journal->source_type],'club_journal_entries'],
@@ -46,11 +48,12 @@ final class Milestone3iizxInternalCashBankTransferTest extends TestCase
             [['amount_paise'=>$transfer->amount_paise+1],['amount_paise'=>$debit->amount_paise],'club_journal_lines'],
             [['fund_code'=>'SERVICE_ACTIVITY_FUND'],['fund_code'=>$debit->fund_code],'club_journal_lines'],
         ];
-        foreach($cases as [$corrupt,$restore,$table]){$id=$table==='club_internal_transfers'?$transfer->id:($table==='club_journal_entries'?$transfer->journal_entry_id:$debit->id);DB::table($table)->where('id',$id)->update($corrupt);$this->postJson($this->endpoint($f),$payload)->assertConflict()->assertJsonPath('code','TRANSFER_IDEMPOTENCY_CONFLICT');DB::table($table)->where('id',$id)->update($restore);}
+        foreach($cases as [$corrupt,$restore,$table]){$id=$table==='club_internal_transfers'?$transfer->id:($table==='club_journal_entries'?$transfer->journal_entry_id:$debit->id);DB::table($table)->where('id',$id)->update($corrupt);config(['instance.organisation_code' => $f['club']->code]); $this->postJson($this->endpoint($f),$payload)->assertConflict()->assertJsonPath('code','TRANSFER_IDEMPOTENCY_CONFLICT');DB::table($table)->where('id',$id)->update($restore);}
     }
     public function test_invalid_accounts_self_transfer_period_and_authority_fail_closed(): void
     {
         $f=$this->fixture('C'); Sanctum::actingAs($f['actor']);
+        config(['instance.organisation_code' => $f['club']->code]);
         foreach ([['destination_account'=>$f['source']->public_id],['source_account'=>$f['expense']->public_id],['amount_paise'=>0]] as $change) $this->postJson($this->endpoint($f),[...$this->payload($f,(string)Str::uuid()),...$change])->assertUnprocessable();
         DB::table('ledger_accounts')->where('id',$f['destination']->id)->update(['is_active'=>false]); $this->postJson($this->endpoint($f),$this->payload($f,(string)Str::uuid()))->assertUnprocessable(); DB::table('ledger_accounts')->where('id',$f['destination']->id)->update(['is_active'=>true]);
         DB::table('club_accounting_periods')->where('id',$f['period']->id)->update(['status'=>'closed','closed_at'=>now(),'closed_by_user_id'=>$f['actor']->id]); $this->postJson($this->endpoint($f),$this->payload($f,(string)Str::uuid()))->assertUnprocessable();

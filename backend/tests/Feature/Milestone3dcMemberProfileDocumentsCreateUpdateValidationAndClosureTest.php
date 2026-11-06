@@ -154,6 +154,7 @@ class Milestone3dcMemberProfileDocumentsCreateUpdateValidationAndClosureTest ext
 
             Sanctum::actingAs($officer);
 
+            config(['instance.organisation_code' => $club->code]);
             $createdId = $this->postJson($this->collectionUrl($club, $member), $this->validPayload([
                 'document_type' => $roleSlug.'-document',
             ]))
@@ -188,6 +189,7 @@ class Milestone3dcMemberProfileDocumentsCreateUpdateValidationAndClosureTest ext
 
             Sanctum::actingAs($user);
 
+            config(['instance.organisation_code' => $club->code]);
             $this->postJson($this->collectionUrl($club, $member), $this->validPayload())
                 ->assertForbidden();
 
@@ -208,6 +210,7 @@ class Milestone3dcMemberProfileDocumentsCreateUpdateValidationAndClosureTest ext
 
         Sanctum::actingAs($crossClubOfficer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson($this->collectionUrl($club, $member), $this->validPayload())
             ->assertForbidden();
 
@@ -250,6 +253,7 @@ class Milestone3dcMemberProfileDocumentsCreateUpdateValidationAndClosureTest ext
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson($this->collectionUrl($club, $member))
             ->assertOk()
             ->assertJsonPath('profile_documents.0.id', $document->id)
@@ -270,10 +274,12 @@ class Milestone3dcMemberProfileDocumentsCreateUpdateValidationAndClosureTest ext
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->deleteJson($this->documentUrl($club, $member, $document))
             ->assertStatus(405);
 
         foreach (['upload', 'download', 'storage', 'ocr', 'pdf'] as $blockedFragment) {
+            config(['instance.organisation_code' => $club->code]);
             $this->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/profile-documents/{$blockedFragment}", [])
                 ->assertStatus(405);
         }
@@ -289,6 +295,7 @@ class Milestone3dcMemberProfileDocumentsCreateUpdateValidationAndClosureTest ext
         Sanctum::actingAs($officer);
 
         foreach (array_merge($this->ownershipAuditFields(), $this->blockedRequestFields()) as $field) {
+            config(['instance.organisation_code' => $club->code]);
             $this->postJson($this->collectionUrl($club, $member), $this->validPayload([
                 $field => 'blocked-value',
             ]))

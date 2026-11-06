@@ -83,7 +83,9 @@ class Milestone3eoMemberDirectorySelectedMemberReadHumanOperatorRetestScopeGateT
             'selectedMember ? <MemberProfile key={selectedMember.backendId} member={selectedMember} role={role} /> : <PersonalMemberProfile role={role} />',
             $code
         );
-        $this->assertStringContainsString('const clubId = memberships?.[0]?.club?.id;', $code);
+        $this->assertStringContainsString('const clubId = session.organisation.id;', $code);
+        $this->assertStringContainsString('const activeMembership = session.membership;', $code);
+        $this->assertStringNotContainsString('const clubId = memberships?.[0]?.club?.id;', $code);
         $this->assertStringContainsString('if (role === "member") {', $code);
         $this->assertStringContainsString('API_BASE_URL + "/clubs/" + clubId + "/members/me"', $code);
         $this->assertStringContainsString('const selfRecord = profilePayload.member;', $code);
@@ -125,7 +127,10 @@ class Milestone3eoMemberDirectorySelectedMemberReadHumanOperatorRetestScopeGateT
 
         $this->assertFileExists($authSessionPath = $this->authSessionPath);
         $authCode = file_get_contents($authSessionPath);
-        $this->assertStringContainsString('const verified = await verifySession(payload.token);', $authCode);
+        $this->assertStringContainsString('const verified = await verifySession(payload.token, controller.signal, attempt);', $authCode);
+        $this->assertStringContainsString('if (generation.current !== attempt) return false;', $authCode);
+        $this->assertStringContainsString('controller.abort()', $authCode);
+        $this->assertStringContainsString('session.organisation.id', $authCode);
         $this->assertStringContainsString('setSession(verified);', $authCode);
         $this->assertStringNotContainsString('switchIdentity', $authCode);
     }

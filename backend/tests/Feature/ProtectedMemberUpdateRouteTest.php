@@ -36,6 +36,7 @@ class ProtectedMemberUpdateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->patchJson("/api/v1/clubs/{$club->id}/members/{$member->id}", [
@@ -88,6 +89,7 @@ class ProtectedMemberUpdateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->patchJson("/api/v1/clubs/{$club->id}/members/{$member->id}", [
@@ -126,6 +128,7 @@ class ProtectedMemberUpdateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->patchJson("/api/v1/clubs/{$club->id}/members/{$member->id}", [
@@ -167,6 +170,7 @@ class ProtectedMemberUpdateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->patchJson("/api/v1/clubs/{$club->id}/members/{$member->id}", [
@@ -202,6 +206,7 @@ class ProtectedMemberUpdateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->patchJson("/api/v1/clubs/{$club->id}/members/{$member->id}", [
@@ -227,6 +232,7 @@ class ProtectedMemberUpdateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->patchJson("/api/v1/clubs/{$club->id}/members/{$member->id}", [
@@ -260,6 +266,7 @@ class ProtectedMemberUpdateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->patchJson("/api/v1/clubs/{$club->id}/members/{$member->id}", [
@@ -287,6 +294,7 @@ class ProtectedMemberUpdateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->patchJson("/api/v1/clubs/{$club->id}/members/{$member->id}", [
@@ -313,6 +321,7 @@ class ProtectedMemberUpdateRouteTest extends TestCase
             'full_name' => 'Unauthenticated Update Member',
         ]);
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->patchJson("/api/v1/clubs/{$club->id}/members/{$member->id}", [
             'full_name' => 'Unauthenticated Changed Name',
         ]);

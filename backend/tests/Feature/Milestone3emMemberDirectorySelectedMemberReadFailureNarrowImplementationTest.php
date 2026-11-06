@@ -117,7 +117,11 @@ class Milestone3emMemberDirectorySelectedMemberReadFailureNarrowImplementationTe
         $this->assertFileExists($authSessionPath = $this->authSessionPath);
         $authCode = file_get_contents($authSessionPath);
         $this->assertStringContainsString('const [session, setSession] = useState<VerifiedDevSession | null>(null);', $authCode);
-        $this->assertStringContainsString('const verified = await verifySession(payload.token);', $authCode);
+        $this->assertStringContainsString('const verified = await verifySession(payload.token, controller.signal, attempt);', $authCode);
+        $this->assertStringContainsString('if (generation.current !== attempt) return false;', $authCode);
+        $this->assertStringContainsString('controller.abort()', $authCode);
+        $this->assertStringContainsString('session.organisation.id', $authCode);
+        $this->assertStringNotContainsString('memberships?.[0]', $authCode);
         $this->assertStringContainsString('setSession(verified);', $authCode);
         $this->assertStringNotContainsString('switchIdentity', $authCode);
     }

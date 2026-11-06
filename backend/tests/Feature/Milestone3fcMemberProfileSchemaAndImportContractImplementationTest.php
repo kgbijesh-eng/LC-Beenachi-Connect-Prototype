@@ -115,6 +115,7 @@ class Milestone3fcMemberProfileSchemaAndImportContractImplementationTest extends
         [$club, $user] = $this->seededOfficer('president-admin');
         $token = $user->createToken('3fc-test')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $create = $this->withToken($token)->postJson("/api/v1/clubs/{$club->id}/members", [
             'member_code' => ' syn-api-001 ',
             'full_name' => ' Synthetic   API Member ',
@@ -149,6 +150,7 @@ class Milestone3fcMemberProfileSchemaAndImportContractImplementationTest extends
         [$club, $user] = $this->seededOfficer('president-admin');
         $token = $user->createToken('3fc-invalid')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $this->withToken($token)->postJson("/api/v1/clubs/{$club->id}/members", [
             'club_id' => $club->id,
             'member_code' => 'SYN-INVALID',
@@ -319,6 +321,7 @@ class Milestone3fcMemberProfileSchemaAndImportContractImplementationTest extends
         ]);
         $token = $normalUser->createToken('3fc-normal')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $listMember = $this->withToken($token)->getJson("/api/v1/clubs/{$club->id}/members")
             ->assertOk()
             ->json('members.0');
@@ -346,6 +349,7 @@ class Milestone3fcMemberProfileSchemaAndImportContractImplementationTest extends
         ]);
         $normalToken = $normalUser->createToken('3fc-own')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $this->withToken($normalToken)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$ownMember->id}")
             ->assertOk()

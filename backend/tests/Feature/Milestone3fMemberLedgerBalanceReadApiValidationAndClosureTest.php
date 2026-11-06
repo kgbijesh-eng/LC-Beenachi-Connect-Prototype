@@ -163,6 +163,7 @@ class Milestone3fMemberLedgerBalanceReadApiValidationAndClosureTest extends Test
 
         Sanctum::actingAs($user);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/me/balance")
             ->assertOk()
             ->assertJsonPath('balance.member_id', $ownMember->id)
@@ -190,6 +191,7 @@ class Milestone3fMemberLedgerBalanceReadApiValidationAndClosureTest extends Test
 
             Sanctum::actingAs($user);
 
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/balance")
                 ->assertOk()
                 ->assertJsonPath('balance.member_id', $member->id)
@@ -207,6 +209,7 @@ class Milestone3fMemberLedgerBalanceReadApiValidationAndClosureTest extends Test
 
         $otherClubMember = $this->createMember($otherClub, null, 'MEM-OTHER-CLUB');
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$otherClubMember->id}/balance")
             ->assertUnauthorized();
 

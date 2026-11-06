@@ -24,6 +24,7 @@ class ProtectedMemberCreateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members", [
@@ -76,6 +77,7 @@ class ProtectedMemberCreateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members", [
@@ -111,6 +113,7 @@ class ProtectedMemberCreateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members", [
@@ -147,6 +150,7 @@ class ProtectedMemberCreateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members", [
@@ -177,6 +181,7 @@ class ProtectedMemberCreateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members", [
@@ -197,6 +202,7 @@ class ProtectedMemberCreateRouteTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members", []);
@@ -214,6 +220,7 @@ class ProtectedMemberCreateRouteTest extends TestCase
 
         $club = Club::where('code', 'LCB')->firstOrFail();
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->postJson("/api/v1/clubs/{$club->id}/members", [
             'member_code' => 'LCB-105',
             'full_name' => 'Unauthenticated Member',

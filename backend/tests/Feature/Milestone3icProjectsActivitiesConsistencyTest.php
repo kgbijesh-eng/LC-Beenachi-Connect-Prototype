@@ -32,6 +32,7 @@ class Milestone3icProjectsActivitiesConsistencyTest extends TestCase
             'title' => 'Planned January Project', 'status' => 'planned', 'planned_start_date' => '2026-01-15',
         ]);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/projects?from=2026-07-01&to=2026-07-31")
             ->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.id', $active->id);
         $this->getJson("/api/v1/clubs/{$club->id}/reports/projects-register?date_from=2026-07-01&date_to=2026-07-31")

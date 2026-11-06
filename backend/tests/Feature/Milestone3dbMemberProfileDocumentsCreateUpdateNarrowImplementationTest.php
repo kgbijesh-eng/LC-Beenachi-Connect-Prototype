@@ -60,6 +60,7 @@ class Milestone3dbMemberProfileDocumentsCreateUpdateNarrowImplementationTest ext
 
         Sanctum::actingAs($president);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson($this->collectionUrl($club, $member), $this->validPayload([
             'club_id' => 9999,
             'member_id' => 9999,
@@ -106,6 +107,7 @@ class Milestone3dbMemberProfileDocumentsCreateUpdateNarrowImplementationTest ext
 
         Sanctum::actingAs($president);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->patchJson($this->documentUrl($club, $member, $document), [
             'status' => 'rejected',
             'remarks' => 'Needs a newer metadata reference.',
@@ -135,6 +137,7 @@ class Milestone3dbMemberProfileDocumentsCreateUpdateNarrowImplementationTest ext
 
         Sanctum::actingAs($secretary);
 
+        config(['instance.organisation_code' => $club->code]);
         $created = $this->postJson($this->collectionUrl($club, $member), $this->validPayload([
             'document_type' => 'membership_form',
             'status' => 'pending',
@@ -165,6 +168,7 @@ class Milestone3dbMemberProfileDocumentsCreateUpdateNarrowImplementationTest ext
 
             Sanctum::actingAs($user);
 
+            config(['instance.organisation_code' => $club->code]);
             $this->postJson($this->collectionUrl($club, $member), $this->validPayload())
                 ->assertForbidden();
 
@@ -184,6 +188,7 @@ class Milestone3dbMemberProfileDocumentsCreateUpdateNarrowImplementationTest ext
 
         Sanctum::actingAs($normalUser);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson($this->collectionUrl($club, $otherMember), $this->validPayload())
             ->assertForbidden();
 
@@ -203,6 +208,7 @@ class Milestone3dbMemberProfileDocumentsCreateUpdateNarrowImplementationTest ext
 
         Sanctum::actingAs($crossClubOfficer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson($this->collectionUrl($club, $member), $this->validPayload())
             ->assertForbidden();
 
@@ -236,6 +242,7 @@ class Milestone3dbMemberProfileDocumentsCreateUpdateNarrowImplementationTest ext
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->patchJson($this->documentUrl($club, $member, $otherDocument), [
             'status' => 'verified',
         ])
@@ -252,6 +259,7 @@ class Milestone3dbMemberProfileDocumentsCreateUpdateNarrowImplementationTest ext
         Sanctum::actingAs($officer);
 
         foreach ($this->blockedRequestFields() as $field) {
+            config(['instance.organisation_code' => $club->code]);
             $this->postJson($this->collectionUrl($club, $member), $this->validPayload([
                 $field => 'blocked-value',
             ]))
@@ -278,6 +286,7 @@ class Milestone3dbMemberProfileDocumentsCreateUpdateNarrowImplementationTest ext
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson($this->collectionUrl($club, $member))
             ->assertOk()
             ->assertJsonPath('profile_documents.0.id', $document->id)
@@ -298,10 +307,12 @@ class Milestone3dbMemberProfileDocumentsCreateUpdateNarrowImplementationTest ext
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->deleteJson($this->documentUrl($club, $member, $document))
             ->assertStatus(405);
 
         foreach (['upload', 'download', 'ocr', 'pdf'] as $blockedFragment) {
+            config(['instance.organisation_code' => $club->code]);
             $this->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/profile-documents/{$blockedFragment}", [])
                 ->assertStatus(405);
         }

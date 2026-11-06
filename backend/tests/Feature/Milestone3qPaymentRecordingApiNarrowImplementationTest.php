@@ -79,6 +79,7 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments", [
@@ -156,6 +157,7 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments", [
@@ -199,6 +201,7 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments", [
@@ -226,6 +229,7 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
             'status' => 'active',
         ]);
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments", [
             'amount' => '100',
             'payment_date' => '2026-06-08',
@@ -261,6 +265,7 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$otherMember->id}/payments", [
@@ -295,6 +300,7 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments", [

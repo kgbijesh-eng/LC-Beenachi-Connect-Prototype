@@ -206,6 +206,7 @@ class Milestone3bzMemberDataImportApiValidationAndClosureTest extends TestCase
         foreach (['president-admin', 'secretary', 'treasurer'] as $roleSlug) {
             $user = $this->userForRole($club, $roleSlug);
 
+            config(['instance.organisation_code' => $club->code]);
             $this
                 ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
                 ->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [
@@ -229,6 +230,7 @@ class Milestone3bzMemberDataImportApiValidationAndClosureTest extends TestCase
 
         $memberUser = $this->userForRole($club, 'member');
 
+        config(['instance.organisation_code' => $club->code]);
         $this
             ->withHeader('Authorization', 'Bearer '.$memberUser->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [
@@ -252,6 +254,7 @@ class Milestone3bzMemberDataImportApiValidationAndClosureTest extends TestCase
             'district' => '318E',
         ]);
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $this
             ->withHeader('Authorization', 'Bearer '.$this->userForRole($club, 'president-admin')->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$otherClub->id}/members/import-preview", [
@@ -280,6 +283,7 @@ class Milestone3bzMemberDataImportApiValidationAndClosureTest extends TestCase
 
         $beforeMembers = Member::query()->count();
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [
@@ -327,6 +331,7 @@ class Milestone3bzMemberDataImportApiValidationAndClosureTest extends TestCase
             'receipts' => Receipt::query()->count(),
         ];
 
+        config(['instance.organisation_code' => $club->code]);
         $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-preview", [

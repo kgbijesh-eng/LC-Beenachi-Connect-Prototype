@@ -55,6 +55,7 @@ class Milestone3gcRemindersDatabaseReadApiFoundationTest extends TestCase
         $cancelledDraft = $this->reminder($club, ['status'=>'cancelled','visibility'=>'members','activated_at'=>null,'cancelled_at'=>now()]);
 
         Sanctum::actingAs($president);
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/reminders?per_page=100")->assertOk()->assertJsonPath('meta.total', 5);
         $this->getJson("/api/v1/clubs/{$club->id}/reminders/{$draft->id}")->assertOk()->assertJsonPath('data.visibility','members');
 
@@ -81,6 +82,7 @@ class Milestone3gcRemindersDatabaseReadApiFoundationTest extends TestCase
         $this->reminder($club, ['title'=>'Other','status'=>'completed','completed_at'=>now()]);
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/reminders?overdue=1&q=Same")->assertOk()
             ->assertJsonCount(1,'data')->assertJsonPath('data.0.id',$overdue->id)->assertJsonPath('data.0.overdue',true);
         $list = $this->getJson("/api/v1/clubs/{$club->id}/reminders?q=Same&per_page=1")->assertOk();
@@ -96,6 +98,7 @@ class Milestone3gcRemindersDatabaseReadApiFoundationTest extends TestCase
         $club = $this->club();
         $other = $this->club('OTHER');
         $record = $this->reminder($club);
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/reminders")->assertUnauthorized();
         Sanctum::actingAs($this->user($club,'member','inactive'));
         $this->getJson("/api/v1/clubs/{$club->id}/reminders")->assertForbidden();
@@ -104,6 +107,7 @@ class Milestone3gcRemindersDatabaseReadApiFoundationTest extends TestCase
         $dual = $this->user($club,'president-admin');
         ClubMembership::create(['club_id'=>$other->id,'user_id'=>$dual->id,'role_id'=>Role::where('slug','president-admin')->firstOrFail()->id,'status'=>'active','joined_at'=>now()]);
         Sanctum::actingAs($dual);
+        config(['instance.organisation_code' => $other->code]);
         $this->getJson("/api/v1/clubs/{$other->id}/reminders/{$record->id}")->assertNotFound();
         $this->getJson("/api/v1/clubs/{$other->id}/reminders")->assertOk()->assertJsonPath('meta.total',0);
 

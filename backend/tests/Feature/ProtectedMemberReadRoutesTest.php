@@ -42,6 +42,7 @@ class ProtectedMemberReadRoutesTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->getJson("/api/v1/clubs/{$club->id}/members");
@@ -77,6 +78,7 @@ class ProtectedMemberReadRoutesTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}");
@@ -118,6 +120,7 @@ class ProtectedMemberReadRoutesTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->getJson("/api/v1/clubs/{$club->id}/members");
@@ -138,6 +141,7 @@ class ProtectedMemberReadRoutesTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->getJson("/api/v1/clubs/{$club->id}/members");
@@ -169,6 +173,7 @@ class ProtectedMemberReadRoutesTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}");
@@ -185,6 +190,7 @@ class ProtectedMemberReadRoutesTest extends TestCase
 
         $club = Club::where('code', 'LCB')->firstOrFail();
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->getJson("/api/v1/clubs/{$club->id}/members");
 
         $response->assertUnauthorized();

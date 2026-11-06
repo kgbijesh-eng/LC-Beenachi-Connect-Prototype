@@ -78,6 +78,7 @@ class Milestone3yPaymentReceiptApiNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$payment->id}/receipt", [
@@ -115,6 +116,7 @@ class Milestone3yPaymentReceiptApiNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $missingResponse = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$payment->id}/receipt");
@@ -155,6 +157,7 @@ class Milestone3yPaymentReceiptApiNarrowImplementationTest extends TestCase
 
         $normalToken = $normalUser->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $generateResponse = $this
             ->withHeader('Authorization', 'Bearer '.$normalToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$payment->id}/receipt");
@@ -193,6 +196,7 @@ class Milestone3yPaymentReceiptApiNarrowImplementationTest extends TestCase
 
         $normalToken = $normalUser->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$normalToken)
             ->getJson("/api/v1/clubs/{$club->id}/members/{$otherMember->id}/payments/{$payment->id}/receipt");
@@ -216,6 +220,7 @@ class Milestone3yPaymentReceiptApiNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$payment->id}/receipt");
@@ -245,6 +250,7 @@ class Milestone3yPaymentReceiptApiNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$otherPayment->id}/receipt");
@@ -271,6 +277,7 @@ class Milestone3yPaymentReceiptApiNarrowImplementationTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
             ->postJson("/api/v1/clubs/{$club->id}/members/{$member->id}/payments/{$payment->id}/receipt", [

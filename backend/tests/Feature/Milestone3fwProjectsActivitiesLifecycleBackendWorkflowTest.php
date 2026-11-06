@@ -78,6 +78,7 @@ class Milestone3fwProjectsActivitiesLifecycleBackendWorkflowTest extends TestCas
             $lead = $this->createMember($club);
             Sanctum::actingAs($user);
 
+            config(['instance.organisation_code' => $club->code]);
             $response = $this->postJson("/api/v1/clubs/{$club->id}/projects", [
                 'record_type' => 'project',
                 'title' => '3FW Draft Project',
@@ -109,6 +110,7 @@ class Milestone3fwProjectsActivitiesLifecycleBackendWorkflowTest extends TestCas
         $club = $this->createClub('FW-GUARD');
         $president = $this->createUserWithRole($club, 'president-admin');
         Sanctum::actingAs($president);
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/projects", [
             'record_type' => 'invalid',
             'title' => 'Invalid',
@@ -125,14 +127,17 @@ class Milestone3fwProjectsActivitiesLifecycleBackendWorkflowTest extends TestCas
 
         $payload = ['record_type' => 'project', 'title' => 'Blocked', 'visibility' => 'members'];
 
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/projects", $payload)->assertUnauthorized();
 
         foreach (['treasurer', 'member'] as $roleSlug) {
             Sanctum::actingAs($this->createUserWithRole($club, $roleSlug));
+            config(['instance.organisation_code' => $club->code]);
             $this->postJson("/api/v1/clubs/{$club->id}/projects", $payload)->assertForbidden();
         }
 
         Sanctum::actingAs($this->createUserWithRole($club, 'president-admin', 'inactive'));
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/projects", $payload)->assertForbidden();
 
         Sanctum::actingAs($this->createUserWithRole($otherClub, 'president-admin'));
@@ -152,6 +157,7 @@ class Milestone3fwProjectsActivitiesLifecycleBackendWorkflowTest extends TestCas
 
         Sanctum::actingAs($president);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->patchJson("/api/v1/clubs/{$club->id}/projects/{$draft->id}", ['lock_version' => 1, 'title' => 'Updated Draft'])
             ->assertOk()
             ->assertJsonPath('data.title', 'Updated Draft')
@@ -181,6 +187,7 @@ class Milestone3fwProjectsActivitiesLifecycleBackendWorkflowTest extends TestCas
         Sanctum::actingAs($president);
 
         $draft = $this->createProject($club, ['status' => 'draft', 'planned_start_date' => '2026-07-01']);
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/projects/{$draft->id}/plan", ['lock_version' => 1])
             ->assertOk()
             ->assertJsonPath('data.status', 'planned')
@@ -205,6 +212,7 @@ class Milestone3fwProjectsActivitiesLifecycleBackendWorkflowTest extends TestCas
         }
 
         $planned = $this->createProject($club, ['status' => 'planned', 'planned_at' => now(), 'planned_start_date' => '2026-07-01']);
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/projects/{$planned->id}/complete", ['lock_version' => 1, 'actual_end_date' => '2026-07-20'])->assertStatus(409);
         $this->postJson("/api/v1/clubs/{$club->id}/projects/{$planned->id}/complete", ['lock_version' => 1, 'actual_start_date' => '2026-07-05', 'actual_end_date' => '2026-07-04'])->assertUnprocessable();
         $this->postJson("/api/v1/clubs/{$club->id}/projects/{$planned->id}/complete", ['lock_version' => 1, 'actual_beneficiary_count' => -1])->assertUnprocessable();
@@ -227,6 +235,7 @@ class Milestone3fwProjectsActivitiesLifecycleBackendWorkflowTest extends TestCas
         $draft = $this->createProject($club, ['status' => 'draft', 'visibility' => 'members', 'planned_at' => null]);
 
         Sanctum::actingAs($president);
+        config(['instance.organisation_code' => $club->code]);
         $this->postJson("/api/v1/clubs/{$club->id}/projects/{$planned->id}/cancel", ['lock_version' => 1, 'cancellation_reason' => 'Cancelled after planning'])->assertOk();
         $this->postJson("/api/v1/clubs/{$club->id}/projects/{$draft->id}/cancel", ['lock_version' => 1, 'cancellation_reason' => 'Cancelled before planning'])->assertOk();
 
@@ -242,6 +251,7 @@ class Milestone3fwProjectsActivitiesLifecycleBackendWorkflowTest extends TestCas
         foreach ($routes as $route) {
             $this->assertFalse(str_starts_with($route, 'DELETE '));
         }
+        config(['instance.organisation_code' => $club->code]);
         $this->deleteJson("/api/v1/clubs/{$club->id}/projects/{$planned->id}")->assertMethodNotAllowed();
     }
 

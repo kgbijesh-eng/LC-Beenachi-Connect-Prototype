@@ -32,6 +32,7 @@ class Milestone3iizvClubExpenseRecordingTest extends TestCase
     public function test_expense_posts_once_and_flows_into_the_canonical_statement(): void
     {
         $f = $this->fixture('A'); Sanctum::actingAs($f['officer']);
+        config(['instance.organisation_code' => $f['club']->code]);
         $before = $this->getJson($this->statement($f))->assertOk()->json('data.snapshot_fingerprint');
         $payload = $this->payload($f);
 
@@ -62,17 +63,18 @@ class Milestone3iizvClubExpenseRecordingTest extends TestCase
     public function test_changed_replay_and_cross_club_accounts_fail_closed_with_tenant_scoped_idempotency(): void
     {
         $a = $this->fixture('A'); $b = $this->fixture('B'); $sharedKey = (string) Str::uuid(); Sanctum::actingAs($a['officer']);
-        $payload = [...$this->payload($a), 'idempotency_key' => $sharedKey]; $this->postJson($this->endpoint($a), $payload)->assertCreated();
+        $payload = [...$this->payload($a), 'idempotency_key' => $sharedKey]; config(['instance.organisation_code' => $a['club']->code]); $this->postJson($this->endpoint($a), $payload)->assertCreated();
         $this->postJson($this->endpoint($a), [...$payload, 'amount_paise' => 1])->assertConflict()->assertJsonPath('code', 'EXPENSE_IDEMPOTENCY_CONFLICT');
         $this->postJson($this->endpoint($a), [...$this->payload($a), 'idempotency_key' => (string) Str::uuid(), 'expense_account' => $b['expense']->public_id])->assertUnprocessable();
         $this->postJson($this->endpoint($a), [...$this->payload($a), 'idempotency_key' => (string) Str::uuid(), 'payment_account' => $b['bank']->public_id])->assertUnprocessable();
-        Sanctum::actingAs($b['officer']); $this->postJson($this->endpoint($b), [...$this->payload($b), 'idempotency_key' => $sharedKey])->assertCreated();
+        Sanctum::actingAs($b['officer']); config(['instance.organisation_code' => $b['club']->code]); $this->postJson($this->endpoint($b), [...$this->payload($b), 'idempotency_key' => $sharedKey])->assertCreated();
         $this->assertDatabaseCount('club_expenses', 2);
     }
 
     public function test_exact_replay_rejects_material_persisted_expense_provenance_corruption(): void
     {
         $f = $this->fixture('C'); Sanctum::actingAs($f['officer']); $payload = $this->payload($f);
+        config(['instance.organisation_code' => $f['club']->code]);
         $this->postJson($this->endpoint($f), $payload)->assertCreated();
         $expense = ClubExpense::query()->where('club_id', $f['club']->id)->firstOrFail();
         $journal = DB::table('club_journal_entries')->where('id', $expense->journal_entry_id)->first();
@@ -91,6 +93,7 @@ class Milestone3iizvClubExpenseRecordingTest extends TestCase
         foreach ($cases as [$corrupt, $restore, $table]) {
             $id = $table === 'club_expenses' ? $expense->id : ($table === 'club_journal_entries' ? $expense->journal_entry_id : $debit->id);
             DB::table($table)->where('id', $id)->update($corrupt);
+            config(['instance.organisation_code' => $f['club']->code]);
             $this->postJson($this->endpoint($f), $payload)->assertConflict()->assertJsonPath('code', 'EXPENSE_IDEMPOTENCY_CONFLICT');
             DB::table($table)->where('id', $id)->update($restore);
         }
@@ -99,10 +102,13 @@ class Milestone3iizvClubExpenseRecordingTest extends TestCase
     public function test_permission_membership_account_period_amount_and_options_contracts_fail_closed(): void
     {
         $f = $this->fixture('A'); Sanctum::actingAs($f['officer']);
+        config(['instance.organisation_code' => $f['club']->code]);
         $this->getJson($this->endpoint($f).'/options')->assertOk()->assertJsonCount(1, 'data.expense_accounts')->assertJsonCount(1, 'data.payment_accounts');
         foreach ([['amount_paise' => 0], ['expense_account' => $f['bank']->public_id], ['payment_account' => $f['expense']->public_id]] as $change) {
+            config(['instance.organisation_code' => $f['club']->code]);
             $this->postJson($this->endpoint($f), [...$this->payload($f), ...$change, 'idempotency_key' => (string) Str::uuid()])->assertUnprocessable();
         }
+        config(['instance.organisation_code' => $f['club']->code]);
         $this->postJson($this->endpoint($f), [...$this->payload($f), 'fund' => 'NOT_A_FUND', 'idempotency_key' => (string) Str::uuid()])->assertUnprocessable();
         DB::table('ledger_accounts')->where('id', $f['expense']->id)->update(['is_active' => false]);
         $this->postJson($this->endpoint($f), [...$this->payload($f), 'idempotency_key' => (string) Str::uuid()])->assertUnprocessable();
@@ -110,6 +116,7 @@ class Milestone3iizvClubExpenseRecordingTest extends TestCase
         try { DB::table('ledger_accounts')->where('id', $f['expense']->id)->update(['currency' => 'USD']); $this->fail('Ledger currency guard must reject mismatches.'); }
         catch (QueryException) { $this->assertSame('INR', DB::table('ledger_accounts')->where('id', $f['expense']->id)->value('currency')); }
         DB::table('ledger_accounts')->where('id', $f['bank']->id)->update(['is_active' => false]);
+        config(['instance.organisation_code' => $f['club']->code]);
         $this->postJson($this->endpoint($f), [...$this->payload($f), 'idempotency_key' => (string) Str::uuid()])->assertUnprocessable();
         DB::table('ledger_accounts')->where('id', $f['bank']->id)->update(['is_active' => true]);
         DB::table('club_accounting_periods')->where('id', $f['period']->id)->update(['status' => 'closed', 'closed_at' => now(), 'closed_by_user_id' => $f['officer']->id]);

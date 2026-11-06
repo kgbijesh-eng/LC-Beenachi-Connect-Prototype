@@ -157,6 +157,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/events/{$timed->id}")
             ->assertOk()
             ->assertJsonPath('data.is_all_day', false)
@@ -186,6 +187,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
 
             Sanctum::actingAs($user);
 
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/events?scope=all")
                 ->assertOk()
                 ->assertJsonPath('data.0.id', $draft->id)
@@ -223,6 +225,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
 
             Sanctum::actingAs($user);
 
+            config(['instance.organisation_code' => $club->code]);
             $response = $this->getJson("/api/v1/clubs/{$club->id}/events")
                 ->assertOk()
                 ->assertJsonCount(1, 'data')
@@ -261,6 +264,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
 
         Sanctum::actingAs($member);
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->getJson("/api/v1/clubs/{$club->id}/events/{$cancelled->id}")
             ->assertOk()
             ->assertJsonPath('data.status', 'cancelled');
@@ -284,6 +288,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
         $otherClub = $this->createClub('EVT-B');
         $event = $this->createClubEvent($club);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/events")
             ->assertUnauthorized();
 
@@ -299,8 +304,10 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
 
         $sameClubOfficer = $this->createUserWithRole($club, 'president-admin');
         Sanctum::actingAs($sameClubOfficer);
+        config(['instance.organisation_code' => $otherClub->code]);
         $this->getJson("/api/v1/clubs/{$otherClub->id}/events/{$event->id}")
             ->assertForbidden();
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/events/999999")
             ->assertNotFound();
     }
@@ -316,6 +323,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/events?scope=all")
             ->assertOk()
             ->assertJsonCount(1, 'data')
@@ -333,6 +341,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
 
         Sanctum::actingAs($officer);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/events")
             ->assertOk()
             ->assertJsonCount(0, 'data')
@@ -381,6 +390,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
 
         Sanctum::actingAs($member);
 
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/events?scope=all")
             ->assertForbidden();
         $this->getJson("/api/v1/clubs/{$club->id}/events?status=draft")
@@ -398,6 +408,7 @@ class Milestone3foEventsMeetingsDatabaseReadApiFoundationTest extends TestCase
             $this->assertFalse(str_starts_with($route, 'DELETE '));
         }
 
+        config(['instance.organisation_code' => $club->code]);
         $this->deleteJson("/api/v1/clubs/{$club->id}/events/{$event->id}")->assertMethodNotAllowed();
     }
 

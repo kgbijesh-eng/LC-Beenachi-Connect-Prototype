@@ -120,6 +120,7 @@ class Milestone3dyMemberEditFlowFrontendImplementationTest extends TestCase
             'status' => 'active',
         ]);
 
+        config(['instance.organisation_code' => $club->code]);
         // Send PATCH update request
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)
@@ -154,6 +155,7 @@ class Milestone3dyMemberEditFlowFrontendImplementationTest extends TestCase
             'full_name' => 'Test Member',
         ]);
 
+        config(['instance.organisation_code' => $club->code]);
         // Unauthorized user attempts update
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$token)

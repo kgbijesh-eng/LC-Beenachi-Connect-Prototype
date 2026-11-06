@@ -345,6 +345,7 @@ class Milestone3fdMemberProfileSchemaAndImportContractValidationAndClosureTest e
         ]);
 
         Sanctum::actingAs($normalUser);
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$own->id}")
             ->assertOk()
             ->assertJsonPath('member.birth_date', '1988-03-04')
@@ -358,6 +359,7 @@ class Milestone3fdMemberProfileSchemaAndImportContractValidationAndClosureTest e
         }
 
         Sanctum::actingAs($secretary);
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/members/{$other->id}")
             ->assertOk()
             ->assertJsonPath('member.birth_date', '1989-04-05')

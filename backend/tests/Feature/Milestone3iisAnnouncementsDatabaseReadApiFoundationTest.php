@@ -108,6 +108,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
             $manager = $this->actor($club, $slug);
             $draft = $this->announcement($club, ['status' => 'draft', 'audience' => 'officers']);
             Sanctum::actingAs($manager);
+            config(['instance.organisation_code' => $club->code]);
             $payload = $this->getJson("/api/v1/clubs/{$club->id}/announcements?scope=current")
                 ->assertOk()->assertJsonPath('data.0.id', $draft->id)->json('data.0');
             $this->assertSame('draft', $payload['stored_status']);
@@ -121,6 +122,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $treasurerOfficerNotice = $this->announcement($treasurerClub, $this->published(['title' => 'Officer notice', 'audience' => 'officers']));
         $treasurerDraft = $this->announcement($treasurerClub, ['title' => 'Hidden draft', 'audience' => 'officers']);
         Sanctum::actingAs($treasurer);
+        config(['instance.organisation_code' => $treasurerClub->code]);
         $treasurerData = $this->getJson("/api/v1/clubs/{$treasurerClub->id}/announcements")
             ->assertOk()
             ->assertJsonCount(2, 'data')
@@ -134,12 +136,14 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
             }
             $this->assertSame('President', $payload['published_by_role']);
         }
+        config(['instance.organisation_code' => $treasurerClub->code]);
         $treasurerDetail = $this->getJson("/api/v1/clubs/{$treasurerClub->id}/announcements/{$treasurerOfficerNotice->id}")
             ->assertOk()
             ->json('data');
         foreach (['club_id', 'audience', 'stored_status', 'created_by_user_id', 'lock_version', 'scheduled_publish_at', 'replaces_announcement_id'] as $hidden) {
             $this->assertArrayNotHasKey($hidden, $treasurerDetail);
         }
+        config(['instance.organisation_code' => $treasurerClub->code]);
         $this->getJson("/api/v1/clubs/{$treasurerClub->id}/announcements/{$treasurerDraft->id}")->assertNotFound();
         $this->getJson("/api/v1/clubs/{$treasurerClub->id}/announcements?audience=officers")->assertForbidden();
 
@@ -149,6 +153,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $memberOfficerNotice = $this->announcement($memberClub, $this->published(['title' => 'Officer notice', 'audience' => 'officers']));
         $memberDraft = $this->announcement($memberClub, ['title' => 'Hidden draft']);
         Sanctum::actingAs($member);
+        config(['instance.organisation_code' => $memberClub->code]);
         $memberPayload = $this->getJson("/api/v1/clubs/{$memberClub->id}/announcements")
             ->assertOk()
             ->assertJsonCount(1, 'data')
@@ -159,6 +164,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         foreach (['club_id', 'audience', 'stored_status', 'created_by_user_id', 'lock_version', 'scheduled_publish_at', 'replaces_announcement_id'] as $hidden) {
             $this->assertArrayNotHasKey($hidden, $memberPayload);
         }
+        config(['instance.organisation_code' => $memberClub->code]);
         $this->getJson("/api/v1/clubs/{$memberClub->id}/announcements/{$memberOfficerNotice->id}")->assertNotFound();
         $this->getJson("/api/v1/clubs/{$memberClub->id}/announcements/{$memberDraft->id}")->assertNotFound();
     }
@@ -174,6 +180,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         ]));
 
         Sanctum::actingAs($treasurer);
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/announcements/{$officerReplacement->id}")
             ->assertOk()
             ->assertJsonMissingPath('data.replaces_announcement_id');
@@ -184,6 +191,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $club = $this->club('AUTH-A');
         $other = $this->club('AUTH-B');
         $record = $this->announcement($club, $this->published());
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/announcements")->assertUnauthorized();
 
         Sanctum::actingAs($this->actor($club, 'member', 'inactive'));
@@ -193,7 +201,9 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $this->getJson("/api/v1/clubs/{$club->id}/announcements")->assertForbidden();
 
         Sanctum::actingAs($this->actor($club, 'member'));
+        config(['instance.organisation_code' => $other->code]);
         $this->getJson("/api/v1/clubs/{$other->id}/announcements/{$record->id}")->assertForbidden();
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/announcements/999999")->assertNotFound();
 
         $otherRecord = $this->announcement($other, $this->published());
@@ -214,6 +224,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $archived = $this->announcement($club, $this->archived(['title' => 'Archived']));
 
         Sanctum::actingAs($member);
+        config(['instance.organisation_code' => $club->code]);
         $current = $this->getJson("/api/v1/clubs/{$club->id}/announcements?scope=current")->assertOk()->json('data');
         $history = $this->getJson("/api/v1/clubs/{$club->id}/announcements?scope=history")->assertOk()->json('data');
         $this->assertSame([$before->id], array_column($current, 'id'));
@@ -241,11 +252,13 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $member = $this->actor($club, 'member');
         Sanctum::actingAs($member);
         foreach (['status=invalid', 'audience=invalid', 'effective_state=invalid', 'scheduled=invalid', 'scope=all'] as $query) {
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/announcements?{$query}")->assertForbidden();
         }
 
         Sanctum::actingAs($this->actor($club, 'president-admin'));
         foreach (['status=invalid', 'audience=invalid', 'effective_state=invalid', 'scheduled=invalid'] as $query) {
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/announcements?{$query}")->assertUnprocessable();
         }
     }
@@ -264,6 +277,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $this->announcement($club, ['title' => 'Draft 100%']);
 
         Sanctum::actingAs($member);
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/announcements?q=%25")->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $percent->id);
         $this->getJson("/api/v1/clubs/{$club->id}/announcements?q=Literal_Agenda")->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $underscore->id);
         $this->getJson("/api/v1/clubs/{$club->id}/announcements?q=President%27s")->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $quote->id);
@@ -272,6 +286,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
 
         Sanctum::actingAs($manager);
         foreach (['scope=current&status=withdrawn', 'scope=current&status=archived', 'scope=history&status=draft', 'scope=history&status=archived', 'status=draft&effective_state=expired', 'scope=current&effective_state=expired', 'scope=history&effective_state=current'] as $query) {
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/announcements?{$query}")->assertUnprocessable();
         }
     }
@@ -283,6 +298,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
             $manager = $this->actor($club, 'president-admin');
             $record = $this->announcement($club, $this->published(['published_at' => $utc]));
             Sanctum::actingAs($manager);
+            config(['instance.organisation_code' => $club->code]);
             $this->getJson("/api/v1/clubs/{$club->id}/announcements?scope=all&published_from={$localDate}&published_to={$localDate}&per_page=1")
                 ->assertOk()->assertJsonPath('data.0.id', $record->id)
                 ->assertJsonPath('meta.filters.published_from', $localDate)
@@ -295,6 +311,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $one = $this->announcement($club, $this->published(['published_at' => '2026-07-20 10:00:00']));
         $two = $this->announcement($club, $this->published(['published_at' => '2026-07-20 10:00:00']));
         Sanctum::actingAs($member);
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/announcements?per_page=1&direction=asc")
             ->assertOk()->assertJsonPath('data.0.id', min($one->id, $two->id))->assertJsonPath('meta.total', 2);
     }
@@ -314,6 +331,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
             ['status' => 'draft', 'published_at' => '2026-07-20 10:00:00'],
         ] as $invalid) {
             $record = $this->announcement($club, array_merge($this->published(['title' => 'Invalid secret']), $invalid));
+            config(['instance.organisation_code' => $club->code]);
             $response = $this->getJson("/api/v1/clubs/{$club->id}/announcements?scope=all&per_page=50")
                 ->assertStatus(500)->assertExactJson(['message' => 'Announcement records are unavailable because stored data failed integrity validation.']);
             $this->assertStringNotContainsString((string) $record->id, $response->getContent());
@@ -335,6 +353,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $foreign = $this->announcement($other, $this->published());
         $record = $this->announcement($club, $this->published(['replaces_announcement_id' => $foreign->id]));
         Sanctum::actingAs($manager);
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->getJson("/api/v1/clubs/{$club->id}/announcements?scope=all")->assertStatus(500);
         $this->assertStringNotContainsString((string) $foreign->id, $response->getContent());
         $this->getJson("/api/v1/clubs/{$club->id}/announcements/{$record->id}")->assertNotFound();
@@ -366,6 +385,7 @@ class Milestone3iisAnnouncementsDatabaseReadApiFoundationTest extends TestCase
         $member = $this->actor($club, 'member');
         Sanctum::actingAs($member);
         $before = ClubAnnouncement::count();
+        config(['instance.organisation_code' => $club->code]);
         $this->getJson("/api/v1/clubs/{$club->id}/announcements")->assertOk();
         $this->assertSame($before, ClubAnnouncement::count());
         $this->postJson("/api/v1/clubs/{$club->id}/announcements", [])->assertForbidden();

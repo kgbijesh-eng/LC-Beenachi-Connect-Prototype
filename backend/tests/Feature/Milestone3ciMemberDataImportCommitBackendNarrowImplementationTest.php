@@ -89,6 +89,7 @@ class Milestone3ciMemberDataImportCommitBackendNarrowImplementationTest extends 
             $user = $this->userForRole($club, $roleSlug);
             $initialCount = Member::query()->count();
 
+            config(['instance.organisation_code' => $club->code]);
             $response = $this
                 ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
                 ->postJson("/api/v1/clubs/{$club->id}/members/import-commit", [
@@ -129,6 +130,7 @@ class Milestone3ciMemberDataImportCommitBackendNarrowImplementationTest extends 
         $club = Club::where('code', 'LCB')->firstOrFail();
         $user = $this->userForRole($club, 'member');
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-commit", [
@@ -146,6 +148,7 @@ class Milestone3ciMemberDataImportCommitBackendNarrowImplementationTest extends 
         $this->seed(DatabaseSeeder::class);
         $club = Club::where('code', 'LCB')->firstOrFail();
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this->postJson("/api/v1/clubs/{$club->id}/members/import-commit", [
             'rows' => [[
                 'Member Code' => 'MEM-UNAUTH-3CI',
@@ -167,6 +170,7 @@ class Milestone3ciMemberDataImportCommitBackendNarrowImplementationTest extends 
         ]);
         $user = $this->userForRole($club, 'president-admin');
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$otherClub->id}/members/import-commit", [
@@ -187,6 +191,7 @@ class Milestone3ciMemberDataImportCommitBackendNarrowImplementationTest extends 
 
         $initialCount = Member::query()->count();
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-commit", [
@@ -220,6 +225,7 @@ class Milestone3ciMemberDataImportCommitBackendNarrowImplementationTest extends 
 
         $initialCount = Member::query()->count();
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-commit", [
@@ -264,6 +270,7 @@ class Milestone3ciMemberDataImportCommitBackendNarrowImplementationTest extends 
 
         $initialCount = Member::query()->count();
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-commit", [
@@ -303,6 +310,7 @@ class Milestone3ciMemberDataImportCommitBackendNarrowImplementationTest extends 
             'receipts' => Receipt::query()->count(),
         ];
 
+        config(['instance.organisation_code' => $club->code]);
         $response = $this
             ->withHeader('Authorization', 'Bearer '.$user->createToken('test-token')->plainTextToken)
             ->postJson("/api/v1/clubs/{$club->id}/members/import-commit", [
