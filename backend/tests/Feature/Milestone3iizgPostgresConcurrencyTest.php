@@ -25,9 +25,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 use Tests\Support\InteractsWithCutoverGovernance;
-use Tests\TestCase;
+use Tests\Support\CutoverPostgresTestCase;
 
-class Milestone3iizgPostgresConcurrencyTest extends TestCase
+class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
 {
     use InteractsWithCutoverGovernance;
 
@@ -79,7 +79,7 @@ class Milestone3iizgPostgresConcurrencyTest extends TestCase
         foreach (['one', 'two'] as $name) {
             $payload = ['club_id' => $club->id, 'preparer_id' => $preparer->id, 'president_id' => $president->id, 'secretary_id' => $secretary->id, 'reference' => 'PG-BOOTSTRAP-'.strtoupper($name)];
             file_put_contents("$barrier/$name.json", json_encode($payload, JSON_THROW_ON_ERROR));
-            $processes[$name] = new Process([PHP_BINARY, $worker, "$barrier/$name.json", $barrier, $name], base_path(), timeout: 40);
+            $processes[$name] = new Process([PHP_BINARY, $worker, "$barrier/$name.json", $barrier, $name], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $club->code], timeout: 40);
             $processes[$name]->start();
         }
         $this->awaitFiles(["$barrier/one.ready", "$barrier/two.ready"]);

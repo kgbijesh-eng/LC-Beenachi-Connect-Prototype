@@ -13,12 +13,16 @@ use App\Models\ClubAccountingCutoverPermissionAssignment;
 use App\Models\ClubMembership;
 use App\Models\Permission;
 use App\Models\User;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Services\Finance\Exceptions\CutoverAuthorizationException;
-use Illuminate\Support\Facades\DB;
 
 final class ClubCutoverPackageBootstrapService
 {
-    public function __construct(private readonly ClubCutoverAuthorityResolver $authority) {}
+    public function __construct(
+        private readonly ClubCutoverAuthorityResolver $authority,
+        private readonly OrganisationTransactionGuard $organisations,
+    ) {}
 
     public function request(Club $club, User $preparer, int $packageVersion, string $reference, User $requester): ClubAccountingCutoverBootstrapOperation
     {
@@ -26,37 +30,40 @@ final class ClubCutoverPackageBootstrapService
         if ($packageVersion < 1 || ! preg_match('/\A[A-Z0-9][A-Z0-9._:-]{5,119}\z/', $reference)) {
             throw new CutoverAuthorizationException('The package bootstrap request is invalid.');
         }
-        $this->authority->governanceOfficerRoleForClub($club->id, $requester);
-        $this->assertPreparer($club->id, $preparer->id);
-        $permission = Permission::query()->where('slug', 'finance.cutover.package.prepare')->firstOrFail();
-        $binding = [
-            'club_id' => $club->id, 'package_version' => $packageVersion,
-            'lions_year' => ClubAccountingCutoverPackage::LIONS_YEAR,
-            'cutover_date' => ClubAccountingCutoverPackage::CUTOVER_DATE,
-            'chart_version' => ClubAccountingCutoverPackage::CHART_VERSION,
-            'preparer_user_id' => $preparer->id, 'permission_id' => $permission->id,
-        ];
-        $digest = hash('sha256', json_encode($binding, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
-        $existing = ClubAccountingCutoverBootstrapOperation::query()->where('operation_reference', $reference)->first();
-        if ($existing) {
-            if (! hash_equals($existing->request_digest, $digest)) {
-                throw new CutoverAuthorizationException('The bootstrap reference was reused with changed semantics.');
+
+        return $this->organisations->run($club, function () use ($club, $preparer, $packageVersion, $reference, $requester): ClubAccountingCutoverBootstrapOperation {
+            $this->authority->governanceOfficerRoleForClub($club->id, $requester);
+            $this->assertPreparer($club->id, $preparer->id);
+            $permission = Permission::query()->where('slug', 'finance.cutover.package.prepare')->firstOrFail();
+            $binding = [
+                'club_id' => $club->id, 'package_version' => $packageVersion,
+                'lions_year' => ClubAccountingCutoverPackage::LIONS_YEAR,
+                'cutover_date' => ClubAccountingCutoverPackage::CUTOVER_DATE,
+                'chart_version' => ClubAccountingCutoverPackage::CHART_VERSION,
+                'preparer_user_id' => $preparer->id, 'permission_id' => $permission->id,
+            ];
+            $digest = hash('sha256', json_encode($binding, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+            $existing = ClubAccountingCutoverBootstrapOperation::query()->where('operation_reference', $reference)->first();
+            if ($existing) {
+                if (! hash_equals($existing->request_digest, $digest)) {
+                    throw new CutoverAuthorizationException('The bootstrap reference was reused with changed semantics.');
+                }
+
+                return $existing;
             }
 
-            return $existing;
-        }
-
-        return ClubAccountingCutoverBootstrapOperation::create([...$binding, 'operation_reference' => $reference, 'request_digest' => $digest, 'status' => 'pending', 'requested_by_user_id' => $requester->id, 'requested_at' => now()]);
+            return ClubAccountingCutoverBootstrapOperation::create([...$binding, 'operation_reference' => $reference, 'request_digest' => $digest, 'status' => 'pending', 'requested_by_user_id' => $requester->id, 'requested_at' => now()]);
+        }, attempts: 1);
     }
 
     public function approve(ClubAccountingCutoverBootstrapOperation $operation, User $actor, string $approvalReference): ClubAccountingCutoverBootstrapOperation
     {
-        return DB::transaction(function () use ($operation, $actor, $approvalReference): ClubAccountingCutoverBootstrapOperation {
-            $operation = ClubAccountingCutoverBootstrapOperation::query()->whereKey($operation->id)->lockForUpdate()->firstOrFail();
+        return $this->organisations->run($operation->club_id, function (OrganisationTransactionContext $context) use ($operation, $actor, $approvalReference): ClubAccountingCutoverBootstrapOperation {
+            $operation = ClubAccountingCutoverBootstrapOperation::query()->whereKey($operation->id)
+                ->where('club_id', $context->organisationId)->lockForUpdate()->firstOrFail();
             if ($operation->status === 'applied') {
                 return $operation;
             }
-            Club::query()->whereKey($operation->club_id)->lockForUpdate()->firstOrFail();
             $role = $this->authority->governanceOfficerRoleForClub($operation->club_id, $actor);
             if ($operation->approvals()->where(fn ($query) => $query->where('approval_role', $role)->orWhere('approved_by_user_id', $actor->id))->exists()) {
                 throw new CutoverAuthorizationException('Each governance role and actor may approve bootstrap only once.');
@@ -72,7 +79,7 @@ final class ClubCutoverPackageBootstrapService
             }
 
             return $operation->fresh('approvals');
-        });
+        }, attempts: 1);
     }
 
     private function apply(ClubAccountingCutoverBootstrapOperation $operation): void

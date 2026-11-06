@@ -32,18 +32,17 @@ use App\Services\Finance\Exceptions\CutoverExecutionException;
 use App\Services\Finance\Exceptions\CutoverPackageException;
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\InteractsWithCutoverGovernance;
-use Tests\TestCase;
+use Tests\Support\CutoverPostgresTestCase;
 
-class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends TestCase
+class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends CutoverPostgresTestCase
 {
-    use InteractsWithCutoverGovernance, RefreshDatabase;
+    use InteractsWithCutoverGovernance;
 
     public function test_permissions_exist_but_no_generic_role_or_finance_manage_grants_cutover_authority(): void
     {
