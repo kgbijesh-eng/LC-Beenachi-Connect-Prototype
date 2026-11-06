@@ -8,6 +8,7 @@ use App\Models\Club;
 use App\Models\ClubMembership;
 use App\Models\Member;
 use App\Models\User;
+use App\Services\Access\InstanceOrganisation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -149,6 +150,7 @@ class AccountActivationService
 
     private function resolveEligibleTargetByUser(Club $club, int $userId, string $email, ?Member $expectedMember = null): array
     {
+        app(InstanceOrganisation::class)->assertClub($club);
         if (! $club->is_active) {
             throw new AccountActivationException('The target is not eligible.');
         }

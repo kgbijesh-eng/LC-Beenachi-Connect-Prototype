@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
+use App\Services\Access\InstanceOrganisation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,6 +23,11 @@ class AuthController extends Controller
             return response()->json([
                 'message' => 'Invalid login credentials.',
             ], 422);
+        }
+
+        $organisation = app(InstanceOrganisation::class)->resolve();
+        if (! $user->clubMemberships()->where('club_id', $organisation->id)->where('status', 'active')->whereHas('role')->exists()) {
+            return response()->json(['message' => 'This action is unauthorized.'], 403);
         }
 
         $token = $user->createToken('lc-beenachi-api-token')->plainTextToken;
@@ -47,11 +53,13 @@ class AuthController extends Controller
             ], 401);
         }
 
-        $user->load([
-            'clubMemberships.club',
-            'clubMemberships.role.permissions',
-            'members:id,club_id,user_id,member_code,full_name',
-        ]);
+        $organisation = app(InstanceOrganisation::class)->resolve();
+        $memberships = $user->clubMemberships()
+            ->where('club_id', $organisation->id)->where('status', 'active')
+            ->with(['club', 'role.permissions'])->get();
+        abort_unless($memberships->count() === 1 && $memberships->sole()->role, 403, 'This action is unauthorized.');
+        $user->load(['members' => fn ($query) => $query->where('club_id', $organisation->id)
+            ->select('id', 'club_id', 'user_id', 'member_code', 'full_name')]);
 
         return response()->json([
             'user' => [
@@ -59,7 +67,8 @@ class AuthController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
             ],
-            'club_memberships' => $user->clubMemberships->map(function ($membership) use ($user): array {
+            'instance_organisation' => ['id' => $organisation->id, 'code' => $organisation->code, 'name' => $organisation->name],
+            'club_memberships' => $memberships->map(function ($membership) use ($user): array {
                 $clubId = $membership->club_id;
 
                 $clubMembers = $user->members->filter(function ($member) use ($user, $clubId) {

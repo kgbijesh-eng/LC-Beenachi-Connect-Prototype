@@ -149,18 +149,6 @@ type ClubProjectsMeta = { current_page: number; last_page: number; total: number
 type PaymentRecordingStatus = "initializing" | "ready" | "submitting" | "success" | "error";
 type PaymentRecordingMode = "cash" | "bank_transfer" | "upi" | "cheque" | "card" | "adjustment";
 
-type BackendClubMembership = {
-  club_id?: number;
-  club?: {
-    id?: number;
-  };
-  member: {
-    id: number;
-    member_code: string;
-    full_name: string;
-  } | null;
-};
-
 type BackendAuthenticatedUser = {
   id?: number;
 };
@@ -1711,17 +1699,12 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
         if (!session) throw new Error("No verified session is available.");
         const token = session.token;
         const authHeaders = { Accept: "application/json", Authorization: "Bearer " + token };
-        const mePayload = { user: session.user, club_memberships: [session.membership] };
-        const authenticatedUser = mePayload.user as BackendAuthenticatedUser | undefined;
+        const authenticatedUser = session.user as BackendAuthenticatedUser | undefined;
         const authenticatedId = authenticatedUser?.id;
-        const memberships = mePayload.club_memberships as BackendClubMembership[] | undefined;
-        const clubId = memberships?.[0]?.club?.id;
+        const clubId = session.organisation.id;
         if (typeof clubId !== "number") throw new Error("No active club context is available.");
 
-        const activeMembership = (memberships || []).find(
-          (membership) =>
-            Number(membership.club_id ?? membership.club?.id) === Number(clubId)
-        );
+        const activeMembership = session.membership;
 
         const linkedMemberInfo = activeMembership?.member ?? null;
 

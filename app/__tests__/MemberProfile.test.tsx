@@ -7,6 +7,7 @@ const authState = vi.hoisted(() => ({
   identity: "ranjith-treasurer",
   member: { id: 35, member_code: "26766860", full_name: "Ranjith MR" },
   session: {
+    organisation: { id: 1, code: "LCB", name: "LC Beenachi" },
     identity: "ranjith-treasurer",
     role: "treasurer" as "president" | "secretary" | "treasurer" | "member",
     token: "frontend-test-token",

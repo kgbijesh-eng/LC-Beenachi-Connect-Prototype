@@ -2,6 +2,8 @@
 
 use App\Console\Commands\IssueAccountActivation;
 use App\Http\Middleware\EnsureClubPermission;
+use App\Http\Middleware\EnsureInstanceOrganisation;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -18,6 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
         IssueAccountActivation::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->api(prepend: [EnsureInstanceOrganisation::class]);
+        $middleware->prependToPriorityList(SubstituteBindings::class, EnsureInstanceOrganisation::class);
         $middleware->alias([
             'club.permission' => EnsureClubPermission::class,
         ]);

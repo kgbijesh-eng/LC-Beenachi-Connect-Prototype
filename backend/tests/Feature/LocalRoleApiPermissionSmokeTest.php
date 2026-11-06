@@ -157,6 +157,7 @@ class LocalRoleApiPermissionSmokeTest extends TestCase
      */
     private function seedClubMemberAndLogin(string $email): array
     {
+        config(['instance.organisation_code' => 'LCB']);
         $this->seed(DatabaseSeeder::class);
 
         $club = Club::where('code', 'LCB')->firstOrFail();
