@@ -153,10 +153,11 @@ presence and application-role privileges. No database was dropped.
 | Canonical receipt/statement regression | 35 | 35 | 0 | 0 | 0 | 334 |
 | Canonical genuine statement snapshot concurrency | 1 | 1 | 0 | 0 | 0 | 11 |
 | Additional opening/authority concurrency | 7 | 7 | 0 | 0 | 0 | 219 |
-| Additional charge/payment integration concurrency | 4 | 4 | 0 | 0 | 0 | — |
-| Additional expense/replay concurrency | 3 | 3 | 0 | 0 | 0 | — |
-| Additional transfer/replay concurrency | 2 | 2 | 0 | 0 | 0 | — |
-| Additional ordinary receipt concurrency | 1 | 1 | 0 | 0 | 0 | — |
+| Additional charge/payment integration concurrency | 4 | 4 | 0 | 0 | 0 | 61 |
+| Additional expense/replay concurrency | 3 | 3 | 0 | 0 | 0 | 46 |
+| Additional transfer/replay concurrency | 2 | 2 | 0 | 0 | 0 | 26 |
+| Additional ordinary receipt concurrency | 1 | 1 | 0 | 0 | 0 | 28 |
+| Final expense-reversal concurrency, fresh isolated cluster | 1 | 1 | 0 | 0 | 0 | 27 |
 
 The canonical verifier exited 0: 94 PHP tests, 1,165 assertions, zero
 failures/errors/skips. Additional completed PostgreSQL lanes total 17 passed with
@@ -206,19 +207,21 @@ failures were caused by the uncommitted worktree diff, without changing an asser
 
 The [complete per-file matrix](p0-2a-backend-test-matrix.md) retains every raw
 outcome and selects the correct PostgreSQL or clean-commit lane for each file.
-Reconciled coverage is **2,143 passing cases and one BLOCKED case**; there are no
-remaining application failures/errors or unexecuted skip cases in that
-reconciliation. This is not a single all-green invocation and does not count the
-blocked expense-reversal lane as passed.
+Final reconciled coverage is **2,144 unique passing cases, 27,863 assertions,
+zero failures/errors/skips and zero blocked cases**. This comprises 2,129
+pre-existing historical cases and 15 new P0.2A cases. It is a reconciliation of
+selected executions, not a single all-green invocation or a sum of overlapping
+groups. The final isolated-cluster verification below resolves the initial block.
 
-### Remaining blocked historical lane
+### Initial blocked historical lane
 
 `Milestone3iizwPostgresExpenseReversalConcurrencyTest` could not run in its required
 PostgreSQL lane: `lcb_3iizw_expense_reversal_concurrency_test` already exists with an
 owner different from the non-elevated application role. The runner rejected it
 before migration/testing. No ownership or role privileges were changed, and no
-test was bypassed. This is one **BLOCKED** historical concurrency case, not a pass
-or a PHPUnit skip. The raw SQLite failure is retained above.
+test was bypassed. It was correctly recorded as **BLOCKED** at commit
+`9228c21ebe8987acee1d08b8e08db77803b260aa`. The raw SQLite failure is retained above;
+the isolated-cluster execution below supplies the subsequent passing evidence.
 
 Completed additional lanes used these exact disposable targets:
 
@@ -278,15 +281,95 @@ Initial sandboxed PHP execution could not read `vendor/autoload.php`. The same
 focused suites were rerun outside that filesystem restriction with explicit
 in-memory settings. No assertions were changed to work around the restriction.
 
+## Final PostgreSQL verification of PR #26
+
+Reviewed implementation: `9228c21ebe8987acee1d08b8e08db77803b260aa`, on 6 November
+2026. The only follow-up changes are these two validation documentation files.
+The PR still contains only the middleware, new access service, new security test
+and two supporting documents. Application, finance, test/worker, schema,
+configuration, route and bootstrap sources are unchanged from that reviewed head.
+
+Read-only catalog inspection on the original server (`127.0.0.1:5432`, PostgreSQL
+17.5) established the precise mismatch: the named disposable database belongs to
+`postgres`, while the expected application role is `lc_beenachi_app`. Its
+CREATEDB, SUPERUSER, CREATEROLE, REPLICATION and BYPASSRLS flags are all false.
+No existing ownership, privileges or contents were changed. Catalog queries used
+the maintenance database with read-only session settings; no protected database
+was connected to. Original before/after owner, ACL and role snapshots matched.
+
+A separate PostgreSQL 17.5 cluster was initialized in a unique temporary directory,
+using generated credentials unrelated to the original server. Its server identity
+was verified as:
+
+- System identifier: `7705005952497150312`.
+- Loopback listener: `127.0.0.1:55492`.
+- Data directory: `%TEMP%/lc-p02a-finalpg-5c13f1e24b9a446bbc2c8232485c3c40/data`.
+- Exact test database: `lcb_3iizw_expense_reversal_concurrency_test`.
+- Owner and test/worker login: `lc_beenachi_app`, with all five elevated flags false,
+  `NOINHERIT` and no role memberships.
+- Fresh database inventory: only that test database, `postgres`, `template0` and
+  `template1`. Both protected database names were absent from this cluster.
+
+These identity, ownership, role and protected-name checks passed before migration,
+immediately before test execution and after the test. New-schema migrations and
+the unchanged test ran only as the non-elevated application role. The original
+test exercised its three concurrent reversal scenarios and all assertions:
+**one test passed, 27 assertions, zero failures/errors/skips**, exit 0.
+
+The original test and concurrency worker SHA-256 hashes were identical before and
+after execution:
+
+```text
+test:   81A118ABA5B0298643D5DF25AC8FE53D2D0CD6A26D191389914CFF1A24DD10B0
+worker: 16458732778C785DBF8356EF41A6A3D5079A669C9AD0F548346DDF0CA0DC8BAF
+```
+
+The fresh cluster was stopped successfully, exit 0, and retained for inspection;
+generated plaintext credential files were removed. Two earlier temporary harness
+attempts stopped before any test: Windows startup-handle behavior and an IP text
+format comparison (`127.0.0.1/32` versus `host(inet_server_addr())`). Both clusters
+were stopped. No safety guard or test assertion was removed to obtain the pass.
+
+An evidence audit detected a prior temporary JUnit filename collision between
+Feature/ExampleTest and Unit/ExampleTest. The Feature example was replayed on
+SQLite `:memory:` (one test, one assertion, passed) to retain its distinct case
+identity. The per-file matrix now identifies files and namespaces independently.
+Selected case identities were checked for duplicates: exactly 2,144 unique cases.
+
+| Retained execution phase | Executions | Passed | Failed | Errors | Skipped | Assertions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Primary SQLite per-file matrix | 2,144 | 2,096 | 27 | 9 | 12 | 26,848 |
+| Baseline middleware control | 103 | 67 | 27 | 9 | 0 | 1,383 |
+| Clean-commit scope rerun | 85 | 85 | 0 | 0 | 0 | 1,615 |
+| Canonical finance verifier | 94 | 94 | 0 | 0 | 0 | 1,165 |
+| Additional completed PostgreSQL lanes | 17 | 17 | 0 | 0 | 0 | 380 |
+| Initial focused security | 28 | 28 | 0 | 0 | 0 | 1,022 |
+| Initial supporting security | 79 | 79 | 0 | 0 | 0 | 1,461 |
+| Final supporting security | 80 | 80 | 0 | 0 | 0 | 1,471 |
+| Feature example audit replay | 1 | 1 | 0 | 0 | 0 | 1 |
+| Final isolated expense-reversal concurrency | 1 | 1 | 0 | 0 | 0 | 27 |
+| **All retained backend executions, including controls/retries** | **2,632** | **2,548** | **54** | **18** | **12** | **35,373** |
+| **Selected unique-case reconciliation** | **2,144** | **2,144** | **0** | **0** | **0** | **27,863** |
+
+The aggregate execution row deliberately preserves failed/errored controls and
+SQLite-only skips. It is not a release-pass count. The selected row chooses one
+correct-environment execution per case; these rows must not be added together.
+Startup/safety checks that never entered PHPUnit contribute zero test executions.
+
+Final local evidence: `%TEMP%/lc-p02a-finalpg-5c13f1e24b9a446bbc2c8232485c3c40/`
+contains `evidence.json`, `reversal.xml`, test/migration/start/stop logs;
+`%TEMP%/lc-p02a-final-reconciliation.json` contains every selected file, case counts,
+assertions and source lane. The temporary verification and reconciliation runners
+are `%TEMP%/lc-p02a-final-postgres.ps1` and `lc-p02a-reconcile.py`. No credentials
+are included in documentation or retained JSON evidence.
+
 ## GO / NO-GO
 
-**GO for review of the narrow P0.2A HTTP implementation:** focused security and
-canonical finance gates pass; no new application failure was identified by the
-historical middleware control. Keep the PR draft pending user review and separate
-merge approval.
+**Pre-merge GO for the narrow P0.2A HTTP implementation:** focused security,
+canonical finance, all historical concurrency lanes and the selected complete
+backend reconciliation pass. No implementation expansion is needed. Keep the PR
+draft pending user review and separate explicit merge approval.
 
-**NO-GO for claiming full historical PostgreSQL completion, full suspension
-safety, pilot deployment or finance cutover.** The expense-reversal concurrency
-lane remains blocked by ownership verification, and all deferred P0.2B–D risks
-above remain. No operator lifecycle, credential revocation or transaction-level
-suspension guarantee is supplied by this PR.
+**NO-GO for full suspension safety, pilot deployment or finance cutover.** All
+deferred P0.2B–D risks above remain. No operator lifecycle, credential revocation
+or transaction-level suspension guarantee is supplied by this PR.
