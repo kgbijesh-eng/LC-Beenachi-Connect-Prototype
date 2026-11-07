@@ -142,7 +142,7 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         $processes = [];
         foreach ($payloads as $name => $payload) {
             file_put_contents("$barrier/$name.json", json_encode($payload, JSON_THROW_ON_ERROR));
-            $processes[$name] = new Process([PHP_BINARY, $worker, "$barrier/$name.json", $barrier, $name], base_path(), timeout: 40);
+            $processes[$name] = new Process([PHP_BINARY, $worker, "$barrier/$name.json", $barrier, $name], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $club->code], timeout: 40);
         }
         $processes['revocation']->start();
         $this->awaitFiles(["$barrier/revocation.locked"]);
@@ -217,6 +217,106 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         }
     }
 
+    public function test_forced_mixed_order_cycle_must_preserve_activation_winner_without_deadlock(): void
+    {
+        $this->requireExplicitPostgres();
+        $this->seed(DefaultRolesAndPermissionsSeeder::class);
+        $fixture = $this->authorizedFixture('revoke-activation-wins', 1);
+        $appointment = $fixture['package']->authorityAppointments()->where('authority_type', 'technical_operator')->firstOrFail();
+        $barrier = sys_get_temp_dir().DIRECTORY_SEPARATOR.'p02b2-c-forced-cycle-'.Str::lower(Str::random(8));
+        mkdir($barrier, 0700, true);
+        $request = [$fixture['club']->id, $fixture['package']->id, $fixture['package']->lock_version, $fixture['package']->canonical_checksum, 'C-FORCED-EXECUTION', (string) Str::uuid(), $fixture['operator']->id];
+        $payloads = [
+            'activation' => ['mode'=>'activate','package_id'=>$fixture['package']->id,'request'=>$request,'hold'=>true],
+            'revocation' => ['mode'=>'revoke','package_id'=>$fixture['package']->id,'target_kind'=>'appointment','target_id'=>$appointment->id,'actor_id'=>$fixture['operator']->id,'reference'=>'C-FORCED-REVOCATION','hold'=>true],
+        ];
+        $processes = [];
+        foreach ($payloads as $name => $payload) {
+            file_put_contents("$barrier/$name.json", json_encode($payload, JSON_THROW_ON_ERROR));
+            $processes[$name] = new Process([PHP_BINARY, base_path('tests/Support/Milestone3iizsPostgresRevocationRaceWorker.php'), "$barrier/$name.json", $barrier, $name], base_path(), env: ['INSTANCE_ORGANISATION_CODE'=>$fixture['club']->code], timeout:40);
+        }
+        try {
+            // Same public roots and winner assertions as the recorded 40P01 gate.
+            // Before E2: opening owns package, revocation owns club. After E2: opening owns both.
+            $processes['activation']->start(); $this->awaitFiles(["$barrier/activation.locked"]);
+            $processes['revocation']->start(); $this->awaitFiles(["$barrier/revocation.started"]);
+            file_put_contents("$barrier/revocation.release", '1');
+            $deadline = microtime(true)+15; $waiting=0;
+            do {
+                DB::select('SELECT pg_stat_clear_snapshot()');
+                $waiting=(int)DB::selectOne("SELECT count(*) AS waiting FROM pg_stat_activity WHERE datname=current_database() AND application_name='p02b2-mixed-revocation' AND wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid))>0")->waiting;
+                if ($waiting>0) { break; } usleep(5_000);
+            } while (microtime(true)<$deadline);
+            $this->assertGreaterThan(0,$waiting,'Revocation must really wait for the opening-owned lock; no timeout is accepted.');
+            file_put_contents("$barrier/activation.release", '1');
+            foreach ($processes as $process) { $process->wait(); }
+            $activation=json_decode(file_get_contents("$barrier/activation.result.json"),true);
+            $revocation=json_decode(file_get_contents("$barrier/revocation.result.json"),true);
+            $evidence=[
+                'activation'=>$activation,'revocation'=>$revocation,
+                'package_status'=>$fixture['package']->fresh()->status,
+                'journals'=>ClubJournalEntry::where('club_id',$fixture['club']->id)->where('source_type','accounting_opening_package')->count(),
+                'successes'=>ClubAccountingCutoverExecutionSuccess::where('cutover_package_id',$fixture['package']->id)->count(),
+                'consumptions'=>ClubAccountingCutoverAuthorityConsumption::where('cutover_package_id',$fixture['package']->id)->count(),
+                'revocations'=>$appointment->events()->where('event_reference','C-FORCED-REVOCATION')->count(),
+            ];
+            file_put_contents("$barrier/reconciliation.json",json_encode($evidence,JSON_THROW_ON_ERROR));
+            fwrite(STDOUT,"\nC_FORCED_CYCLE_EVIDENCE ".json_encode($evidence,JSON_THROW_ON_ERROR)."\n");
+            // This is a safety gate, not a test that celebrates reproducing a deadlock.
+            $codes=array_merge($activation['cause_codes']??[],$revocation['cause_codes']??[]);
+            $this->assertNotContains('40P01',$codes,'Mixed-order deadlock requires separately approved opening changes.');
+            $this->assertNotContains('55P03', $codes, 'A lock timeout cannot masquerade as a governance rejection.');
+            $this->assertNotContains('57014', $codes, 'Statement cancellation cannot masquerade as a governance rejection.');
+            $this->assertSame('activated',$activation['outcome']);
+            $this->assertSame('rejected',$revocation['outcome']);
+            $this->assertSame(0,$evidence['revocations']);
+            $this->assertSame(1,$evidence['journals']);
+            $this->assertSame(1,$evidence['successes']);
+            $this->assertSame(1,$evidence['consumptions']);
+        } finally {
+            foreach ($processes as $name=>$process) { file_put_contents("$barrier/$name.release",'1'); if($process->isRunning()){$process->stop();} }
+        }
+    }
+
+    public static function additionalRaces(): array
+    {
+        return [['appointment', 'revocation'], ['permission', 'activation'], ['decision', 'activation'], ['decision', 'revocation'], ['suspension', 'activation'], ['suspension', 'revocation']];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('additionalRaces')]
+    public function test_remaining_revocation_and_suspension_winner_orders(string $kind, string $winner): void
+    {
+        $this->requireExplicitPostgres(); $this->seed(DefaultRolesAndPermissionsSeeder::class);
+        $f = $this->authorizedFixture('revoke-activation-wins', 1);
+        $target = match ($kind) {
+            'appointment' => $f['package']->authorityAppointments()->where('authority_type', 'technical_operator')->firstOrFail(),
+            'permission' => $f['package']->permissionAssignments()->where('user_id', $f['operator']->id)->whereHas('permission', fn ($q) => $q->where('slug', 'finance.cutover.package.execute'))->firstOrFail(),
+            'decision' => $f['package']->decisions()->where('decision_stage', 'activation')->where('actor_authority', 'independent_ca')->firstOrFail(),
+            default => $f['club'],
+        };
+        $actor = $kind === 'decision' ? $f['ca']->id : $f['operator']->id;
+        [$first, $second] = $this->raceActivationAndRevocation($f, $winner, $kind, $target->id, $actor, 'E2-RACE');
+        $activation = $winner === 'activation' ? $first : $second;
+        $other = $winner === 'activation' ? $second : $first;
+        foreach ([$first, $second] as $result) {
+            $this->assertNotContains('40P01', $result['cause_codes'] ?? []);
+            $this->assertNotContains('55P03', $result['cause_codes'] ?? []);
+            $this->assertNotContains('57014', $result['cause_codes'] ?? []);
+        }
+        $posted = $winner === 'activation';
+        $this->assertSame($posted ? 'activated' : 'rejected', $activation['outcome']);
+        // Historical lifecycle permits append-only decision revocation after posting;
+        // it cannot undo the consumed decision or immutable journal. No new rule here.
+        $this->assertSame($kind === 'suspension' ? 'suspended' : (($posted && $kind !== 'decision') ? 'rejected' : 'revoked'), $other['outcome']);
+        $this->assertSame($posted ? 1 : 0, ClubJournalEntry::where('club_id', $f['club']->id)->count());
+        $this->assertSame($posted ? 1 : 0, ClubAccountingCutoverExecutionSuccess::where('club_id', $f['club']->id)->count());
+        $this->assertSame($posted ? 1 : 0, ClubAccountingCutoverAuthorityConsumption::where('club_id', $f['club']->id)->count());
+        if ($kind === 'decision') {
+            $this->assertSame(1, $target->events()->where('event_reference', 'E2-RACE')->count());
+            if ($posted) { $this->assertSame($target->id, ClubAccountingCutoverAuthorityConsumption::first()->ca_activation_decision_id); }
+        }
+    }
+
     private function raceDirectDecisionInserts(int $packageId, array $first, array $second): array
     {
         $barrier = sys_get_temp_dir().DIRECTORY_SEPARATOR.'3iizg-pg-decision-'.Str::lower(Str::random(8));
@@ -271,24 +371,37 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         $request = [$fixture['club']->id, $fixture['package']->id, $fixture['package']->lock_version, $fixture['package']->canonical_checksum, 'EXEC-'.$reference, (string) Str::uuid(), $fixture['operator']->id];
         $payloads = [
             'activation' => ['mode' => 'activate', 'package_id' => $fixture['package']->id, 'request' => $request],
-            'revocation' => ['mode' => 'revoke', 'package_id' => $fixture['package']->id, 'target_kind' => $targetKind, 'target_id' => $targetId, 'actor_id' => $actorId, 'reference' => $reference],
+            'revocation' => ['mode' => $targetKind === 'suspension' ? 'suspend' : 'revoke', 'club_id' => $fixture['club']->id, 'package_id' => $fixture['package']->id, 'target_kind' => $targetKind, 'target_id' => $targetId, 'actor_id' => $actorId, 'reference' => $reference],
         ];
         $worker = base_path('tests/Support/Milestone3iizsPostgresRevocationRaceWorker.php');
         $processes = [];
         foreach ($payloads as $name => $payload) {
             file_put_contents("$barrier/$name.json", json_encode([...$payload, 'hold' => $name === $winner], JSON_THROW_ON_ERROR));
-            $processes[$name] = new Process([PHP_BINARY, $worker, "$barrier/$name.json", $barrier, $name], base_path(), timeout: 40);
+            $processes[$name] = new Process([PHP_BINARY, $worker, "$barrier/$name.json", $barrier, $name], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $fixture['club']->code], timeout: 40);
         }
         $processes[$winner]->start();
         $this->awaitFiles(["$barrier/$winner.locked"]);
         $loser = $winner === 'activation' ? 'revocation' : 'activation';
         $processes[$loser]->start();
-        usleep(100_000);
+        $this->awaitFiles(["$barrier/$loser.started"]);
+        $this->awaitWorkerLockWait('p02b2-mixed-'.$loser);
         file_put_contents("$barrier/$winner.release", '1');
         $processes[$winner]->wait();
         $processes[$loser]->wait();
 
-        return [json_decode(file_get_contents("$barrier/$winner.result.json"), true), json_decode(file_get_contents("$barrier/$loser.result.json"), true)];
+        $results = [json_decode(file_get_contents("$barrier/$winner.result.json"), true), json_decode(file_get_contents("$barrier/$loser.result.json"), true)];
+        // Record reconciliation even when the unchanged winner assertion fails.
+        $evidence = [
+            'requested_first' => $winner, 'results' => $results,
+            'package_status' => $fixture['package']->fresh()->status,
+            'journals' => ClubJournalEntry::where('club_id', $fixture['club']->id)->where('source_type', 'accounting_opening_package')->count(),
+            'successes' => ClubAccountingCutoverExecutionSuccess::where('cutover_package_id', $fixture['package']->id)->count(),
+            'consumptions' => ClubAccountingCutoverAuthorityConsumption::where('cutover_package_id', $fixture['package']->id)->count(),
+            'revocation_events' => DB::table($targetKind === 'appointment' ? 'club_accounting_cutover_authority_events' : ($targetKind === 'decision' ? 'club_accounting_cutover_decision_events' : 'club_accounting_cutover_permission_events'))->where('cutover_package_id', $fixture['package']->id)->where('event_reference', $reference)->count(),
+        ];
+        file_put_contents("$barrier/reconciliation.json", json_encode($evidence, JSON_THROW_ON_ERROR));
+        fwrite(STDOUT, "\nC_MIXED_EVIDENCE ".json_encode($evidence, JSON_THROW_ON_ERROR)."\n");
+        return $results;
     }
 
     private function runIteration(string $scenario, int $iteration): array
@@ -306,8 +419,8 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         file_put_contents($barrier.DIRECTORY_SEPARATOR.'one.request.json', json_encode($request, JSON_THROW_ON_ERROR));
         file_put_contents($barrier.DIRECTORY_SEPARATOR.'two.request.json', json_encode($second, JSON_THROW_ON_ERROR));
         $worker = base_path('tests/Support/Milestone3iizgPostgresConcurrencyWorker.php');
-        $one = new Process([PHP_BINARY, $worker, $barrier.DIRECTORY_SEPARATOR.'one.request.json', $barrier, 'one'], base_path(), timeout: 40);
-        $two = new Process([PHP_BINARY, $worker, $barrier.DIRECTORY_SEPARATOR.'two.request.json', $barrier, 'two'], base_path(), timeout: 40);
+        $one = new Process([PHP_BINARY, $worker, $barrier.DIRECTORY_SEPARATOR.'one.request.json', $barrier, 'one'], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $fixture['club']->code], timeout: 40);
+        $two = new Process([PHP_BINARY, $worker, $barrier.DIRECTORY_SEPARATOR.'two.request.json', $barrier, 'two'], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $fixture['club']->code], timeout: 40);
 
         DB::beginTransaction();
         DB::select('select id from club_accounting_cutover_packages where id = ? for no key update', [$fixture['package']->id]);
@@ -318,7 +431,8 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
             file_put_contents($barrier.DIRECTORY_SEPARATOR.'one.release', 'release');
             $this->awaitAttemptCount($fixture['package']->id, 1);
             file_put_contents($barrier.DIRECTORY_SEPARATOR.'two.release', 'release');
-            $this->awaitAttemptCount($fixture['package']->id, 2);
+            $this->awaitFiles([$barrier.DIRECTORY_SEPARATOR.'two.started']);
+            $this->awaitWorkerLockWait('p02b2-opening-two');
             $releasedAt = hrtime(true);
             DB::commit();
         } catch (\Throwable $exception) {
@@ -335,6 +449,7 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         $this->assertTrue(collect($results)->every(fn (array $result): bool => $result['started_at_ns'] < $releasedAt), 'Both independent workers must enter activation before the package lock is released.');
         $this->assertTrue(max(array_column($results, 'started_at_ns')) < min(array_column($results, 'finished_at_ns')), 'Worker execution intervals must overlap.');
 
+        $this->awaitAttemptCount($fixture['package']->id, 2);
         $package = $fixture['package']->fresh();
         $journal = ClubJournalEntry::query()->with('lines')->findOrFail($package->opening_journal_entry_id);
         $this->assertSame(ClubAccountingCutoverPackage::STATUS_POSTED, $package->status);
@@ -346,6 +461,19 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         $notPostedConflicts = DB::table('club_accounting_cutover_execution_events')->where('cutover_package_id', $package->id)->where('event_type', 'execution_conflict')->where('result', 'not_posted')->count();
 
         return ['outcomes' => collect($results)->pluck('outcome')->sort()->values()->all(), 'terminal_events' => $terminal, 'not_posted_conflicts' => $notPostedConflicts, 'released_at_ns' => $releasedAt, 'workers' => $results, 'journal_id' => $journal->id];
+    }
+
+    private function awaitWorkerLockWait(string $application): void
+    {
+        $deadline = microtime(true) + 20;
+        do {
+            DB::select('SELECT pg_stat_clear_snapshot()');
+            if ((int) DB::selectOne("SELECT count(*) AS n FROM pg_stat_activity WHERE application_name=? AND wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid))>0", [$application])->n > 0) {
+                return;
+            }
+            usleep(5_000);
+        } while (microtime(true) < $deadline);
+        $this->fail('Worker must be observed waiting on a real PostgreSQL lock.');
     }
 
     private function awaitFiles(array $files): void

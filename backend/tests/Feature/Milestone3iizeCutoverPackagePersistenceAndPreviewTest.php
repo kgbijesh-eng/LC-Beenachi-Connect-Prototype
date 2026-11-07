@@ -214,7 +214,13 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends CutoverPostg
         $fixture = $this->fixture();
         $package = $this->authorizedDraft($fixture);
         $this->assertCutoverFailure(fn () => $this->service()->replaceSchedules($fixture['club']->id, $package->id, $fixture['actor']->id, 99, $this->rows($fixture)));
-        $this->assertCutoverFailure(fn () => $this->service()->replaceSchedules($fixture['otherClub']->id, $package->id, $fixture['actor']->id, 1, $this->rows($fixture)));
+        try {
+            $this->service()->replaceSchedules($fixture['otherClub']->id, $package->id, $fixture['actor']->id, 1, $this->rows($fixture));
+            $this->fail('The authoritative foreign-organisation boundary must reject.');
+        } catch (\App\Services\Access\OrganisationAccessRejected $exception) {
+            $this->assertSame('ORGANISATION_FOREIGN', $exception->reason);
+            $this->assertSame(404, $exception->status);
+        }
         $this->assertSame(0, $package->scheduleRows()->count());
     }
 

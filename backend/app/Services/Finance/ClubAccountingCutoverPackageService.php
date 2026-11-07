@@ -15,15 +15,19 @@ use App\Models\ClubAccountingCutoverScheduleRow;
 use App\Models\ClubJournalEntry;
 use App\Models\LedgerAccount;
 use App\Models\User;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Services\Finance\Exceptions\CutoverPackageException;
 use DateTimeImmutable;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use JsonException;
 
 final class ClubAccountingCutoverPackageService
 {
-    public function __construct(private readonly ClubCutoverAuthorityResolver $authority) {}
+    public function __construct(
+        private readonly ClubCutoverAuthorityResolver $authority,
+        private readonly OrganisationTransactionGuard $organisations,
+    ) {}
 
     public const PREVIEW_CONTRACT = 'OPENING-JOURNAL-PREVIEW-2026-01';
 
@@ -53,9 +57,8 @@ final class ClubAccountingCutoverPackageService
 
     public function replaceSchedules(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, array $rows): ClubAccountingCutoverPackage
     {
-        $normalized = $this->normalizeScheduleRows($clubId, $rows);
-
-        return $this->mutate($clubId, $packageId, $actorUserId, $expectedLockVersion, 'schedules changed', function (ClubAccountingCutoverPackage $package) use ($normalized): void {
+        return $this->mutate($clubId, $packageId, $actorUserId, $expectedLockVersion, 'schedules changed', function (ClubAccountingCutoverPackage $package) use ($rows): void {
+            $normalized = $this->normalizeScheduleRows($package->club_id, $rows);
             $package->scheduleRows()->delete();
             foreach ($normalized as $row) {
                 $package->scheduleRows()->create(['club_id' => $package->club_id, ...$row]);
@@ -148,8 +151,8 @@ final class ClubAccountingCutoverPackageService
 
     public function refreshValidation(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion): ClubAccountingCutoverPackage
     {
-        return DB::transaction(function () use ($clubId, $packageId, $actorUserId, $expectedLockVersion): ClubAccountingCutoverPackage {
-            $package = $this->lockPackage($clubId, $packageId, $expectedLockVersion);
+        return $this->organisations->run($clubId, function (OrganisationTransactionContext $context) use ($packageId, $actorUserId, $expectedLockVersion): ClubAccountingCutoverPackage {
+            $package = $this->lockPackage($context->organisationId, $packageId, $expectedLockVersion);
             $actor = User::query()->find($actorUserId);
             if (! $actor) {
                 throw new CutoverPackageException('The validation request violates club scope.');
@@ -170,7 +173,7 @@ final class ClubAccountingCutoverPackageService
             $this->audit($package, $actorUserId, 'finance.cutover_package.validated', ['valid' => $validation['valid'], 'checksum' => $checksum]);
 
             return $this->loadCanonical($package->fresh());
-        });
+        }, attempts: 1);
     }
 
     public function checksum(ClubAccountingCutoverPackage $package): string
@@ -296,8 +299,8 @@ final class ClubAccountingCutoverPackageService
 
     private function mutate(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, string $reason, callable $mutation): ClubAccountingCutoverPackage
     {
-        return DB::transaction(function () use ($clubId, $packageId, $actorUserId, $expectedLockVersion, $reason, $mutation): ClubAccountingCutoverPackage {
-            $package = $this->lockPackage($clubId, $packageId, $expectedLockVersion);
+        return $this->organisations->run($clubId, function (OrganisationTransactionContext $context) use ($packageId, $actorUserId, $expectedLockVersion, $reason, $mutation): ClubAccountingCutoverPackage {
+            $package = $this->lockPackage($context->organisationId, $packageId, $expectedLockVersion);
             $actor = User::query()->find($actorUserId);
             if (! $actor) {
                 throw new CutoverPackageException('The package authoring request violates club scope.');
@@ -320,7 +323,7 @@ final class ClubAccountingCutoverPackageService
             $this->audit($package, $actorUserId, 'finance.cutover_package.accounting_content_changed', ['reason' => $reason, 'lock_version' => $package->lock_version]);
 
             return $this->loadCanonical($package->fresh());
-        });
+        }, attempts: 1);
     }
 
     private function normalizeScheduleRows(int $clubId, array $rows): array
@@ -402,7 +405,7 @@ final class ClubAccountingCutoverPackageService
 
     private function lockPackage(int $clubId, int $packageId, int $expectedLockVersion): ClubAccountingCutoverPackage
     {
-        $package = ClubAccountingCutoverPackage::query()->whereKey($packageId)->lockForUpdate()->first();
+        $package = ClubAccountingCutoverPackage::query()->whereKey($packageId)->where('club_id', $clubId)->lockForUpdate()->first();
         if (! $package || $package->club_id !== $clubId) {
             throw new CutoverPackageException('The cutover package violates club scope.');
         }

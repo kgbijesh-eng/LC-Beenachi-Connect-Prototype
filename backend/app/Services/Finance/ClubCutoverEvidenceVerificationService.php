@@ -8,12 +8,14 @@ use App\Models\ClubAccountingCutoverEvidenceReference;
 use App\Models\ClubAccountingCutoverEvidenceVerification;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\User;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Services\Finance\Exceptions\CutoverAuthorizationException;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 final class ClubCutoverEvidenceVerificationService
 {
-    public function __construct(private readonly ClubCutoverAuthorityResolver $authority) {}
+    public function __construct(private readonly ClubCutoverAuthorityResolver $authority, private readonly OrganisationTransactionGuard $organisations) {}
 
     public function decide(ClubAccountingCutoverPackage $package, ClubAccountingCutoverEvidenceReference $evidence, User $actor, string $result, string $reference, ?string $safeNote, int $expectedLockVersion): ClubAccountingCutoverEvidenceVerification
     {
@@ -21,8 +23,8 @@ final class ClubCutoverEvidenceVerificationService
             throw new CutoverAuthorizationException('The evidence verification request is invalid.');
         }
 
-        return DB::transaction(function () use ($package, $evidence, $actor, $result, $reference, $safeNote, $expectedLockVersion) {
-            $locked = ClubAccountingCutoverPackage::whereKey($package->id)->lockForUpdate()->firstOrFail();
+        return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $evidence, $actor, $result, $reference, $safeNote, $expectedLockVersion) {
+            $locked = ClubAccountingCutoverPackage::whereKey($package->id)->where('club_id', $context->organisationId)->lockForUpdate()->firstOrFail();
             $lockedEvidence = ClubAccountingCutoverEvidenceReference::query()->whereKey($evidence->id)
                 ->where('club_id', $locked->club_id)->where('cutover_package_id', $locked->id)->first();
             if (! $lockedEvidence || $locked->club_id !== $package->club_id || $locked->package_version !== $package->package_version) {
@@ -31,7 +33,7 @@ final class ClubCutoverEvidenceVerificationService
             $this->authority->activeMember($locked, $actor, 'secretary');
             $this->authority->permission($locked, $actor, 'finance.cutover.package.verify');
             $bindingDigest = self::bindingDigest($lockedEvidence);
-            $existing = ClubAccountingCutoverEvidenceVerification::where('verification_reference', $reference)->first();
+            $existing = ClubAccountingCutoverEvidenceVerification::where('club_id', $context->organisationId)->where('verification_reference', $reference)->first();
             if ($existing) {
                 if ($existing->club_id !== $locked->club_id || $existing->cutover_package_id !== $locked->id
                     || $existing->package_version !== $locked->package_version || $existing->evidence_reference_id !== $lockedEvidence->id
@@ -47,12 +49,21 @@ final class ClubCutoverEvidenceVerificationService
             if ($locked->lock_version !== $expectedLockVersion) {
                 throw new CutoverAuthorizationException('The evidence verification package binding is stale.');
             }
-            $verification = ClubAccountingCutoverEvidenceVerification::create(['club_id' => $locked->club_id, 'cutover_package_id' => $locked->id, 'evidence_reference_id' => $lockedEvidence->id, 'evidence_reference_public_id' => $lockedEvidence->public_id, 'evidence_binding_digest' => $bindingDigest, 'package_version' => $locked->package_version, 'package_lock_version' => $locked->lock_version, 'result' => $result, 'verification_reference' => $reference, 'safe_note' => $safeNote, 'verified_by_user_id' => $actor->id, 'verified_at' => now()]);
+            $verification = $this->createVerification(['club_id' => $locked->club_id, 'cutover_package_id' => $locked->id, 'evidence_reference_id' => $lockedEvidence->id, 'evidence_reference_public_id' => $lockedEvidence->public_id, 'evidence_binding_digest' => $bindingDigest, 'package_version' => $locked->package_version, 'package_lock_version' => $locked->lock_version, 'result' => $result, 'verification_reference' => $reference, 'safe_note' => $safeNote, 'verified_by_user_id' => $actor->id, 'verified_at' => now()]);
             $lockedEvidence->update(['verification_status' => $result, 'reviewer_note' => $safeNote]);
             $locked->update(['canonical_checksum' => null, 'last_validated_at' => null, 'activation_ready' => false, 'readiness_checked_at' => null, 'updated_by_user_id' => $actor->id, 'lock_version' => $locked->lock_version + 1]);
 
             return $verification;
-        });
+        }, attempts: 1);
+    }
+
+    private function createVerification(array $attributes): ClubAccountingCutoverEvidenceVerification
+    {
+        try {
+            return ClubAccountingCutoverEvidenceVerification::create($attributes);
+        } catch (UniqueConstraintViolationException $exception) {
+            throw new CutoverAuthorizationException('The verification reference was reused with changed semantics.', previous: $exception);
+        }
     }
 
     public static function bindingDigest(ClubAccountingCutoverEvidenceReference $evidence): string
