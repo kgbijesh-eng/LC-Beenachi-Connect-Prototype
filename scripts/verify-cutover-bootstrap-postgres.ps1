@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
     [switch]$COnly,
     [switch]$CRegressionOnly,
@@ -23,6 +23,7 @@ $databases = @(switch ($Suite) {
     'Cutover' { @('lcb_p02b2_cutover_test') }
     'C' { @('lcb_p02b2_cutover_test') }
     'D' { @('lcb_p02b2_cutover_test') }
+    'Audit' { @('lcb_p02b2_cutover_test') }
     'Guard' { @('lcb_p02b1_transaction_guard_test') }
     'Finance' { @('lcb_3ijae_finance_p02b2ab', 'lcb_3iizt_statement_snapshot_concurrency_test') }
 })
@@ -117,6 +118,7 @@ try {
     Push-Location "$repository/backend"
     try {
         switch ($Suite) {
+            'Audit' { Run-Tests 'audit-focused' @('tests/Feature/CutoverExecutionAuditRecorderTest.php') $databases[0] }
             'D' {
                 Run-Tests 'd-focused' @('tests/Feature/CutoverLifecycleEligibilityTest.php') $databases[0]
                 Run-Tests 'd-historical' @('tests/Feature/Milestone3iizeCutoverPackagePersistenceAndPreviewTest.php','tests/Feature/Milestone3iizfCutoverAuthorizationAndLifecycleContractTest.php','tests/Feature/Milestone3iizgOpeningJournalAndOneTimeActivationTest.php','tests/Feature/Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest.php') $databases[0]

@@ -30,6 +30,12 @@ Suspended evidence requires valid authoritative identity and ownership; foreign 
 misconfigured targets cannot write foreign evidence. Ambient roots fail closed.
 The recorder is initially unwired from opening so E1 can be reviewed separately.
 
+E1 validation: six focused PostgreSQL cases / 74 assertions passed with zero
+failures/errors/skips and confirmed shutdown. Active and inactive audit-only paths,
+foreign/configuration/ownership failures, native/Laravel ambient rejection and
+single-attempt persistence failure were exercised. Evidence:
+`%TEMP%/lc-p02b2-audit-a5019be6dd04484ab0d41a3147b89dd9/`.
+
 ## E2 and validation
 
 Financial root, audit-failure/indeterminate handling, test evidence and decisions
