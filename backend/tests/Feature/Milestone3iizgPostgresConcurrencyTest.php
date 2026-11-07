@@ -142,7 +142,7 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         $processes = [];
         foreach ($payloads as $name => $payload) {
             file_put_contents("$barrier/$name.json", json_encode($payload, JSON_THROW_ON_ERROR));
-            $processes[$name] = new Process([PHP_BINARY, $worker, "$barrier/$name.json", $barrier, $name], base_path(), timeout: 40);
+            $processes[$name] = new Process([PHP_BINARY, $worker, "$barrier/$name.json", $barrier, $name], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $club->code], timeout: 40);
         }
         $processes['revocation']->start();
         $this->awaitFiles(["$barrier/revocation.locked"]);
@@ -217,6 +217,64 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         }
     }
 
+    public function test_forced_mixed_order_cycle_must_preserve_activation_winner_without_deadlock(): void
+    {
+        $this->requireExplicitPostgres();
+        $this->seed(DefaultRolesAndPermissionsSeeder::class);
+        $fixture = $this->authorizedFixture('revoke-activation-wins', 1);
+        $appointment = $fixture['package']->authorityAppointments()->where('authority_type', 'technical_operator')->firstOrFail();
+        $barrier = sys_get_temp_dir().DIRECTORY_SEPARATOR.'p02b2-c-forced-cycle-'.Str::lower(Str::random(8));
+        mkdir($barrier, 0700, true);
+        $request = [$fixture['club']->id, $fixture['package']->id, $fixture['package']->lock_version, $fixture['package']->canonical_checksum, 'C-FORCED-EXECUTION', (string) Str::uuid(), $fixture['operator']->id];
+        $payloads = [
+            'activation' => ['mode'=>'activate','package_id'=>$fixture['package']->id,'request'=>$request,'hold'=>true],
+            'revocation' => ['mode'=>'revoke','package_id'=>$fixture['package']->id,'target_kind'=>'appointment','target_id'=>$appointment->id,'actor_id'=>$fixture['operator']->id,'reference'=>'C-FORCED-REVOCATION','hold'=>true],
+        ];
+        $processes = [];
+        foreach ($payloads as $name => $payload) {
+            file_put_contents("$barrier/$name.json", json_encode($payload, JSON_THROW_ON_ERROR));
+            $processes[$name] = new Process([PHP_BINARY, base_path('tests/Support/Milestone3iizsPostgresRevocationRaceWorker.php'), "$barrier/$name.json", $barrier, $name], base_path(), env: ['INSTANCE_ORGANISATION_CODE'=>$fixture['club']->code], timeout:40);
+        }
+        try {
+            // Real public roots: opening owns package; C revocation owns club.
+            $processes['activation']->start(); $this->awaitFiles(["$barrier/activation.locked"]);
+            $processes['revocation']->start(); $this->awaitFiles(["$barrier/revocation.locked"]);
+            file_put_contents("$barrier/revocation.release", '1');
+            $deadline = microtime(true)+15; $waiting=0;
+            do {
+                DB::select('SELECT pg_stat_clear_snapshot()');
+                $waiting=(int)DB::selectOne("SELECT count(*) AS waiting FROM pg_stat_activity WHERE datname=current_database() AND application_name='p02b2-mixed-revocation' AND wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid))>0")->waiting;
+                if ($waiting>0) { break; } usleep(5_000);
+            } while (microtime(true)<$deadline);
+            $this->assertGreaterThan(0,$waiting,'Revocation must really wait for opening package while retaining club.');
+            file_put_contents("$barrier/activation.release", '1');
+            foreach ($processes as $process) { $process->wait(); }
+            $activation=json_decode(file_get_contents("$barrier/activation.result.json"),true);
+            $revocation=json_decode(file_get_contents("$barrier/revocation.result.json"),true);
+            $evidence=[
+                'activation'=>$activation,'revocation'=>$revocation,
+                'package_status'=>$fixture['package']->fresh()->status,
+                'journals'=>ClubJournalEntry::where('club_id',$fixture['club']->id)->where('source_type','accounting_opening_package')->count(),
+                'successes'=>ClubAccountingCutoverExecutionSuccess::where('cutover_package_id',$fixture['package']->id)->count(),
+                'consumptions'=>ClubAccountingCutoverAuthorityConsumption::where('cutover_package_id',$fixture['package']->id)->count(),
+                'revocations'=>$appointment->events()->where('event_reference','C-FORCED-REVOCATION')->count(),
+            ];
+            file_put_contents("$barrier/reconciliation.json",json_encode($evidence,JSON_THROW_ON_ERROR));
+            fwrite(STDOUT,"\nC_FORCED_CYCLE_EVIDENCE ".json_encode($evidence,JSON_THROW_ON_ERROR)."\n");
+            // This is a safety gate, not a test that celebrates reproducing a deadlock.
+            $codes=array_merge($activation['cause_codes']??[],$revocation['cause_codes']??[]);
+            $this->assertNotContains('40P01',$codes,'Mixed-order deadlock requires separately approved opening changes.');
+            $this->assertSame('activated',$activation['outcome']);
+            $this->assertSame('rejected',$revocation['outcome']);
+            $this->assertSame(0,$evidence['revocations']);
+            $this->assertSame(1,$evidence['journals']);
+            $this->assertSame(1,$evidence['successes']);
+            $this->assertSame(1,$evidence['consumptions']);
+        } finally {
+            foreach ($processes as $name=>$process) { file_put_contents("$barrier/$name.release",'1'); if($process->isRunning()){$process->stop();} }
+        }
+    }
+
     private function raceDirectDecisionInserts(int $packageId, array $first, array $second): array
     {
         $barrier = sys_get_temp_dir().DIRECTORY_SEPARATOR.'3iizg-pg-decision-'.Str::lower(Str::random(8));
@@ -277,7 +335,7 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         $processes = [];
         foreach ($payloads as $name => $payload) {
             file_put_contents("$barrier/$name.json", json_encode([...$payload, 'hold' => $name === $winner], JSON_THROW_ON_ERROR));
-            $processes[$name] = new Process([PHP_BINARY, $worker, "$barrier/$name.json", $barrier, $name], base_path(), timeout: 40);
+            $processes[$name] = new Process([PHP_BINARY, $worker, "$barrier/$name.json", $barrier, $name], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $fixture['club']->code], timeout: 40);
         }
         $processes[$winner]->start();
         $this->awaitFiles(["$barrier/$winner.locked"]);
@@ -288,7 +346,19 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         $processes[$winner]->wait();
         $processes[$loser]->wait();
 
-        return [json_decode(file_get_contents("$barrier/$winner.result.json"), true), json_decode(file_get_contents("$barrier/$loser.result.json"), true)];
+        $results = [json_decode(file_get_contents("$barrier/$winner.result.json"), true), json_decode(file_get_contents("$barrier/$loser.result.json"), true)];
+        // Record reconciliation even when the unchanged winner assertion fails.
+        $evidence = [
+            'requested_first' => $winner, 'results' => $results,
+            'package_status' => $fixture['package']->fresh()->status,
+            'journals' => ClubJournalEntry::where('club_id', $fixture['club']->id)->where('source_type', 'accounting_opening_package')->count(),
+            'successes' => ClubAccountingCutoverExecutionSuccess::where('cutover_package_id', $fixture['package']->id)->count(),
+            'consumptions' => ClubAccountingCutoverAuthorityConsumption::where('cutover_package_id', $fixture['package']->id)->count(),
+            'revocation_events' => DB::table($targetKind === 'appointment' ? 'club_accounting_cutover_authority_events' : 'club_accounting_cutover_permission_events')->where('cutover_package_id', $fixture['package']->id)->where('event_reference', $reference)->count(),
+        ];
+        file_put_contents("$barrier/reconciliation.json", json_encode($evidence, JSON_THROW_ON_ERROR));
+        fwrite(STDOUT, "\nC_MIXED_EVIDENCE ".json_encode($evidence, JSON_THROW_ON_ERROR)."\n");
+        return $results;
     }
 
     private function runIteration(string $scenario, int $iteration): array

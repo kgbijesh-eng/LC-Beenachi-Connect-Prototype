@@ -10,6 +10,7 @@ use App\Services\Finance\ClubCutoverAuthorityAdministrationService;
 use App\Services\Finance\ClubOpeningJournalActivationService;
 use App\Services\Finance\CutoverExecutionRequest;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 
 require dirname(__DIR__, 2).'/vendor/autoload.php';
@@ -20,15 +21,22 @@ $payload = json_decode((string) file_get_contents($payloadPath), true, flags: JS
 $resultPath = "$barrier/$name.result.json";
 
 try {
-    DB::beginTransaction();
-    DB::table('club_accounting_cutover_packages')->where('id', $payload['package_id'])->lockForUpdate()->first();
-    file_put_contents("$barrier/$name.locked", '1');
-    if ($payload['hold']) {
+    DB::select("SELECT set_config('application_name', ?, false)", ['p02b2-mixed-'.$name]);
+    // Observe each public operation's own first lock; never introduce an ambient root.
+    $locks = [];
+    DB::listen(function (QueryExecuted $event) use (&$locks, $payload, $barrier, $name) {
+        if (! str_contains(strtolower($event->sql), 'for update')) { return; }
+        $locks[] = $event->sql;
+        file_put_contents("$barrier/$name.locks.json", json_encode($locks, JSON_THROW_ON_ERROR));
+        if (count($locks) !== 1) { return; }
+        file_put_contents("$barrier/$name.locked", '1');
+        if (! $payload['hold']) { return; }
         $deadline = microtime(true) + 30;
         while (! is_file("$barrier/$name.release") && microtime(true) < $deadline) {
             usleep(5_000);
         }
-    }
+        if (! is_file("$barrier/$name.release")) { throw new RuntimeException('Owned lock barrier timed out.'); }
+    });
     if ($payload['mode'] === 'activate') {
         $record = $app->make(ClubOpeningJournalActivationService::class)->execute(new CutoverExecutionRequest(...$payload['request']));
         $result = ['outcome' => 'activated', 'id' => $record->id];
@@ -45,12 +53,13 @@ try {
         }
         $result = ['outcome' => 'revoked', 'id' => $event->id];
     }
-    DB::commit();
 } catch (Throwable $exception) {
-    if (DB::transactionLevel() > 0) {
-        DB::rollBack();
-    }
     $result = ['outcome' => 'rejected', 'exception' => $exception::class, 'message' => $exception->getMessage()];
+    $result['cause_codes'] = [];
+    for ($cause = $exception; $cause !== null; $cause = $cause->getPrevious()) {
+        $result['cause_codes'][] = (string) $cause->getCode();
+    }
 }
+$result['locks'] = $locks ?? [];
 file_put_contents($resultPath, json_encode($result, JSON_THROW_ON_ERROR));
 exit(0);

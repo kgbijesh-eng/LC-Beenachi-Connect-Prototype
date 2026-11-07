@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
+    [switch]$COnly,
+    [switch]$CRegressionOnly,
     [string]$PostgresBin = 'C:/Program Files/PostgreSQL/17/bin',
     [string]$PhpPath = 'C:/Users/dell/.config/herd/bin/php84/php.exe',
     [ValidateRange(1024, 65535)][int]$Port = 55494
@@ -10,6 +12,8 @@ param(
 # Fresh cluster only. Never reads .env credentials or contacts an existing server.
 $ErrorActionPreference = 'Stop'
 if ($BootstrapOnly -and $Suite -ne 'Cutover') { throw '-BootstrapOnly requires -Suite Cutover.' }
+if ($COnly -and $Suite -ne 'C') { throw '-COnly requires -Suite C.' }
+if ($CRegressionOnly -and ($Suite -ne 'C' -or $COnly)) { throw '-CRegressionOnly requires -Suite C without -COnly.' }
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $output = Join-Path ([IO.Path]::GetTempPath()) ('lc-p02b2-'+$Suite.ToLower()+'-'+[guid]::NewGuid().ToString('N'))
 $data = Join-Path $output 'data'
@@ -17,11 +21,14 @@ $admin = 'p02b2_isolated_admin'
 $appRole = 'lc_beenachi_app'
 $databases = @(switch ($Suite) {
     'Cutover' { @('lcb_p02b2_cutover_test') }
+    'C' { @('lcb_p02b2_cutover_test') }
     'Guard' { @('lcb_p02b1_transaction_guard_test') }
     'Finance' { @('lcb_3ijae_finance_p02b2ab', 'lcb_3iizt_statement_snapshot_concurrency_test') }
 })
 $evidence = @{ suite=$Suite; directory=$output; host='127.0.0.1'; port=$Port; databases=$databases; status='STARTING'; results=@() }
 $evidence.bootstrap_only=[bool]$BootstrapOnly
+$evidence.c_only=[bool]$COnly
+$evidence.c_regression_only=[bool]$CRegressionOnly
 $names = @('APP_ENV','DB_CONNECTION','DB_URL','DB_HOST','DB_PORT','DB_DATABASE','DB_USERNAME','DB_PASSWORD','DB_SSLMODE','PGPASSWORD','PGOPTIONS','PGSERVICE','PGSERVICEFILE','APP_CONFIG_CACHE','CACHE_STORE','SESSION_DRIVER','QUEUE_CONNECTION','INSTANCE_ORGANISATION_CODE','RUN_P02B2_CUTOVER_POSTGRES','RUN_P02B1_POSTGRES_TESTS','RUN_3IIZG_POSTGRES_CONCURRENCY','RUN_3IJAE_POSTGRES_CONCURRENCY','RUN_3IIZT_POSTGRES_CONCURRENCY')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = @{ exists=(Test-Path "Env:$name"); value=[Environment]::GetEnvironmentVariable($name) } }
@@ -53,7 +60,7 @@ function Assert-Fresh {
     return @{ identity=$identity; inventory=$inventory; owner=$appRole; elevated=$false; memberships=0; protected_names_present=0 }
 }
 
-function Run-Tests([string]$Name, [string[]]$Paths, [string]$Database) {
+function Run-Tests([string]$Name, [string[]]$Paths, [string]$Database, [switch]$RecordFailures) {
     $null = Assert-Fresh
     $env:DB_DATABASE=$Database
     $env:PGPASSWORD=$appPassword
@@ -66,7 +73,10 @@ function Run-Tests([string]$Name, [string[]]$Paths, [string]$Database) {
     $result = @{name=$Name;tests=[int]$root.tests;assertions=[int]$root.assertions;failures=[int]$root.failures;errors=[int]$root.errors;skipped=[int]$root.skipped;exit_code=$testExit}
     $evidence.results += $result
     $result | ConvertTo-Json -Compress | Write-Host
-    if ($testExit -ne 0 -or $result.failures -ne 0 -or $result.errors -ne 0 -or $result.skipped -ne 0) { throw "Test group $Name did not fully pass." }
+    if ($testExit -ne 0 -or $result.failures -ne 0 -or $result.errors -ne 0 -or $result.skipped -ne 0) {
+        if ($RecordFailures) { $evidence.recorded_test_failure=$true; return }
+        throw "Test group $Name did not fully pass."
+    }
 }
 
 New-Item -ItemType Directory -Path $output | Out-Null
@@ -106,6 +116,19 @@ try {
     Push-Location "$repository/backend"
     try {
         switch ($Suite) {
+            'C' {
+                if (-not $CRegressionOnly) {
+                Run-Tests 'c-focused' @('tests/Feature/CutoverOrganisationEnforcementTest.php') $databases[0]
+                }
+                if (-not $COnly) {
+                    if (-not $CRegressionOnly) {
+                    Run-Tests 'bootstrap' @('tests/Feature/CutoverBootstrapOrganisationTest.php') $databases[0]
+                    }
+                    Run-Tests 'historical' @('tests/Feature/Milestone3iizeCutoverPackagePersistenceAndPreviewTest.php','tests/Feature/Milestone3iizfCutoverAuthorizationAndLifecycleContractTest.php','tests/Feature/Milestone3iizgOpeningJournalAndOneTimeActivationTest.php','tests/Feature/Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest.php') $databases[0]
+                    # Keep original assertions, preserve failure status, and retain all evidence.
+                    Run-Tests 'c-mixed-concurrency' @('tests/Feature/Milestone3iizgPostgresConcurrencyTest.php') $databases[0] -RecordFailures
+                }
+            }
             'Cutover' {
                 Run-Tests 'bootstrap' @('tests/Feature/CutoverBootstrapOrganisationTest.php') $databases[0]
                 if (-not $BootstrapOnly) {
@@ -127,6 +150,11 @@ try {
     foreach ($file in $sourcePaths) { if ((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -cne $before[$file.FullName]) { throw 'Source changed during validation.' } }
     $evidence.source_hashes_unchanged=$true
     $evidence.status='PASS'
+    if ($evidence.recorded_test_failure) { $evidence.status='FAILED_OR_BLOCKED'; $evidence.reason='Mixed-order concurrency assertions did not fully pass. Merge NO-GO.' }
+    if ($Suite -eq 'C' -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
+        $evidence.mixed_order_deadlock_observed=$true
+        $evidence.status='FAILED_OR_BLOCKED';$evidence.reason='PostgreSQL observed a mixed-order deadlock. Merge NO-GO regardless of victim outcomes.'
+    }
 } catch {
     $evidence.status='FAILED_OR_BLOCKED';$evidence.reason=$_.Exception.Message
     throw

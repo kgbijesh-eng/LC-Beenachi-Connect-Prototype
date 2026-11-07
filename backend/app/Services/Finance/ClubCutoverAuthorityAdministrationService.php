@@ -16,53 +16,66 @@ use App\Models\ClubAccountingCutoverPermissionEvent;
 use App\Models\ClubMembership;
 use App\Models\Permission;
 use App\Models\User;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Services\Finance\Exceptions\CutoverAuthorizationException;
-use Illuminate\Support\Facades\DB;
+use Closure;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 final class ClubCutoverAuthorityAdministrationService
 {
-    public function __construct(private readonly ClubCutoverAuthorityResolver $authority) {}
+    public function __construct(
+        private readonly ClubCutoverAuthorityResolver $authority,
+        private readonly OrganisationTransactionGuard $organisations,
+    ) {}
 
     public function requestPermission(ClubAccountingCutoverPackage $package, User $subject, string $slug, string $reference, User $requester, ?string $expiresAt = null): ClubAccountingCutoverAdminOperation
     {
-        $permission = Permission::query()->where('slug', $slug)->first();
-        if (! $permission || ! str_starts_with($slug, 'finance.cutover.package.')) {
-            throw new CutoverAuthorizationException('The exact cutover permission is undefined.');
-        }
-        $this->assertPermissionRoleBasis($package, $subject, $slug);
-        $this->assertNoConflict($package, $subject, $slug);
+        return $this->withPackage($package, function (ClubAccountingCutoverPackage $current, OrganisationTransactionContext $context) use ($package, $subject, $slug, $reference, $requester, $expiresAt) {
+            $permission = Permission::query()->where('slug', $slug)->first();
+            if (! $permission || ! str_starts_with($slug, 'finance.cutover.package.')) {
+                throw new CutoverAuthorizationException('The exact cutover permission is undefined.');
+            }
+            $this->assertPermissionRoleBasis($current, $subject, $slug);
+            $this->assertNoConflict($current, $subject, $slug);
 
-        return $this->request($package, $requester, 'assign_permission', $subject, 'permission', $slug, $reference, null, $expiresAt);
+            return $this->request($context, $package, $requester, 'assign_permission', $subject, 'permission', $slug, $reference, null, $expiresAt);
+        });
     }
 
     public function requestAppointment(ClubAccountingCutoverPackage $package, User $subject, string $type, string $reference, User $requester, ?string $expiresAt = null): ClubAccountingCutoverAdminOperation
     {
-        if (! in_array($type, [ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, ClubAccountingCutoverAuthorityAppointment::TYPE_TECHNICAL_OPERATOR], true)) {
-            throw new CutoverAuthorizationException('The cutover authority type is invalid.');
-        }
-        $this->assertNoConflict($package, $subject, $type);
+        return $this->withPackage($package, function (ClubAccountingCutoverPackage $current, OrganisationTransactionContext $context) use ($package, $subject, $type, $reference, $requester, $expiresAt) {
+            if (! in_array($type, [ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, ClubAccountingCutoverAuthorityAppointment::TYPE_TECHNICAL_OPERATOR], true)) {
+                throw new CutoverAuthorizationException('The cutover authority type is invalid.');
+            }
+            $this->assertNoConflict($current, $subject, $type);
 
-        return $this->request($package, $requester, 'appoint', $subject, 'appointment', $type, $reference, null, $expiresAt);
+            return $this->request($context, $package, $requester, 'appoint', $subject, 'appointment', $type, $reference, null, $expiresAt);
+        });
     }
 
     public function requestAppointmentRevocation(ClubAccountingCutoverAuthorityAppointment $target, string $reference, string $reason, User $requester): ClubAccountingCutoverAdminOperation
     {
-        $package = ClubAccountingCutoverPackage::findOrFail($target->cutover_package_id);
-
-        return $this->request($package, $requester, 'revoke_appointment', $target->appointedUser, 'appointment_record', (string) $target->id, $reference, $reason);
+        return $this->organisations->run($target->club_id, function (OrganisationTransactionContext $context) use ($target, $reference, $reason, $requester) {
+            $package = $this->lockPackage($context, $target->cutover_package_id);
+            $current = ClubAccountingCutoverAuthorityAppointment::whereKey($target->id)->where('club_id', $context->organisationId)->where('cutover_package_id', $package->id)->firstOrFail();
+            return $this->request($context, $package, $requester, 'revoke_appointment', $current->appointedUser, 'appointment_record', (string) $current->id, $reference, $reason);
+        }, attempts: 1);
     }
 
     public function requestPermissionRevocation(ClubAccountingCutoverPermissionAssignment $target, string $reference, string $reason, User $requester): ClubAccountingCutoverAdminOperation
     {
-        $package = ClubAccountingCutoverPackage::findOrFail($target->cutover_package_id);
-        $subject = User::findOrFail($target->user_id);
-
-        return $this->request($package, $requester, 'revoke_permission', $subject, 'permission_record', (string) $target->id, $reference, $reason);
+        return $this->organisations->run($target->club_id, function (OrganisationTransactionContext $context) use ($target, $reference, $reason, $requester) {
+            $package = $this->lockPackage($context, $target->cutover_package_id);
+            $current = ClubAccountingCutoverPermissionAssignment::whereKey($target->id)->where('club_id', $context->organisationId)->where('cutover_package_id', $package->id)->firstOrFail();
+            return $this->request($context, $package, $requester, 'revoke_permission', User::findOrFail($current->user_id), 'permission_record', (string) $current->id, $reference, $reason);
+        }, attempts: 1);
     }
 
     public function requestCaEligibility(ClubAccountingCutoverAuthorityAppointment $appointment, array $externalReferences, string $checkedOn, string $independenceState, string $reference, User $requester, ?string $digest = null, ?string $expiresAt = null): ClubAccountingCutoverAdminOperation
     {
-        if ($appointment->authority_type !== ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA || ! in_array($independenceState, ['confirmed', 'not_confirmed'], true) || count($externalReferences) < 5 || ! preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $checkedOn) || ($digest !== null && ! preg_match('/\A[a-f0-9]{64}\z/', $digest))) {
+        if (! in_array($independenceState, ['confirmed', 'not_confirmed'], true) || count($externalReferences) < 5 || ! preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $checkedOn) || ($digest !== null && ! preg_match('/\A[a-f0-9]{64}\z/', $digest))) {
             throw new CutoverAuthorizationException('The CA eligibility request is invalid.');
         }
         foreach ($externalReferences as $key => $value) {
@@ -73,19 +86,24 @@ final class ClubCutoverAuthorityAdministrationService
         if (strlen(json_encode($externalReferences, JSON_THROW_ON_ERROR)) > 500) {
             throw new CutoverAuthorizationException('The CA evidence reference set exceeds the safe metadata boundary.');
         }
-        $package = ClubAccountingCutoverPackage::findOrFail($appointment->cutover_package_id);
-
-        return $this->request($package, $requester, 'attest_ca_eligibility', $appointment->appointedUser, 'ca_eligibility', (string) $appointment->id, $reference, json_encode(['references' => $externalReferences, 'checked_on' => $checkedOn, 'independence_state' => $independenceState, 'digest' => $digest, 'expires_at' => $expiresAt], JSON_THROW_ON_ERROR));
+        return $this->organisations->run($appointment->club_id, function (OrganisationTransactionContext $context) use ($appointment, $externalReferences, $checkedOn, $independenceState, $reference, $requester, $digest, $expiresAt) {
+            $package = $this->lockPackage($context, $appointment->cutover_package_id);
+            $current = ClubAccountingCutoverAuthorityAppointment::whereKey($appointment->id)->where('club_id', $context->organisationId)->where('cutover_package_id', $package->id)->firstOrFail();
+            if ($current->authority_type !== ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA) {
+                throw new CutoverAuthorizationException('The CA eligibility request is invalid.');
+            }
+            return $this->request($context, $package, $requester, 'attest_ca_eligibility', $current->appointedUser, 'ca_eligibility', (string) $current->id, $reference, json_encode(['references' => $externalReferences, 'checked_on' => $checkedOn, 'independence_state' => $independenceState, 'digest' => $digest, 'expires_at' => $expiresAt], JSON_THROW_ON_ERROR));
+        }, attempts: 1);
     }
 
     public function approve(ClubAccountingCutoverAdminOperation $operation, User $actor, string $approvalReference): ClubAccountingCutoverAdminOperation
     {
-        return DB::transaction(function () use ($operation, $actor, $approvalReference) {
-            $operation = ClubAccountingCutoverAdminOperation::query()->whereKey($operation->id)->lockForUpdate()->firstOrFail();
+        return $this->organisations->run($operation->club_id, function (OrganisationTransactionContext $context) use ($operation, $actor, $approvalReference) {
+            $operation = ClubAccountingCutoverAdminOperation::query()->whereKey($operation->id)->where('club_id', $context->organisationId)->lockForUpdate()->firstOrFail();
             if ($operation->status === 'applied') {
                 return $operation;
             }
-            $package = ClubAccountingCutoverPackage::query()->whereKey($operation->cutover_package_id)->lockForUpdate()->firstOrFail();
+            $package = $this->lockPackage($context, $operation->cutover_package_id);
             if ($operation->package_version !== $package->package_version || $operation->package_lock_version !== $package->lock_version) {
                 throw new CutoverAuthorizationException('The administration operation is stale for the current package version.');
             }
@@ -98,18 +116,18 @@ final class ClubCutoverAuthorityAdministrationService
             }
             ClubAccountingCutoverAdminApproval::create(['club_id' => $operation->club_id, 'cutover_package_id' => $operation->cutover_package_id, 'admin_operation_id' => $operation->id, 'approval_role' => $role, 'approved_by_user_id' => $actor->id, 'approval_reference' => $approvalReference, 'operation_digest' => $operation->request_digest, 'approved_at' => now()]);
             if ($operation->approvals()->count() === 2) {
-                $this->apply($operation, $package);
+                $this->apply($context, $operation, $package);
             }
 
             return $operation->fresh('approvals');
-        });
+        }, attempts: 1);
     }
 
     public function selfRevokeAppointment(ClubAccountingCutoverAuthorityAppointment $target, User $actor, string $reference, string $reason): ClubAccountingCutoverAuthorityEvent
     {
-        return DB::transaction(function () use ($target, $actor, $reference, $reason): ClubAccountingCutoverAuthorityEvent {
-            $package = ClubAccountingCutoverPackage::query()->whereKey($target->cutover_package_id)->lockForUpdate()->firstOrFail();
-            $current = ClubAccountingCutoverAuthorityAppointment::query()->with('events')->whereKey($target->id)->lockForUpdate()->first();
+        return $this->organisations->run($target->club_id, function (OrganisationTransactionContext $context) use ($target, $actor, $reference, $reason): ClubAccountingCutoverAuthorityEvent {
+            $package = $this->lockPackage($context, $target->cutover_package_id);
+            $current = ClubAccountingCutoverAuthorityAppointment::query()->with('events')->whereKey($target->id)->where('club_id', $context->organisationId)->where('cutover_package_id', $package->id)->lockForUpdate()->first();
             if (! $current || $current->cutover_package_id !== $package->id || $current->club_id !== $package->club_id
                 || $current->appointed_user_id !== $actor->id || $current->effective_at->isFuture()
                 || ($current->expires_at !== null && ! $current->expires_at->isFuture())
@@ -119,14 +137,14 @@ final class ClubCutoverAuthorityAdministrationService
             }
 
             return ClubAccountingCutoverAuthorityEvent::create(['club_id' => $current->club_id, 'cutover_package_id' => $current->cutover_package_id, 'authority_appointment_id' => $current->id, 'event_type' => 'revoked', 'event_reference' => $reference, 'reason' => $reason, 'recorded_by_user_id' => $actor->id, 'recorded_at' => now()]);
-        });
+        }, attempts: 1);
     }
 
     public function selfRevokePermission(ClubAccountingCutoverPermissionAssignment $target, User $actor, string $reference, string $reason): ClubAccountingCutoverPermissionEvent
     {
-        return DB::transaction(function () use ($target, $actor, $reference, $reason): ClubAccountingCutoverPermissionEvent {
-            $package = ClubAccountingCutoverPackage::query()->whereKey($target->cutover_package_id)->lockForUpdate()->firstOrFail();
-            $current = ClubAccountingCutoverPermissionAssignment::query()->with('events')->whereKey($target->id)->lockForUpdate()->first();
+        return $this->organisations->run($target->club_id, function (OrganisationTransactionContext $context) use ($target, $actor, $reference, $reason): ClubAccountingCutoverPermissionEvent {
+            $package = $this->lockPackage($context, $target->cutover_package_id);
+            $current = ClubAccountingCutoverPermissionAssignment::query()->with('events')->whereKey($target->id)->where('club_id', $context->organisationId)->where('cutover_package_id', $package->id)->lockForUpdate()->first();
             if (! $current || $current->cutover_package_id !== $package->id || $current->club_id !== $package->club_id
                 || $current->user_id !== $actor->id || $current->effective_at->isFuture()
                 || ($current->expires_at !== null && ! $current->expires_at->isFuture())
@@ -136,7 +154,7 @@ final class ClubCutoverAuthorityAdministrationService
             }
 
             return ClubAccountingCutoverPermissionEvent::create(['club_id' => $current->club_id, 'cutover_package_id' => $current->cutover_package_id, 'permission_assignment_id' => $current->id, 'event_type' => 'revoked', 'event_reference' => $reference, 'reason' => $reason, 'recorded_by_user_id' => $actor->id, 'recorded_at' => now()]);
-        });
+        }, attempts: 1);
     }
 
     /** Legacy single-grantor entry points are deliberately fail closed. */
@@ -160,12 +178,14 @@ final class ClubCutoverAuthorityAdministrationService
         throw new CutoverAuthorizationException('Use self-revocation or a dual-approved revocation operation.');
     }
 
-    private function request(ClubAccountingCutoverPackage $p, User $requester, string $action, User $subject, string $type, string $key, string $reference, ?string $note = null, ?string $expiresAt = null): ClubAccountingCutoverAdminOperation
+    private function request(OrganisationTransactionContext $context, ClubAccountingCutoverPackage $p, User $requester, string $action, User $subject, string $type, string $key, string $reference, ?string $note = null, ?string $expiresAt = null): ClubAccountingCutoverAdminOperation
     {
+        $context->assertUsable($p->club_id);
+        // Preserve the supplied version/lock binding, including exact stale replay.
         $storedKey = $note === null ? $key : $key.'|'.base64_encode($note);
         $binding = ['club_id' => $p->club_id, 'cutover_package_id' => $p->id, 'package_version' => $p->package_version, 'package_lock_version' => $p->lock_version, 'action' => $action, 'subject_user_id' => $subject->id, 'target_type' => $type, 'target_key' => $storedKey, 'effective_at' => null, 'expires_at' => $expiresAt];
         $digest = $this->digest($binding);
-        $existing = ClubAccountingCutoverAdminOperation::where('operation_reference', $reference)->first();
+        $existing = ClubAccountingCutoverAdminOperation::where('club_id', $context->organisationId)->where('operation_reference', $reference)->first();
         if ($existing) {
             if (! hash_equals($existing->request_digest, $digest)) {
                 throw new CutoverAuthorizationException('The operation reference was reused with changed semantics.');
@@ -174,11 +194,17 @@ final class ClubCutoverAuthorityAdministrationService
             return $existing;
         }
 
-        return ClubAccountingCutoverAdminOperation::create([...$binding, 'operation_reference' => $reference, 'request_digest' => $digest, 'status' => 'pending', 'requested_by_user_id' => $requester->id, 'requested_at' => now()]);
+        try {
+            return ClubAccountingCutoverAdminOperation::create([...$binding, 'operation_reference' => $reference, 'request_digest' => $digest, 'status' => 'pending', 'requested_by_user_id' => $requester->id, 'requested_at' => now()]);
+        } catch (UniqueConstraintViolationException $exception) {
+            // A globally used reference in another organisation must not disclose its record.
+            throw new CutoverAuthorizationException('The operation reference was reused with changed semantics.', previous: $exception);
+        }
     }
 
-    private function apply(ClubAccountingCutoverAdminOperation $o, ClubAccountingCutoverPackage $p): void
+    private function apply(OrganisationTransactionContext $context, ClubAccountingCutoverAdminOperation $o, ClubAccountingCutoverPackage $p): void
     {
+        $context->assertUsable($p->club_id);
         $record = null;
         if ($o->action === 'assign_permission') {
             $permission = Permission::where('slug', $o->target_key)->firstOrFail();
@@ -195,12 +221,12 @@ final class ClubCutoverAuthorityAdministrationService
             } [$id,$encoded] = array_pad(explode('|', $o->target_key, 2), 2, '');
             $reason = base64_decode($encoded, true) ?: 'Governance revocation';
             if ($o->action === 'revoke_appointment') {
-                $target = ClubAccountingCutoverAuthorityAppointment::findOrFail($id);
+                $target = ClubAccountingCutoverAuthorityAppointment::whereKey($id)->where('club_id', $context->organisationId)->where('cutover_package_id', $p->id)->firstOrFail();
                 if ($target->events()->whereIn('event_type', ['revoked', 'invalidated'])->exists()) {
                     throw new CutoverAuthorizationException('The appointment is not current.');
                 } $record = ClubAccountingCutoverAuthorityEvent::create(['club_id' => $p->club_id, 'cutover_package_id' => $p->id, 'authority_appointment_id' => $target->id, 'event_type' => 'revoked', 'event_reference' => $o->operation_reference, 'reason' => $reason, 'recorded_by_user_id' => $o->approvals()->where('approval_role', 'secretary')->value('approved_by_user_id'), 'recorded_at' => now()]);
             } else {
-                $target = ClubAccountingCutoverPermissionAssignment::findOrFail($id);
+                $target = ClubAccountingCutoverPermissionAssignment::whereKey($id)->where('club_id', $context->organisationId)->where('cutover_package_id', $p->id)->firstOrFail();
                 if ($target->events()->whereIn('event_type', ['revoked', 'invalidated'])->exists()) {
                     throw new CutoverAuthorizationException('The permission assignment is not current.');
                 } $record = ClubAccountingCutoverPermissionEvent::create(['club_id' => $p->club_id, 'cutover_package_id' => $p->id, 'permission_assignment_id' => $target->id, 'event_type' => 'revoked', 'event_reference' => $o->operation_reference, 'reason' => $reason, 'recorded_by_user_id' => $o->approvals()->where('approval_role', 'secretary')->value('approved_by_user_id'), 'recorded_at' => now()]);
@@ -208,9 +234,23 @@ final class ClubCutoverAuthorityAdministrationService
         } elseif ($o->action === 'attest_ca_eligibility') {
             [$id,$encoded] = explode('|', $o->target_key, 2);
             $data = json_decode(base64_decode($encoded), true, flags: JSON_THROW_ON_ERROR);
+            ClubAccountingCutoverAuthorityAppointment::whereKey($id)->where('club_id', $context->organisationId)->where('cutover_package_id', $p->id)->firstOrFail();
             $record = ClubAccountingCutoverCaEligibility::create(['club_id' => $p->club_id, 'cutover_package_id' => $p->id, 'authority_appointment_id' => $id, 'external_reference_set' => json_encode($data['references'], JSON_THROW_ON_ERROR), 'external_reference_digest' => $data['digest'], 'checked_on' => $data['checked_on'], 'independence_state' => $data['independence_state'], 'expires_at' => $data['expires_at'], 'admin_operation_id' => $o->id, 'eligible_at' => now()]);
         }
         $o->update(['status' => 'applied', 'target_record_id' => $record?->id, 'applied_at' => now()]);
+    }
+
+    private function withPackage(ClubAccountingCutoverPackage $binding, Closure $operation): mixed
+    {
+        return $this->organisations->run($binding->club_id, function (OrganisationTransactionContext $context) use ($binding, $operation) {
+            return $operation($this->lockPackage($context, $binding->id), $context);
+        }, attempts: 1);
+    }
+
+    private function lockPackage(OrganisationTransactionContext $context, int $packageId): ClubAccountingCutoverPackage
+    {
+        $context->assertUsable();
+        return ClubAccountingCutoverPackage::whereKey($packageId)->where('club_id', $context->organisationId)->lockForUpdate()->firstOrFail();
     }
 
     private function assertNoConflict(ClubAccountingCutoverPackage $p, User $u, string $authority): void
