@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
     [switch]$COnly,
     [switch]$CRegressionOnly,
@@ -24,6 +24,8 @@ $databases = @(switch ($Suite) {
     'C' { @('lcb_p02b2_cutover_test') }
     'D' { @('lcb_p02b2_cutover_test') }
     'Audit' { @('lcb_p02b2_cutover_test') }
+    'Integration' { @('lcb_p02b2_cutover_test') }
+    'Opening' { @('lcb_p02b2_cutover_test') }
     'Guard' { @('lcb_p02b1_transaction_guard_test') }
     'Finance' { @('lcb_3ijae_finance_p02b2ab', 'lcb_3iizt_statement_snapshot_concurrency_test') }
 })
@@ -118,6 +120,14 @@ try {
     Push-Location "$repository/backend"
     try {
         switch ($Suite) {
+            'Opening' { Run-Tests 'opening-focused' @('tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0] }
+            'Integration' {
+                Run-Tests 'de-focused' @('tests/Feature/CutoverLifecycleEligibilityTest.php','tests/Feature/CutoverExecutionAuditRecorderTest.php','tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0]
+                Run-Tests 'c-focused' @('tests/Feature/CutoverOrganisationEnforcementTest.php') $databases[0]
+                Run-Tests 'bootstrap' @('tests/Feature/CutoverBootstrapOrganisationTest.php') $databases[0]
+                Run-Tests 'historical' @('tests/Feature/Milestone3iizeCutoverPackagePersistenceAndPreviewTest.php','tests/Feature/Milestone3iizfCutoverAuthorizationAndLifecycleContractTest.php','tests/Feature/Milestone3iizgOpeningJournalAndOneTimeActivationTest.php','tests/Feature/Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest.php') $databases[0]
+                Run-Tests 'concurrency' @('tests/Feature/Milestone3iizgPostgresConcurrencyTest.php') $databases[0]
+            }
             'Audit' { Run-Tests 'audit-focused' @('tests/Feature/CutoverExecutionAuditRecorderTest.php') $databases[0] }
             'D' {
                 Run-Tests 'd-focused' @('tests/Feature/CutoverLifecycleEligibilityTest.php') $databases[0]
@@ -158,7 +168,7 @@ try {
     $evidence.source_hashes_unchanged=$true
     $evidence.status='PASS'
     if ($evidence.recorded_test_failure) { $evidence.status='FAILED_OR_BLOCKED'; $evidence.reason='Mixed-order concurrency assertions did not fully pass. Merge NO-GO.' }
-    if ($Suite -eq 'C' -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
+    if ($Suite -in @('C','Integration') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
         $evidence.mixed_order_deadlock_observed=$true
         $evidence.status='FAILED_OR_BLOCKED';$evidence.reason='PostgreSQL observed a mixed-order deadlock. Merge NO-GO regardless of victim outcomes.'
     }
@@ -167,7 +177,9 @@ try {
     throw
 } finally {
     if ($started) {
-        & "$PostgresBin/pg_ctl.exe" -D $data -w -t 60 -m fast stop *> "$output/stop.log"
+        # Windows fsync of repeated disposable migrations can exceed sixty seconds.
+        # This changes teardown patience only, never business retries or worker timeouts.
+        & "$PostgresBin/pg_ctl.exe" -D $data -w -t 120 -m fast stop *> "$output/stop.log"
         $evidence.stop_exit_code=$LASTEXITCODE
         if ($LASTEXITCODE -ne 0) { $evidence.status='FAILED_OR_BLOCKED' }
     }

@@ -30,6 +30,8 @@ while (! is_file($releasePath)) {
 }
 
 $started = hrtime(true);
+\Illuminate\Support\Facades\DB::select("SELECT set_config('application_name', ?, false)", ['p02b2-opening-'.$worker]);
+file_put_contents($barrierDirectory.DIRECTORY_SEPARATOR.$worker.'.started', '1');
 try {
     $success = $app->make(ClubOpeningJournalActivationService::class)->execute($request);
     $result = ['worker' => $worker, 'outcome' => 'resolved', 'success_id' => $success->id, 'journal_entry_id' => $success->journal_entry_id];
