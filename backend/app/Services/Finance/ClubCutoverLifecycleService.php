@@ -12,17 +12,19 @@ use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingCutoverReview;
 use App\Models\LedgerAccount;
 use App\Models\User;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Services\Finance\Exceptions\CutoverPackageException;
 use Illuminate\Support\Facades\DB;
 
 final class ClubCutoverLifecycleService
 {
-    public function __construct(private ClubCutoverAuthorityResolver $authority, private ClubAccountingCutoverPackageService $packages) {}
+    public function __construct(private ClubCutoverAuthorityResolver $authority, private ClubAccountingCutoverPackageService $packages, private OrganisationTransactionGuard $organisations) {}
 
     public function prepare(ClubAccountingCutoverPackage $package, User $actor, int $expectedLockVersion): ClubAccountingCutoverPackage
     {
-        return DB::transaction(function () use ($package, $actor, $expectedLockVersion): ClubAccountingCutoverPackage {
-            $locked = $this->lock($package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_DRAFT);
+        return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $actor, $expectedLockVersion): ClubAccountingCutoverPackage {
+            $locked = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_DRAFT);
             $this->authority->permission($locked, $actor, 'finance.cutover.package.prepare');
             $validation = $this->packages->validate($locked);
             if (! $validation['valid']) {
@@ -32,13 +34,13 @@ final class ClubCutoverLifecycleService
             $locked->update(['status' => ClubAccountingCutoverPackage::STATUS_PREPARED, 'prepared_by_user_id' => $actor->id, 'prepared_at' => now(), 'canonical_checksum' => $checksum, 'lock_version' => $locked->lock_version + 1, 'updated_by_user_id' => $actor->id]);
 
             return $locked->fresh();
-        });
+        }, attempts: 1);
     }
 
     public function verify(ClubAccountingCutoverPackage $package, User $actor, int $expectedLockVersion): ClubAccountingCutoverPackage
     {
-        return DB::transaction(function () use ($package, $actor, $expectedLockVersion): ClubAccountingCutoverPackage {
-            $locked = $this->lock($package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_PREPARED);
+        return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $actor, $expectedLockVersion): ClubAccountingCutoverPackage {
+            $locked = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_PREPARED);
             $this->authority->permission($locked, $actor, 'finance.cutover.package.verify');
             if ($locked->prepared_by_user_id === $actor->id) {
                 throw new CutoverPackageException('The preparer cannot verify the same package.');
@@ -49,13 +51,13 @@ final class ClubCutoverLifecycleService
             $locked->update(['status' => ClubAccountingCutoverPackage::STATUS_INTERNALLY_VERIFIED, 'internally_verified_by_user_id' => $actor->id, 'internally_verified_at' => now(), 'lock_version' => $locked->lock_version + 1, 'updated_by_user_id' => $actor->id]);
 
             return $locked->fresh();
-        });
+        }, attempts: 1);
     }
 
     public function review(ClubAccountingCutoverPackage $package, User $actor, int $expectedLockVersion, string $classification, string $reference, string $reviewDate, string $rationale): ClubAccountingCutoverReview
     {
-        return DB::transaction(function () use ($package, $actor, $expectedLockVersion, $classification, $reference, $reviewDate, $rationale): ClubAccountingCutoverReview {
-            $locked = $this->lock($package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_INTERNALLY_VERIFIED);
+        return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $actor, $expectedLockVersion, $classification, $reference, $reviewDate, $rationale): ClubAccountingCutoverReview {
+            $locked = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_INTERNALLY_VERIFIED);
             $classification = strtoupper(trim($classification));
             if ($locked->dr033_classification !== null || ! preg_match('/\A[A-Z0-9][A-Z0-9._:-]{2,39}\z/', $classification)) {
                 throw new CutoverPackageException('DR-033 may be selected exactly once by the accounting review.');
@@ -76,13 +78,13 @@ final class ClubCutoverLifecycleService
             $review = ClubAccountingCutoverReview::create(['club_id' => $locked->club_id, 'cutover_package_id' => $locked->id, 'reviewer_identifier' => $reference, 'review_date' => $reviewDate, 'selected_classification' => $classification, 'written_rationale' => $rationale, 'package_version' => $locked->package_version, 'chart_version' => $locked->chart_version, 'package_checksum' => $checksum, 'status' => 'current', 'recorded_by_user_id' => $actor->id, 'authority_appointment_id' => $appointment->id, 'permission_assignment_id' => $permission->id, 'authority_basis' => 'appointed_independent_ca', 'recorded_at' => now()]);
 
             return $review->fresh();
-        });
+        }, attempts: 1);
     }
 
     public function approve(ClubAccountingCutoverPackage $package, User $actor, int $expectedLockVersion, string $approvalDate, string $reference): ClubAccountingCutoverApproval
     {
-        return DB::transaction(function () use ($package, $actor, $expectedLockVersion, $approvalDate, $reference): ClubAccountingCutoverApproval {
-            $locked = $this->lock($package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_ACCOUNTING_REVIEWED);
+        return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $actor, $expectedLockVersion, $approvalDate, $reference): ClubAccountingCutoverApproval {
+            $locked = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_ACCOUNTING_REVIEWED);
             $permission = $this->authority->president($locked, $actor, 'finance.cutover.package.business-approve');
             $review = $this->trustedReview($locked);
             if ($review->recorded_by_user_id === $actor->id) {
@@ -92,14 +94,14 @@ final class ClubCutoverLifecycleService
             $locked->update(['status' => ClubAccountingCutoverPackage::STATUS_BUSINESS_APPROVED, 'lock_version' => $locked->lock_version + 1, 'updated_by_user_id' => $actor->id]);
 
             return $approval->fresh();
-        });
+        }, attempts: 1);
     }
 
     public function decide(ClubAccountingCutoverPackage $package, User $actor, int $expectedLockVersion, string $stage, string $authorityType, string $reference, string $reason): ClubAccountingCutoverDecision
     {
-        return DB::transaction(function () use ($package, $actor, $expectedLockVersion, $stage, $authorityType, $reference, $reason): ClubAccountingCutoverDecision {
+        return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $actor, $expectedLockVersion, $stage, $authorityType, $reference, $reason): ClubAccountingCutoverDecision {
             $requiredState = $stage === ClubAccountingCutoverDecision::STAGE_DRY_RUN ? ClubAccountingCutoverPackage::STATUS_BUSINESS_APPROVED : ClubAccountingCutoverPackage::STATUS_DRY_RUN_ACCEPTED;
-            $locked = $this->lock($package, $expectedLockVersion, $requiredState);
+            $locked = $this->lock($context, $package, $expectedLockVersion, $requiredState);
             $permissionSlug = $stage === ClubAccountingCutoverDecision::STAGE_DRY_RUN ? 'finance.cutover.package.dry-run-accept' : 'finance.cutover.package.activate-authorize';
             $review = $this->trustedReview($locked);
             $approval = $this->trustedApproval($locked);
@@ -130,26 +132,27 @@ final class ClubCutoverLifecycleService
             }
 
             return $decision->fresh();
-        });
+        }, attempts: 1);
     }
 
     public function revoke(ClubAccountingCutoverDecision $decision, User $actor, string $reference, string $reason): ClubAccountingCutoverDecisionEvent
     {
-        return DB::transaction(function () use ($decision, $actor, $reference, $reason): ClubAccountingCutoverDecisionEvent {
-            $decision = ClubAccountingCutoverDecision::query()->with('events')->lockForUpdate()->findOrFail($decision->id);
+        return $this->organisations->run($decision->club_id, function (OrganisationTransactionContext $context) use ($decision, $actor, $reference, $reason): ClubAccountingCutoverDecisionEvent {
+            $package = ClubAccountingCutoverPackage::whereKey($decision->cutover_package_id)->where('club_id', $context->organisationId)->lockForUpdate()->firstOrFail();
+            $decision = ClubAccountingCutoverDecision::query()->with('events')->where('club_id', $context->organisationId)->where('cutover_package_id', $package->id)->lockForUpdate()->findOrFail($decision->id);
             if ($decision->recorded_by_user_id !== $actor->id || $decision->events->isNotEmpty()) {
                 throw new CutoverPackageException('Only the original actor may revoke a current decision.');
             }
-            $package = ClubAccountingCutoverPackage::query()->findOrFail($decision->cutover_package_id);
             $permission = $this->authority->permission($package, $actor, 'finance.cutover.package.rollback-authorize');
 
             return ClubAccountingCutoverDecisionEvent::create(['club_id' => $decision->club_id, 'cutover_package_id' => $decision->cutover_package_id, 'cutover_decision_id' => $decision->id, 'event_type' => 'revoked', 'event_reference' => $reference, 'reason' => $reason, 'recorded_by_user_id' => $actor->id, 'permission_assignment_id' => $permission->id, 'recorded_at' => now()]);
-        });
+        }, attempts: 1);
     }
 
-    private function lock(ClubAccountingCutoverPackage $package, int $version, string $state): ClubAccountingCutoverPackage
+    private function lock(OrganisationTransactionContext $context, ClubAccountingCutoverPackage $package, int $version, string $state): ClubAccountingCutoverPackage
     {
-        $locked = ClubAccountingCutoverPackage::query()->whereKey($package->id)->where('club_id', $package->club_id)->lockForUpdate()->first();
+        $context->assertUsable($package->club_id);
+        $locked = ClubAccountingCutoverPackage::query()->whereKey($package->id)->where('club_id', $context->organisationId)->lockForUpdate()->first();
         if (! $locked || $locked->lock_version !== $version || $locked->status !== $state) {
             throw new CutoverPackageException('The cutover lifecycle state or lock version is stale.');
         }
