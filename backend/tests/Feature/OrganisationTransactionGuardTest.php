@@ -413,8 +413,8 @@ class OrganisationTransactionGuardTest extends TestCase
         }
         $request = new JournalPostingRequest($this->club->id, $period->id, '2027-08-01', 'Synthetic journal', 'INR', 'b1_synthetic', 'synthetic', 'posted', (string) Str::uuid(), $actor->id, [new JournalLineInput($accounts[0]->id, 'debit', 100, fundCode: 'GENERAL_CLUB_FUND'), new JournalLineInput($accounts[1]->id, 'credit', 100, fundCode: 'GENERAL_CLUB_FUND')]);
         $this->guard->run($this->club, function ($context) use ($request) {
-            $first = app(ClubJournalPostingService::class)->post($request);
-            $replay = app(ClubJournalPostingService::class)->post($request);
+            $first = app(ClubJournalPostingService::class)->postWithin($context, $request);
+            $replay = app(ClubJournalPostingService::class)->postWithin($context, $request);
             $this->assertSame($first->id, $replay->id);
             $context->assertUsable();
             $this->assertSame(1, DB::transactionLevel());

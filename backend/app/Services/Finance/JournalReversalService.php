@@ -6,6 +6,8 @@ namespace App\Services\Finance;
 
 use App\Models\AuditLog;
 use App\Models\Club;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Models\ClubAccountingPeriod;
 use App\Models\ClubJournalEntry;
 use App\Models\ClubJournalLine;
@@ -38,114 +40,137 @@ final class JournalReversalService
     {
         $normalized = $this->validateAndNormalize($request);
 
-        return DB::transaction(function () use ($request, $normalized): ClubJournalEntry {
-            $club = Club::query()->whereKey($request->clubId)->lockForUpdate()->first();
-            if (! $club) {
-                throw new ReversalClubScopeViolationException('The reversal club is invalid.');
-            }
+        return app(OrganisationTransactionGuard::class)->run($request->clubId,
+            fn (OrganisationTransactionContext $context): ClubJournalEntry => $this->reverseBody($context, $request, $normalized), 3);
+    }
 
-            $original = ClubJournalEntry::query()->whereKey($request->originalEntryId)->lockForUpdate()->first();
-            if (! $original) {
-                throw new OriginalJournalEntryNotFoundException('The original journal entry is unavailable.');
-            }
-            if ($original->club_id !== $club->id) {
-                throw new ReversalClubScopeViolationException('The reversal request violates club scope.');
-            }
-            $originalLines = ClubJournalLine::query()
-                ->where('journal_entry_id', $original->id)
-                ->orderBy('line_number')
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get();
+    public function reverseWithin(OrganisationTransactionContext $context, JournalReversalRequest $request): ClubJournalEntry
+    {
+        $normalized = $this->validateAndNormalize($request);
 
-            if (! User::query()->whereKey($request->reversalActorUserId)->exists()) {
-                throw new InvalidReversalActorException('The reversal actor is invalid.');
-            }
-            $period = ClubAccountingPeriod::query()->whereKey($request->reversalAccountingPeriodId)->lockForUpdate()->first();
-            if (! $period) {
-                throw new InvalidReversalPeriodException('The reversal period is invalid.');
-            }
-            if ($period->club_id !== $club->id) {
-                throw new ReversalClubScopeViolationException('The reversal request violates club scope.');
-            }
-            if ($period->status !== ClubAccountingPeriod::STATUS_OPEN) {
-                throw new ClosedReversalPeriodException('The reversal period is closed.');
-            }
-            if ($normalized['effective_date'] < $period->start_date->format('Y-m-d')
-                || $normalized['effective_date'] > $period->end_date->format('Y-m-d')) {
-                throw new InvalidReversalDateException('The reversal effective date is outside the target period.');
-            }
+        return app(OrganisationTransactionGuard::class)->within($context, $request->clubId,
+            fn (): ClubJournalEntry => DB::transaction(
+                fn (): ClubJournalEntry => $this->reverseBody($context, $request, $normalized), 3));
+    }
 
-            $existing = $this->resolveReplay($club, $original, $originalLines, $normalized);
-            if ($existing) {
-                return $existing;
-            }
-            if ($original->reversal_of_entry_id !== null) {
-                throw new ReversalOfReversalProhibitedException('Reversal entries cannot be reversed.');
-            }
-            if ($original->status === ClubJournalEntry::STATUS_REVERSED || $original->reversals()->exists()) {
-                throw new AlreadyReversedJournalException('The journal entry has already been reversed.');
-            }
-            if ($original->status !== ClubJournalEntry::STATUS_POSTED) {
-                throw new OriginalEntryNotPostedException('Only posted journal entries can be reversed.');
-            }
-            if ($originalLines->count() < 2) {
-                throw new ReversalLinkConflictException('The original journal entry is incomplete.');
-            }
+    private function reverseBody(OrganisationTransactionContext $context, JournalReversalRequest $request, array $normalized): ClubJournalEntry
+    {
+        $club = Club::query()->whereKey($request->clubId)->lockForUpdate()->first();
+        if (! $club) {
+            throw new ReversalClubScopeViolationException('The reversal club is invalid.');
+        }
 
-            $reversal = $this->posting->post(new JournalPostingRequest(
-                clubId: $club->id,
-                accountingPeriodId: $period->id,
-                effectiveDate: $normalized['effective_date'],
-                description: sprintf('Reversal of %s: %s', $original->reference, $normalized['reason']),
-                currency: ClubJournalEntry::CURRENCY_INR,
-                sourceType: $normalized['source_type'],
-                sourceId: $normalized['source_id'],
-                sourceEvent: $normalized['source_event'],
-                idempotencyKey: $normalized['idempotency_key'],
-                postingActorUserId: $request->reversalActorUserId,
-                lines: $originalLines->map(fn (ClubJournalLine $line): JournalLineInput => new JournalLineInput(
-                    $line->ledger_account_id,
-                    $line->direction === ClubJournalLine::DIRECTION_DEBIT ? ClubJournalLine::DIRECTION_CREDIT : ClubJournalLine::DIRECTION_DEBIT,
-                    $line->amount_paise,
-                    $line->description,
-                    $line->fund_code,
-                    null,
-                    $line->id,
-                ))->all(),
-                reversalOfEntryId: $original->id,
-                metadata: [
-                    'reversal_reason' => $normalized['reason'],
-                    'reversal_original_entry_public_id' => $original->public_id,
-                ],
-            ));
+        $owner = ClubJournalEntry::query()->whereKey($request->originalEntryId)->value('club_id');
+        if ($owner !== null && (int) $owner !== $club->id) {
+            throw new ReversalClubScopeViolationException('The reversal request violates club scope.');
+        }
+        $original = ClubJournalEntry::query()->where('club_id', $club->id)->whereKey($request->originalEntryId)->lockForUpdate()->first();
+        if (! $original) {
+            throw new OriginalJournalEntryNotFoundException('The original journal entry is unavailable.');
+        }
+        if ($original->club_id !== $club->id) {
+            throw new ReversalClubScopeViolationException('The reversal request violates club scope.');
+        }
+        $originalLines = ClubJournalLine::query()
+            ->where('club_id', $club->id)
+            ->where('journal_entry_id', $original->id)
+            ->orderBy('line_number')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
 
-            try {
-                $original->update([
-                    'status' => ClubJournalEntry::STATUS_REVERSED,
-                    'reversed_by_user_id' => $request->reversalActorUserId,
-                ]);
-            } catch (LogicException $exception) {
-                throw new ReversalLifecycleTransitionException('The original journal entry could not be transitioned.', 0, $exception);
-            }
+        if (! User::query()->whereKey($request->reversalActorUserId)->exists()) {
+            throw new InvalidReversalActorException('The reversal actor is invalid.');
+        }
+        $owner = ClubAccountingPeriod::query()->whereKey($request->reversalAccountingPeriodId)->value('club_id');
+        if ($owner !== null && (int) $owner !== $club->id) {
+            throw new ReversalClubScopeViolationException('The reversal request violates club scope.');
+        }
+        $period = ClubAccountingPeriod::query()->where('club_id', $club->id)->whereKey($request->reversalAccountingPeriodId)->lockForUpdate()->first();
+        if (! $period) {
+            throw new InvalidReversalPeriodException('The reversal period is invalid.');
+        }
+        if ($period->club_id !== $club->id) {
+            throw new ReversalClubScopeViolationException('The reversal request violates club scope.');
+        }
+        if ($period->status !== ClubAccountingPeriod::STATUS_OPEN) {
+            throw new ClosedReversalPeriodException('The reversal period is closed.');
+        }
+        if ($normalized['effective_date'] < $period->start_date->format('Y-m-d')
+            || $normalized['effective_date'] > $period->end_date->format('Y-m-d')) {
+            throw new InvalidReversalDateException('The reversal effective date is outside the target period.');
+        }
 
-            AuditLog::create([
-                'club_id' => $club->id,
-                'user_id' => $request->reversalActorUserId,
-                'action' => 'finance.journal.reversed',
-                'auditable_type' => ClubJournalEntry::class,
-                'auditable_id' => $original->id,
-                'metadata' => [
-                    'reversal_entry_public_id' => $reversal->public_id,
-                    'reversal_reason' => $normalized['reason'],
-                    'source_type' => $normalized['source_type'],
-                    'source_id' => $normalized['source_id'],
-                    'source_event' => $normalized['source_event'],
-                ],
+        $existing = $this->resolveReplay($club, $original, $originalLines, $normalized);
+        if ($existing) {
+            return $existing;
+        }
+        if ($original->reversal_of_entry_id !== null) {
+            throw new ReversalOfReversalProhibitedException('Reversal entries cannot be reversed.');
+        }
+        if ($original->status === ClubJournalEntry::STATUS_REVERSED || $original->reversals()->exists()) {
+            throw new AlreadyReversedJournalException('The journal entry has already been reversed.');
+        }
+        if ($original->status !== ClubJournalEntry::STATUS_POSTED) {
+            throw new OriginalEntryNotPostedException('Only posted journal entries can be reversed.');
+        }
+        if ($originalLines->count() < 2) {
+            throw new ReversalLinkConflictException('The original journal entry is incomplete.');
+        }
+
+        $reversal = $this->posting->postWithin($context, new JournalPostingRequest(
+            clubId: $club->id,
+            accountingPeriodId: $period->id,
+            effectiveDate: $normalized['effective_date'],
+            description: sprintf('Reversal of %s: %s', $original->reference, $normalized['reason']),
+            currency: ClubJournalEntry::CURRENCY_INR,
+            sourceType: $normalized['source_type'],
+            sourceId: $normalized['source_id'],
+            sourceEvent: $normalized['source_event'],
+            idempotencyKey: $normalized['idempotency_key'],
+            postingActorUserId: $request->reversalActorUserId,
+            lines: $originalLines->map(fn (ClubJournalLine $line): JournalLineInput => new JournalLineInput(
+                $line->ledger_account_id,
+                $line->direction === ClubJournalLine::DIRECTION_DEBIT ? ClubJournalLine::DIRECTION_CREDIT : ClubJournalLine::DIRECTION_DEBIT,
+                $line->amount_paise,
+                $line->description,
+                $line->fund_code,
+                null,
+                $line->id,
+            ))->all(),
+            reversalOfEntryId: $original->id,
+            metadata: [
+                'reversal_reason' => $normalized['reason'],
+                'reversal_original_entry_public_id' => $original->public_id,
+            ],
+        ));
+
+        try {
+            $original->update([
+                'status' => ClubJournalEntry::STATUS_REVERSED,
+                'reversed_by_user_id' => $request->reversalActorUserId,
             ]);
+        } catch (LogicException $exception) {
+            throw new ReversalLifecycleTransitionException('The original journal entry could not be transitioned.', 0, $exception);
+        }
 
-            return $this->canonicalEntry($reversal);
-        }, 3);
+        AuditLog::create([
+            'club_id' => $club->id,
+            'user_id' => $request->reversalActorUserId,
+            'action' => 'finance.journal.reversed',
+            'auditable_type' => ClubJournalEntry::class,
+            'auditable_id' => $original->id,
+            'metadata' => [
+                'reversal_entry_public_id' => $reversal->public_id,
+                'reversal_reason' => $normalized['reason'],
+                'source_type' => $normalized['source_type'],
+                'source_id' => $normalized['source_id'],
+                'source_event' => $normalized['source_event'],
+            ],
+        ]);
+
+        return $this->canonicalEntry($reversal);
+
     }
 
     private function validateAndNormalize(JournalReversalRequest $request): array

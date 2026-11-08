@@ -128,7 +128,7 @@ try {
                 Run-Tests 'f1-real-outcomes-stability' @('tests/Feature/CutoverOpeningTransactionOutcomeTest.php') $databases[0]
             }
             'B3Foundation' { Run-Tests 'b3-foundation' @('tests/Feature/FinancialTransactionFoundationTest.php') $databases[0] }
-            'B3' { Run-Tests 'b3-foundation' @('tests/Feature/FinancialTransactionFoundationTest.php') $databases[0] }
+            'B3' { Run-Tests 'b3-core' @('tests/Feature/FinancialOrganisationEnforcementTest.php','tests/Feature/FinancialTransactionFoundationTest.php','tests/Feature/Milestone3iicCoreJournalPostingServiceTest.php','tests/Feature/Milestone3iieInternalJournalReversalServiceTest.php','tests/Feature/Milestone3iizkACanonicalAccountingMetadataFundAttributionTest.php') $databases[0] }
             'Opening' { Run-Tests 'opening-focused' @('tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0] }
             'Integration' {
                 Run-Tests 'de-focused' @('tests/Feature/CutoverLifecycleEligibilityTest.php','tests/Feature/CutoverExecutionAuditRecorderTest.php','tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0]
