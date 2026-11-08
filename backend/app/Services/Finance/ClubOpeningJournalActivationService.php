@@ -46,18 +46,20 @@ final class ClubOpeningJournalActivationService
             throw new CutoverExecutionAuditException('attempt', $failure);
         }
 
-        $callbackFinished = false;
+        $attempts = [];
         $pdo = null;
         try {
             $pdo = DB::connection()->getPdo();
-            return $this->organisations->run($request->clubId, function (OrganisationTransactionContext $context) use ($request, &$callbackFinished): ClubAccountingCutoverExecutionSuccess {
-                $callbackFinished = false;
-                $result = $this->executeFinancial($context, $request);
-                $callbackFinished = true;
-                return $result;
+            return $this->organisations->run($request->clubId, function (OrganisationTransactionContext $context) use ($request, &$attempts): ClubAccountingCutoverExecutionSuccess {
+                // Capture the root identity before the first financial operation, on
+                // every retry. Never use an exception's SQLSTATE as outcome evidence.
+                $attemptPdo = DB::connection()->getPdo();
+                $xid = $attemptPdo->query('SELECT pg_current_xact_id()::text')->fetchColumn();
+                $attempts[] = ['pdo' => $attemptPdo, 'xid' => $xid];
+                return $this->executeFinancial($context, $request);
             }, attempts: 3);
         } catch (Throwable $failure) {
-            if (! $this->rollbackConfirmed($pdo) || ($callbackFinished && ! $this->serverAborted($failure))) {
+            if (! $this->canRecordNotPosted($pdo, $attempts)) {
                 $unknown = new CutoverExecutionOutcomeUnknownException('Opening execution outcome is indeterminate; reconciliation is required.', previous: $failure);
                 try {
                     $this->audit->indeterminate($request);
@@ -78,25 +80,35 @@ final class ClubOpeningJournalActivationService
         }
     }
 
-    private function rollbackConfirmed(?PDO $original): bool
+    /**
+     * Idle PDO/depth are prerequisites for inspecting outcomes, not proof of rollback.
+     * An empty list proves this invocation never entered financial business work.
+     * Otherwise every attempted root must be positively reported aborted by the
+     * original PostgreSQL connection. Committed, unknown, unavailable or mismatched
+     * evidence requires reconciliation; none may produce a not_posted assertion.
+     */
+    private function canRecordNotPosted(?PDO $original, array $attempts): bool
     {
         try {
-            $current = DB::connection()->getRawPdo();
-            return $original !== null && ! $original->inTransaction() && $current instanceof PDO
-                && $current === $original && ! $current->inTransaction() && DB::transactionLevel() === 0;
+            if ($original === null || DB::connection()->getRawPdo() !== $original
+                || $original->inTransaction() || DB::transactionLevel() !== 0) {
+                return false;
+            }
+            foreach ($attempts as $attempt) {
+                if ($attempt['pdo'] !== $original || ! is_string($attempt['xid'])
+                    || ! preg_match('/\A[0-9]+\z/', $attempt['xid'])) {
+                    return false;
+                }
+                $statement = $original->prepare('SELECT pg_xact_status(CAST(? AS xid8))');
+                $statement->execute([$attempt['xid']]);
+                if ($statement->fetchColumn() !== 'aborted') {
+                    return false;
+                }
+            }
+            return true;
         } catch (Throwable) {
             return false;
         }
-    }
-
-    private function serverAborted(Throwable $failure): bool
-    {
-        for ($cause = $failure; $cause !== null; $cause = $cause->getPrevious()) {
-            if (in_array((string) $cause->getCode(), ['40001', '40P01'], true)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private function executeFinancial(OrganisationTransactionContext $context, CutoverExecutionRequest $request): ClubAccountingCutoverExecutionSuccess
