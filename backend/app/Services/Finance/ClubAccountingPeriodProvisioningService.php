@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Services\Finance;
 
-use App\Models\Club;
 use App\Models\ClubAccountingPeriod;
 use App\Models\User;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Services\Finance\Exceptions\AccountingPeriodProvisioningConflictException;
 use App\Services\Finance\Exceptions\InvalidLionsYearException;
 use App\Services\Finance\Exceptions\InvalidProvisioningActorException;
-use App\Services\Finance\Exceptions\InvalidProvisioningClubException;
 use App\Services\Finance\Exceptions\InvalidProvisioningRequestException;
-use App\Services\Finance\Exceptions\ProvisioningPersistenceConflictException;
+use Illuminate\Database\ConcurrencyErrorDetector;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
@@ -20,47 +20,78 @@ final class ClubAccountingPeriodProvisioningService
 {
     public function provision(ClubAccountingPeriodProvisioningRequest $request): ClubAccountingPeriod
     {
+        $this->validateAndDerive($request);
+
+        return app(OrganisationTransactionGuard::class)->run($request->clubId,
+            fn (OrganisationTransactionContext $context): ClubAccountingPeriod => $this->provisionWithin($context, $request), 3);
+    }
+
+    public function provisionWithin(OrganisationTransactionContext $context, ClubAccountingPeriodProvisioningRequest $request): ClubAccountingPeriod
+    {
         $normalized = $this->validateAndDerive($request);
 
+        return app(OrganisationTransactionGuard::class)->within($context, $request->clubId,
+            fn (): ClubAccountingPeriod => DB::transaction(fn (): ClubAccountingPeriod => $this->provisionBody($context, $request, $normalized), 3));
+    }
+
+    private function provisionBody(OrganisationTransactionContext $context, ClubAccountingPeriodProvisioningRequest $request, array $normalized): ClubAccountingPeriod
+    {
+        $context->assertUsable($request->clubId);
+        // This private SQL savepoint proves rollback independently of Laravel depth
+        // or exception SQLSTATE. The B1 club lock predates it and remains held.
+        $savepoint = 'b5_provision_'.bin2hex(random_bytes(12));
+        DB::statement('SAVEPOINT '.$savepoint);
         try {
-            return DB::transaction(function () use ($request, $normalized): ClubAccountingPeriod {
-                $club = Club::query()->whereKey($request->clubId)->lockForUpdate()->first();
-                if (! $club) {
-                    throw new InvalidProvisioningClubException('The provisioning club is invalid.');
-                }
-                if (! User::query()->whereKey($request->createdByUserId)->exists()) {
-                    throw new InvalidProvisioningActorException('The provisioning actor is invalid.');
-                }
+            if (! User::query()->whereKey($request->createdByUserId)->exists()) {
+                throw new InvalidProvisioningActorException('The provisioning actor is invalid.');
+            }
 
-                $existing = ClubAccountingPeriod::query()
-                    ->where('club_id', $club->id)
-                    ->where('lions_year', $normalized['lions_year'])
-                    ->lockForUpdate()
-                    ->first();
-                if ($existing) {
-                    return $this->resolveExisting($existing, $normalized);
-                }
-
-                return ClubAccountingPeriod::create([
-                    'club_id' => $club->id,
+            $existing = ClubAccountingPeriod::query()
+                ->where('club_id', $context->organisationId)
+                ->where('lions_year', $normalized['lions_year'])
+                ->lockForUpdate()
+                ->first();
+            if ($existing) {
+                $result = $this->resolveExisting($existing, $normalized);
+            } else {
+                $result = ClubAccountingPeriod::create([
+                    'club_id' => $context->organisationId,
                     'lions_year' => $normalized['lions_year'],
                     'start_date' => $normalized['start_date'],
                     'end_date' => $normalized['end_date'],
                     'status' => ClubAccountingPeriod::STATUS_OPEN,
                     'created_by_user_id' => $request->createdByUserId,
                 ])->fresh();
-            }, 3);
+            }
         } catch (QueryException $exception) {
-            $existing = ClubAccountingPeriod::query()
-                ->where('club_id', $request->clubId)
-                ->where('lions_year', $normalized['lions_year'])
-                ->first();
-            if ($existing) {
-                return $this->resolveExisting($existing, $normalized);
+            // Preserve the framework's genuine concurrency retry path; never replay
+            // instead of allowing the outer owner to retry or exhaust its budget.
+            if (app(ConcurrencyErrorDetector::class)->causedByConcurrencyError($exception)) {
+                throw $exception;
+            }
+            try {
+                DB::statement('ROLLBACK TO SAVEPOINT '.$savepoint);
+                DB::statement('RELEASE SAVEPOINT '.$savepoint);
+            } catch (\Throwable) {
+                // Unknown rollback/completion outcome must preserve the original failure.
+                throw $exception;
+            }
+            $context->assertUsable($request->clubId);
+            if (! User::query()->whereKey($request->createdByUserId)->exists()) {
+                throw new InvalidProvisioningActorException('The provisioning actor is invalid.');
+            }
+            $existing = ClubAccountingPeriod::query()->where('club_id', $context->organisationId)
+                ->where('lions_year', $normalized['lions_year'])->lockForUpdate()->first();
+            if (! $existing) {
+                throw $exception;
             }
 
-            throw new ProvisioningPersistenceConflictException('The accounting period could not be provisioned.', 0, $exception);
+            return $this->resolveExisting($existing, $normalized);
         }
+        // Release/completion errors are deliberately outside the recovery catch.
+        DB::statement('RELEASE SAVEPOINT '.$savepoint);
+
+        return $result;
     }
 
     private function validateAndDerive(ClubAccountingPeriodProvisioningRequest $request): array

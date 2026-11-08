@@ -11,6 +11,7 @@ use App\Models\ClubJournalEntry;
 use App\Models\ClubMembership;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Access\OrganisationAccessRejected;
 use App\Services\Finance\AccountingPeriodCloseRequest;
 use App\Services\Finance\ClubAccountingPeriodCloseService;
 use App\Services\Finance\ClubAccountingPeriodProvisioningRequest;
@@ -32,7 +33,6 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3iifInternalAccountingPeriodCloseServiceTest extends FinancialPostgresTestCase
 {
-
     public function test_empty_or_balanced_period_closes_without_creating_or_mutating_journals(): void
     {
         $f = $this->fixture();
@@ -75,6 +75,9 @@ class Milestone3iifInternalAccountingPeriodCloseServiceTest extends FinancialPos
             try {
                 $this->service()->close($this->request($f, $overrides));
                 $this->fail('Invalid close context must fail.');
+            } catch (OrganisationAccessRejected $e) {
+                $this->assertArrayHasKey('clubId', $overrides);
+                $this->assertSame('ORGANISATION_FOREIGN', $e->reason);
             } catch (InvalidAccountingPeriodCloseRequestException) {
                 $this->addToAssertionCount(1);
             }
