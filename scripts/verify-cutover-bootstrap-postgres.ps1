@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair', 'B3Fixtures', 'B3Poison', 'B3PoisonCommit')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair', 'B3Fixtures', 'B3Poison', 'B3PoisonCommit', 'B3Active', 'B3Direct', 'B3Contexts', 'B3Races', 'B3Workers', 'B3Retries', 'B3Resources', 'B3Cross', 'B3OpeningPeer')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
     [switch]$COnly,
     [switch]$CRegressionOnly,
@@ -34,6 +34,15 @@ $databases = @(switch ($Suite) {
     'B3Fixtures' { @('lcb_p02b3_finance_test') }
     'B3Poison' { @('lcb_p02b3_finance_test') }
     'B3PoisonCommit' { @('lcb_p02b3_finance_test') }
+    'B3Active' { @('lcb_p02b3_finance_test') }
+    'B3Direct' { @('lcb_p02b3_finance_test') }
+    'B3Contexts' { @('lcb_p02b3_finance_test') }
+    'B3Races' { @('lcb_p02b3_finance_test') }
+    'B3Retries' { @('lcb_p02b3_finance_test') }
+    'B3Resources' { @('lcb_p02b3_finance_test') }
+    'B3Cross' { @('lcb_p02b3_finance_test') }
+    'B3OpeningPeer' { @('lcb_p02b2_cutover_test') }
+    'B3Workers' { @('lcb_3iizh_concurrency_test','lcb_3iizv_expense_concurrency_test','lcb_3iizw_expense_reversal_concurrency_test') }
     'Guard' { @('lcb_p02b1_transaction_guard_test') }
     'Finance' { @('lcb_3ijae_finance_p02b2ab', 'lcb_3iizt_statement_snapshot_concurrency_test') }
 })
@@ -42,6 +51,8 @@ $evidence.bootstrap_only=[bool]$BootstrapOnly
 $evidence.c_only=[bool]$COnly
 $evidence.c_regression_only=[bool]$CRegressionOnly
 $names = @('APP_ENV','DB_CONNECTION','DB_URL','DB_HOST','DB_PORT','DB_DATABASE','DB_USERNAME','DB_PASSWORD','DB_SSLMODE','PGPASSWORD','PGOPTIONS','PGSERVICE','PGSERVICEFILE','APP_CONFIG_CACHE','CACHE_STORE','SESSION_DRIVER','QUEUE_CONNECTION','INSTANCE_ORGANISATION_CODE','RUN_P02B2_CUTOVER_POSTGRES','RUN_P02B1_POSTGRES_TESTS','RUN_P02B3_FINANCE_POSTGRES','RUN_3IIZG_POSTGRES_CONCURRENCY','RUN_3IJAE_POSTGRES_CONCURRENCY','RUN_3IIZT_POSTGRES_CONCURRENCY')
+$names += @('RUN_3IIZH_POSTGRES_CONCURRENCY','RUN_3IIZV_POSTGRES_CONCURRENCY','RUN_3IIZW_POSTGRES_CONCURRENCY','RUN_3IJAB_POSTGRES_CONCURRENCY')
+$names += @('B3_WORKER_PORT','B3_WORKER_STARTED','B3_WORKER_DATABASE_OID')
 $names += @('B3_FIXTURE_PORT','B3_FIXTURE_STARTED','B3_FIXTURE_DATABASE_OID','B3_FIXTURE_POISON_FILE')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = @{ exists=(Test-Path "Env:$name"); value=[Environment]::GetEnvironmentVariable($name) } }
@@ -77,6 +88,9 @@ function Run-Tests([string]$Name, [string[]]$Paths, [string]$Database, [switch]$
     if ($env:B3_FIXTURE_POISON_FILE -and (Test-Path -LiteralPath $env:B3_FIXTURE_POISON_FILE)) { throw 'Fixture cluster already discarded; no further database operations.' }
     $null = Assert-Fresh
     $env:DB_DATABASE=$Database
+    $env:B3_WORKER_PORT=[string]$Port
+    $env:B3_WORKER_STARTED=Query-Fresh 'SELECT extract(epoch FROM pg_postmaster_start_time())::text;' $Database -Application
+    $env:B3_WORKER_DATABASE_OID=Query-Fresh 'SELECT oid::text FROM pg_database WHERE datname=current_database();' $Database -Application
     $env:PGPASSWORD=$appPassword
     & $PhpPath artisan migrate:fresh --force --no-ansi *> "$output/$Name-migrations.log"
     if ($LASTEXITCODE -ne 0) { throw "Migration failed for $Name." }
@@ -138,7 +152,7 @@ try {
     }
     $env:APP_ENV='testing';$env:DB_CONNECTION='pgsql';$env:DB_URL='';$env:DB_HOST='127.0.0.1';$env:DB_PORT=[string]$Port;$env:DB_USERNAME=$appRole;$env:DB_PASSWORD=$appPassword;$env:DB_SSLMODE='disable'
     $env:CACHE_STORE='array';$env:SESSION_DRIVER='array';$env:QUEUE_CONNECTION='sync';$env:INSTANCE_ORGANISATION_CODE='UNASSIGNED-SYNTHETIC'
-    $env:RUN_P02B3_FINANCE_POSTGRES='1';$env:RUN_P02B2_CUTOVER_POSTGRES='1';$env:RUN_P02B1_POSTGRES_TESTS='1';$env:RUN_3IIZG_POSTGRES_CONCURRENCY='1';$env:RUN_3IJAE_POSTGRES_CONCURRENCY='1';$env:RUN_3IIZT_POSTGRES_CONCURRENCY='1'
+    $env:RUN_3IIZH_POSTGRES_CONCURRENCY='1';$env:RUN_3IIZV_POSTGRES_CONCURRENCY='1';$env:RUN_3IIZW_POSTGRES_CONCURRENCY='1';$env:RUN_3IJAB_POSTGRES_CONCURRENCY='0';$env:RUN_P02B3_FINANCE_POSTGRES='1';$env:RUN_P02B2_CUTOVER_POSTGRES='1';$env:RUN_P02B1_POSTGRES_TESTS='1';$env:RUN_3IIZG_POSTGRES_CONCURRENCY='1';$env:RUN_3IJAE_POSTGRES_CONCURRENCY='1';$env:RUN_3IIZT_POSTGRES_CONCURRENCY='1'
     Push-Location "$repository/backend"
     try {
         switch ($Suite) {
@@ -180,6 +194,19 @@ try {
             }
             'B3Poison' { Run-Tests 'fixture-uncertain' @('tests/Feature/DisposableCorruptionFixtureUncertainTest.php','--filter','test_unprovable_restoration') $databases[0] }
             'B3PoisonCommit' { Run-Tests 'fixture-committed' @('tests/Feature/DisposableCorruptionFixtureUncertainTest.php','--filter','test_post_commit_failure') $databases[0] }
+            'B3Active' { Run-Tests 'b3-active' @('tests/Feature/FinancialBoundaryMatrixTest.php','--filter','test_active_direct') $databases[0] -RecordFailures }
+            'B3Direct' { Run-Tests 'b3-direct' @('tests/Feature/FinancialBoundaryMatrixTest.php') $databases[0] -RecordFailures }
+            'B3Contexts' { Run-Tests 'b3-contexts' @('tests/Feature/SourceTransactionContextMatrixTest.php') $databases[0] -RecordFailures }
+            'B3Races' { Run-Tests 'b3-suspension-races' @('tests/Feature/FinancialSuspensionConcurrencyTest.php') $databases[0] -RecordFailures }
+            'B3Workers' {
+                Run-Tests 'collections-workers' @('tests/Feature/Milestone3iizhPostgresConcurrencyTest.php') $databases[0] -RecordFailures
+                Run-Tests 'expense-workers' @('tests/Feature/Milestone3iizvPostgresExpenseConcurrencyTest.php') $databases[1] -RecordFailures
+                Run-Tests 'expense-reversal-workers' @('tests/Feature/Milestone3iizwPostgresExpenseReversalConcurrencyTest.php') $databases[2] -RecordFailures
+            }
+            'B3Retries' { Run-Tests 'b3-genuine-retries' @('tests/Feature/FinancialTransactionRetryTest.php') $databases[0] -RecordFailures }
+            'B3Resources' { Run-Tests 'b3-resource-lock-scope' @('tests/Feature/FinancialResourceLockScopeTest.php') $databases[0] -RecordFailures }
+            'B3Cross' { Run-Tests 'b3-cross-service' @('tests/Feature/FinancialCrossServiceConcurrencyTest.php') $databases[0] -RecordFailures }
+            'B3OpeningPeer' { Run-Tests 'b3-opening-peer' @('tests/Feature/FinancialOpeningPeerConcurrencyTest.php') $databases[0] -RecordFailures }
             'Opening' { Run-Tests 'opening-focused' @('tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0] }
             'Integration' {
                 Run-Tests 'de-focused' @('tests/Feature/CutoverLifecycleEligibilityTest.php','tests/Feature/CutoverExecutionAuditRecorderTest.php','tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0]
@@ -227,11 +254,13 @@ try {
         if ($Suite -notin @('B3Poison','B3PoisonCommit') -or $evidence.recorded_test_failure) { throw 'Unexpected fixture discard.' }
         $evidence.status='EXPECTED_DISCARD'
     } else { $evidence.after=Assert-Fresh }
+    $afterPaths = @((Get-ChildItem "$repository/backend/app" -Recurse -File -Filter '*.php').FullName) + @((Get-ChildItem "$repository/backend/tests" -Recurse -File -Filter '*.php').FullName)
+    if (@(Compare-Object ($sourcePaths.FullName | Sort-Object) ($afterPaths | Sort-Object)).Count -ne 0) { throw 'Source file inventory changed during validation.' }
     foreach ($file in $sourcePaths) { if ((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -cne $before[$file.FullName]) { throw 'Source changed during validation.' } }
     $evidence.source_hashes_unchanged=$true
     if (-not $evidence.fixture_discard_requested) { $evidence.status='PASS' }
     if ($evidence.recorded_test_failure) { $evidence.status='FAILED_OR_BLOCKED'; $evidence.reason='Recorded test failures, errors or skips prevent acceptance. Merge NO-GO.' }
-    if ($Suite -in @('C','Integration') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
+    if ($Suite -in @('C','Integration','B3Races','B3Workers','B3Cross','B3OpeningPeer') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
         $evidence.mixed_order_deadlock_observed=$true
         $evidence.status='FAILED_OR_BLOCKED';$evidence.reason='PostgreSQL observed a mixed-order deadlock. Merge NO-GO regardless of victim outcomes.'
     }

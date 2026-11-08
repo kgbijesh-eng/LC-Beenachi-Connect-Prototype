@@ -43,7 +43,9 @@ final class DisposableCorruptionFixture
             throw new RuntimeException('A bounded fixture mutation plan is required.');
         }
         foreach ($mutations as $m) {
-            if (! is_array($m)) throw new RuntimeException('Fixture mutation must be data only.');
+            if (! is_array($m)) {
+                throw new RuntimeException('Fixture mutation must be data only.');
+            }
             $table = $m['table'] ?? '';
             if (! isset(self::COLUMNS[$table]) || ! is_int($m['id'] ?? null) || $m['id'] < 1
                 || array_diff(array_keys($m), ['table', 'id', 'values', 'delete']) !== []
@@ -52,36 +54,53 @@ final class DisposableCorruptionFixture
                 throw new RuntimeException('Fixture mutation is not allowlisted.');
             }
             foreach (($m['values'] ?? []) as $value) {
-                if (! is_string($value) && ! is_int($value) && ! is_bool($value) && $value !== null) throw new RuntimeException('Fixture values must be bound scalar data.');
+                if (! is_string($value) && ! is_int($value) && ! is_bool($value) && $value !== null) {
+                    throw new RuntimeException('Fixture values must be bound scalar data.');
+                }
             }
         }
         $before = $this->snapshot();
         $this->expected($before);
-        $attemptPdo = null; $transactionId = null;
+        $attemptPdo = null;
+        $transactionId = null;
         try {
             app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $mutations, $before, &$attemptPdo, &$transactionId): void {
                 $attemptPdo = DB::connection()->getPdo();
                 $transactionId = DB::connection()->selectOne('SELECT pg_current_xact_id()::text AS id', [], false)->id;
                 $context->assertUsable($club);
                 $this->identity();
-                if ($this->snapshot() !== $before) throw new RuntimeException('Fixture catalogue changed before construction.');
+                if ($this->snapshot() !== $before) {
+                    throw new RuntimeException('Fixture catalogue changed before construction.');
+                }
                 foreach ($mutations as $m) {
                     if (! DB::table($m['table'])->where('club_id', $context->organisationId)->where('id', $m['id'])->lockForUpdate()->first()) {
                         throw new RuntimeException('Fixture target is not owned by the authoritative organisation.');
                     }
                 }
                 $selected = [];
-                foreach ($mutations as $m) if (isset(self::TRIGGERS[$m['table']])) $selected[$m['table']] = self::TRIGGERS[$m['table']];
+                foreach ($mutations as $m) {
+                    if (isset(self::TRIGGERS[$m['table']])) {
+                        $selected[$m['table']] = self::TRIGGERS[$m['table']];
+                    }
+                }
                 ksort($selected);
-                foreach ($selected as $table => $trigger) DB::unprepared('ALTER TABLE ONLY public."'.$table.'" DISABLE TRIGGER "'.$trigger.'"');
+                foreach ($selected as $table => $trigger) {
+                    DB::unprepared('ALTER TABLE ONLY public."'.$table.'" DISABLE TRIGGER "'.$trigger.'"');
+                }
                 // Only this fixed raw-DML loop executes while triggers are disabled.
                 foreach ($mutations as $m) {
                     $row = DB::table($m['table'])->where('club_id', $context->organisationId)->where('id', $m['id']);
                     $changed = isset($m['delete']) ? $row->delete() : $row->update($m['values']);
-                    if ($changed !== 1) throw new RuntimeException('Fixture must affect exactly one owned row.');
+                    if ($changed !== 1) {
+                        throw new RuntimeException('Fixture must affect exactly one owned row.');
+                    }
                 }
-                foreach ($selected as $table => $trigger) DB::unprepared('ALTER TABLE ONLY public."'.$table.'" ENABLE TRIGGER "'.$trigger.'"');
-                if ($this->snapshot() !== $before) throw new RuntimeException('Fixture restoration is not proven before commit.');
+                foreach ($selected as $table => $trigger) {
+                    DB::unprepared('ALTER TABLE ONLY public."'.$table.'" ENABLE TRIGGER "'.$trigger.'"');
+                }
+                if ($this->snapshot() !== $before) {
+                    throw new RuntimeException('Fixture restoration is not proven before commit.');
+                }
                 $this->expected($before);
                 $context->assertUsable($club);
             }, 1);
@@ -94,6 +113,7 @@ final class DisposableCorruptionFixture
                 if (DB::transactionLevel() !== 0 || DB::connection()->getPdo()->inTransaction() || $this->snapshot() !== $before) {
                     throw new RuntimeException('Rollback/restoration could not be proven.');
                 }
+                $this->evidence($club, $mutations, $before, $transactionId, $transactionId === null ? 'no_fixture_mutation' : 'aborted');
             } catch (Throwable $uncertain) {
                 $this->discard($uncertain);
             }
@@ -101,7 +121,10 @@ final class DisposableCorruptionFixture
         }
         try {
             $this->identity();
-            if ($this->snapshot() !== $before) throw new RuntimeException('Post-commit restoration is not proven.');
+            if ($this->snapshot() !== $before || DB::connection()->selectOne('SELECT pg_xact_status(CAST(? AS xid8))::text AS status', [$transactionId], false)->status !== 'committed') {
+                throw new RuntimeException('Post-commit restoration/outcome is not proven.');
+            }
+            $this->evidence($club, $mutations, $before, $transactionId, 'committed');
         } catch (Throwable $uncertain) {
             $this->discard($uncertain);
         }
@@ -129,8 +152,8 @@ final class DisposableCorruptionFixture
         $r = $c->selectOne("SELECT current_database() AS db, current_user AS role, pg_get_userbyid(d.datdba) AS owner, host(inet_server_addr()) AS host, inet_server_port()::text AS port, extract(epoch FROM pg_postmaster_start_time())::text AS started, d.oid::text AS oid, NOT r.rolsuper AND NOT r.rolcreatedb AND NOT r.rolcreaterole AND NOT r.rolreplication AND NOT r.rolbypassrls AND NOT r.rolinherit AND NOT EXISTS(SELECT 1 FROM pg_auth_members WHERE member=r.oid) AS safe, NOT EXISTS(SELECT 1 FROM pg_database WHERE datname NOT IN ('lcb_p02b3_finance_test','postgres','template0','template1')) AS inventory, NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datid=d.oid AND pid<>pg_backend_pid() AND backend_type='client backend') AS isolated FROM pg_database d JOIN pg_roles r ON r.rolname=current_user WHERE d.datname=current_database()", [], false);
         if ($r->db !== 'lcb_p02b3_finance_test' || $r->role !== 'lc_beenachi_app' || $r->owner !== 'lc_beenachi_app'
             || $r->host !== '127.0.0.1' || $r->port !== getenv('B3_FIXTURE_PORT') || $r->started !== getenv('B3_FIXTURE_STARTED')
-            || $r->oid !== getenv('B3_FIXTURE_DATABASE_OID') || ! in_array($r->safe, [true,1,'1','t'], true) || ! in_array($r->inventory, [true,1,'1','t'], true) || ! in_array($r->isolated, [true,1,'1','t'], true)) {
-            $reason = ['start' => $r->started === getenv('B3_FIXTURE_STARTED'), 'oid' => $r->oid === getenv('B3_FIXTURE_DATABASE_OID'), 'safe' => in_array($r->safe,[true,1,'1','t'],true), 'inventory' => in_array($r->inventory,[true,1,'1','t'],true), 'isolated' => in_array($r->isolated,[true,1,'1','t'],true)];
+            || $r->oid !== getenv('B3_FIXTURE_DATABASE_OID') || ! in_array($r->safe, [true, 1, '1', 't'], true) || ! in_array($r->inventory, [true, 1, '1', 't'], true) || ! in_array($r->isolated, [true, 1, '1', 't'], true)) {
+            $reason = ['start' => $r->started === getenv('B3_FIXTURE_STARTED'), 'oid' => $r->oid === getenv('B3_FIXTURE_DATABASE_OID'), 'safe' => in_array($r->safe, [true, 1, '1', 't'], true), 'inventory' => in_array($r->inventory, [true, 1, '1', 't'], true), 'isolated' => in_array($r->isolated, [true, 1, '1', 't'], true)];
             throw new RuntimeException('Disposable fixture cluster, owner, role or isolation rejected: '.implode(',', array_keys(array_filter($reason, fn ($v) => ! $v))));
         }
     }
@@ -141,17 +164,28 @@ final class DisposableCorruptionFixture
         $placeholders = implode(',', array_fill(0, count($tables), '?'));
         $rows = DB::connection()->select("/* b3 fixture trigger snapshot */ SELECT c.relname AS table_name, t.tgname, t.tgenabled, t.tgisinternal, t.tgtype, t.tgnargs, pg_get_triggerdef(t.oid) AS definition, pg_get_userbyid(c.relowner) AS owner, n.nspname AS schema_name, p.proname, p.prosrc, p.prosecdef, p.proconfig, pg_get_userbyid(p.proowner) AS function_owner FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_proc p ON p.oid=t.tgfoid WHERE n.nspname='public' AND c.relname IN ($placeholders) ORDER BY c.relname,t.tgname", $tables, false);
         $constraints = DB::connection()->select("/* b3 fixture constraint snapshot */ SELECT c.relname, con.conname, con.convalidated, pg_get_constraintdef(con.oid) AS definition FROM pg_constraint con JOIN pg_class c ON c.oid=con.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname IN ($placeholders) ORDER BY c.relname,con.conname", $tables, false);
+
         return ['triggers' => array_map(fn ($row) => (array) $row, $rows), 'constraints' => array_map(fn ($row) => (array) $row, $constraints)];
     }
 
     private function expected(array $snapshot): void
     {
         $rows = $snapshot['triggers'];
-        foreach ($rows as $row) if ($row['tgenabled'] !== 'O') throw new RuntimeException('Expected fixture trigger definition/enabled state rejected.');
-        foreach ($snapshot['constraints'] as $constraint) if (! in_array($constraint['convalidated'], [true,1,'1','t'],true)) throw new RuntimeException('Fixture constraints must remain validated.');
+        foreach ($rows as $row) {
+            if ($row['tgenabled'] !== 'O') {
+                throw new RuntimeException('Expected fixture trigger definition/enabled state rejected.');
+            }
+        }
+        foreach ($snapshot['constraints'] as $constraint) {
+            if (! in_array($constraint['convalidated'], [true, 1, '1', 't'], true)) {
+                throw new RuntimeException('Fixture constraints must remain validated.');
+            }
+        }
         foreach (self::TRIGGERS as $table => $name) {
             $found = array_values(array_filter($rows, fn ($r) => $r['table_name'] === $table && $r['tgname'] === $name));
-            if (count($found) !== 1) throw new RuntimeException('Expected fixture trigger is missing.');
+            if (count($found) !== 1) {
+                throw new RuntimeException('Expected fixture trigger is missing.');
+            }
             $t = $found[0];
             $definition = 'CREATE TRIGGER '.$name.' BEFORE DELETE OR UPDATE ON public.'.$table.' FOR EACH ROW EXECUTE FUNCTION accounting_integration_reject_mutation()';
             if ($t['definition'] !== $definition || $t['tgenabled'] !== 'O' || $t['tgisinternal'] || (int) $t['tgtype'] !== 27
@@ -163,11 +197,24 @@ final class DisposableCorruptionFixture
         }
     }
 
+    private function evidence(Club $club, array $mutations, array $snapshot, ?string $xid, string $outcome): void
+    {
+        $selected = [];
+        foreach ($mutations as $m) {
+            if (isset(self::TRIGGERS[$m['table']])) {
+                $selected[] = self::TRIGGERS[$m['table']];
+            }
+        }
+        fwrite(STDOUT, "\nB3_FIXTURE_RESTORATION ".json_encode(['database' => 'lcb_p02b3_finance_test', 'organisation' => $club->id, 'transaction_id' => $xid, 'outcome' => $outcome, 'selected_triggers' => array_values(array_unique($selected)), 'catalogue_before_sha256' => hash('sha256', json_encode($snapshot, JSON_THROW_ON_ERROR)), 'catalogue_after_sha256' => hash('sha256', json_encode($this->snapshot(), JSON_THROW_ON_ERROR)), 'restored' => true], JSON_THROW_ON_ERROR)."\n");
+    }
+
     private function discard(Throwable $failure): never
     {
         $path = (string) getenv('B3_FIXTURE_POISON_FILE');
         try {
-            if ($path === '' || file_put_contents($path, json_encode(['discard' => true, 'database' => 'lcb_p02b3_finance_test', 'reason' => 'Fixture restoration or transaction outcome is uncertain.'], JSON_THROW_ON_ERROR)) === false) throw new RuntimeException('Discard marker unavailable.');
+            if ($path === '' || file_put_contents($path, json_encode(['discard' => true, 'database' => 'lcb_p02b3_finance_test', 'reason' => 'Fixture restoration or transaction outcome is uncertain.'], JSON_THROW_ON_ERROR)) === false) {
+                throw new RuntimeException('Discard marker unavailable.');
+            }
         } catch (Throwable) {
             // No marker means later tests cannot safely be admitted: terminate this test process.
             fwrite(STDERR, 'Fixture cluster must be discarded; marker persistence failed.');
