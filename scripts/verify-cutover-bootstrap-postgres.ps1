@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
     [switch]$COnly,
     [switch]$CRegressionOnly,
@@ -27,6 +27,8 @@ $databases = @(switch ($Suite) {
     'Integration' { @('lcb_p02b2_cutover_test') }
     'Opening' { @('lcb_p02b2_cutover_test') }
     'F1' { @('lcb_p02b2_cutover_test') }
+    'B3Foundation' { @('lcb_p02b3_finance_test') }
+    'B3' { @('lcb_p02b3_finance_test') }
     'Guard' { @('lcb_p02b1_transaction_guard_test') }
     'Finance' { @('lcb_3ijae_finance_p02b2ab', 'lcb_3iizt_statement_snapshot_concurrency_test') }
 })
@@ -34,7 +36,7 @@ $evidence = @{ suite=$Suite; directory=$output; host='127.0.0.1'; port=$Port; da
 $evidence.bootstrap_only=[bool]$BootstrapOnly
 $evidence.c_only=[bool]$COnly
 $evidence.c_regression_only=[bool]$CRegressionOnly
-$names = @('APP_ENV','DB_CONNECTION','DB_URL','DB_HOST','DB_PORT','DB_DATABASE','DB_USERNAME','DB_PASSWORD','DB_SSLMODE','PGPASSWORD','PGOPTIONS','PGSERVICE','PGSERVICEFILE','APP_CONFIG_CACHE','CACHE_STORE','SESSION_DRIVER','QUEUE_CONNECTION','INSTANCE_ORGANISATION_CODE','RUN_P02B2_CUTOVER_POSTGRES','RUN_P02B1_POSTGRES_TESTS','RUN_3IIZG_POSTGRES_CONCURRENCY','RUN_3IJAE_POSTGRES_CONCURRENCY','RUN_3IIZT_POSTGRES_CONCURRENCY')
+$names = @('APP_ENV','DB_CONNECTION','DB_URL','DB_HOST','DB_PORT','DB_DATABASE','DB_USERNAME','DB_PASSWORD','DB_SSLMODE','PGPASSWORD','PGOPTIONS','PGSERVICE','PGSERVICEFILE','APP_CONFIG_CACHE','CACHE_STORE','SESSION_DRIVER','QUEUE_CONNECTION','INSTANCE_ORGANISATION_CODE','RUN_P02B2_CUTOVER_POSTGRES','RUN_P02B1_POSTGRES_TESTS','RUN_P02B3_FINANCE_POSTGRES','RUN_3IIZG_POSTGRES_CONCURRENCY','RUN_3IJAE_POSTGRES_CONCURRENCY','RUN_3IIZT_POSTGRES_CONCURRENCY')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = @{ exists=(Test-Path "Env:$name"); value=[Environment]::GetEnvironmentVariable($name) } }
 $started = $false
@@ -117,7 +119,7 @@ try {
     $evidence.before=Assert-Fresh
     $env:APP_ENV='testing';$env:DB_CONNECTION='pgsql';$env:DB_URL='';$env:DB_HOST='127.0.0.1';$env:DB_PORT=[string]$Port;$env:DB_USERNAME=$appRole;$env:DB_PASSWORD=$appPassword;$env:DB_SSLMODE='disable'
     $env:CACHE_STORE='array';$env:SESSION_DRIVER='array';$env:QUEUE_CONNECTION='sync';$env:INSTANCE_ORGANISATION_CODE='UNASSIGNED-SYNTHETIC'
-    $env:RUN_P02B2_CUTOVER_POSTGRES='1';$env:RUN_P02B1_POSTGRES_TESTS='1';$env:RUN_3IIZG_POSTGRES_CONCURRENCY='1';$env:RUN_3IJAE_POSTGRES_CONCURRENCY='1';$env:RUN_3IIZT_POSTGRES_CONCURRENCY='1'
+    $env:RUN_P02B3_FINANCE_POSTGRES='1';$env:RUN_P02B2_CUTOVER_POSTGRES='1';$env:RUN_P02B1_POSTGRES_TESTS='1';$env:RUN_3IIZG_POSTGRES_CONCURRENCY='1';$env:RUN_3IJAE_POSTGRES_CONCURRENCY='1';$env:RUN_3IIZT_POSTGRES_CONCURRENCY='1'
     Push-Location "$repository/backend"
     try {
         switch ($Suite) {
@@ -125,6 +127,8 @@ try {
                 Run-Tests 'f1-real-outcomes' @('tests/Feature/CutoverOpeningTransactionOutcomeTest.php') $databases[0]
                 Run-Tests 'f1-real-outcomes-stability' @('tests/Feature/CutoverOpeningTransactionOutcomeTest.php') $databases[0]
             }
+            'B3Foundation' { Run-Tests 'b3-foundation' @('tests/Feature/FinancialTransactionFoundationTest.php') $databases[0] }
+            'B3' { Run-Tests 'b3-foundation' @('tests/Feature/FinancialTransactionFoundationTest.php') $databases[0] }
             'Opening' { Run-Tests 'opening-focused' @('tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0] }
             'Integration' {
                 Run-Tests 'de-focused' @('tests/Feature/CutoverLifecycleEligibilityTest.php','tests/Feature/CutoverExecutionAuditRecorderTest.php','tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0]
