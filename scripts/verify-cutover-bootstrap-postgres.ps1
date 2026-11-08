@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair', 'B3Fixtures', 'B3Poison', 'B3PoisonCommit', 'B3Active', 'B3Direct', 'B3Contexts', 'B3Races', 'B3Workers', 'B3Retries', 'B3Resources', 'B3Cross', 'B3OpeningPeer', 'B4', 'B4Races', 'B4Resources')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair', 'B3Fixtures', 'B3Poison', 'B3PoisonCommit', 'B3Active', 'B3Direct', 'B3Contexts', 'B3Races', 'B3Workers', 'B3Retries', 'B3Resources', 'B3Cross', 'B3OpeningPeer', 'B4', 'B4Races', 'B4Resources', 'B4Reactivation')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
     [switch]$COnly,
     [switch]$CRegressionOnly,
@@ -30,6 +30,7 @@ $databases = @(switch ($Suite) {
     'B4' { @('lcb_p02b3_finance_test') }
     'B4Races' { @('lcb_p02b3_finance_test') }
     'B4Resources' { @('lcb_p02b3_finance_test') }
+    'B4Reactivation' { @('lcb_p02b3_finance_test') }
     'B3Foundation' { @('lcb_p02b3_finance_test') }
     'B3' { @('lcb_p02b3_finance_test') }
     'B3Historical' { @('lcb_p02b3_finance_test') }
@@ -165,6 +166,7 @@ try {
             }
             'B4' { Run-Tests 'b4-enforcement' @('tests/Feature/IntegrationConfigurationEnforcementTest.php') $databases[0] -RecordFailures }
             'B4Races' { Run-Tests 'b4-races' @('tests/Feature/IntegrationConfigurationConcurrencyTest.php') $databases[0] -RecordFailures }
+            'B4Reactivation' { Run-Tests 'b4-reactivation-blocker' @('tests/Feature/IntegrationConfigurationConcurrencyTest.php','--filter','activate-config-first-1') $databases[0] -RecordFailures }
             'B4Resources' { Run-Tests 'b4-resources' @('tests/Feature/IntegrationConfigurationResourceScopeTest.php') $databases[0] -RecordFailures }
             'B3Foundation' { Run-Tests 'b3-foundation' @('tests/Feature/FinancialTransactionFoundationTest.php') $databases[0] }
             'B3' { Run-Tests 'b3-core' @('tests/Feature/FinancialOrganisationEnforcementTest.php','tests/Feature/FinancialTransactionFoundationTest.php','tests/Feature/Milestone3iicCoreJournalPostingServiceTest.php','tests/Feature/Milestone3iieInternalJournalReversalServiceTest.php','tests/Feature/Milestone3iizkACanonicalAccountingMetadataFundAttributionTest.php') $databases[0] }
@@ -266,7 +268,7 @@ try {
     $evidence.source_hashes_unchanged=$true
     if (-not $evidence.fixture_discard_requested) { $evidence.status='PASS' }
     if ($evidence.recorded_test_failure) { $evidence.status='FAILED_OR_BLOCKED'; $evidence.reason='Recorded test failures, errors or skips prevent acceptance. Merge NO-GO.' }
-    if ($Suite -in @('C','Integration','B3Races','B3Workers','B3Cross','B3OpeningPeer','B4Races','B4Resources') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
+    if ($Suite -in @('C','Integration','B3Races','B3Workers','B3Cross','B3OpeningPeer','B4Races','B4Resources','B4Reactivation') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
         $evidence.mixed_order_deadlock_observed=$true
         $evidence.status='FAILED_OR_BLOCKED';$evidence.reason='PostgreSQL observed a mixed-order deadlock. Merge NO-GO regardless of victim outcomes.'
     }

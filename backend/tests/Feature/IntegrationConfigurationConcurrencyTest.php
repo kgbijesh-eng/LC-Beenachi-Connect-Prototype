@@ -103,6 +103,15 @@ return $cases;
         $result = $configurationFirst ? $this->race($config, $source) : $this->race($source, $config);
         $expected = $action === 'revokeMapping' && $configurationFirst || $action === 'activate' && ! $configurationFirst ? 'domain_rejected' : 'success';
         $this->assertSame(['success', $expected], array_column($result, 'status'));
+        fwrite(STDOUT, "\nB4_SOURCE_COVERAGE_DIAGNOSTIC ".json_encode([
+            'action' => $action, 'configuration_first' => $configurationFirst,
+            'original_activation' => $activation->id,
+            'activations' => DB::table('club_accounting_integration_activations')->where('club_id', $source['club'])->where('source_type', 'member_charge')->orderBy('id')->get(['id', 'coverage_start_date', 'activated_at']),
+            'terminal_events' => DB::table('club_accounting_integration_activation_events')->where('club_id', $source['club'])->orderBy('id')->get(['id', 'integration_activation_id', 'event_type', 'recorded_at']),
+            'current_slot' => DB::table('club_accounting_integration_current_activations')->where('club_id', $source['club'])->where('source_type', 'member_charge')->first(),
+            'coverage' => DB::table('club_accounting_source_coverage_decisions')->where('club_id', $source['club'])->where('source_type', 'member_charge')->first(),
+            'journal_before' => $before, 'journal_after' => ClubJournalEntry::where('club_id', $source['club'])->count(),
+        ], JSON_THROW_ON_ERROR)."\n");
         $posted = $action === 'activate' ? $configurationFirst : ! $configurationFirst;
         $this->assertSame($before + (int) $posted, ClubJournalEntry::where('club_id', $source['club'])->count());
         if ($action === 'revokeActivation') {

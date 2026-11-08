@@ -41,10 +41,10 @@ final class IntegrationConfigurationFixture
         $p['proposal_input'] = ['client_request_id' => (string) Str::uuid(), 'proposal_type' => 'mapping_create', 'source_type' => 'member_charge', 'source_key' => 'membership_dues', 'ledger_account_id' => $p['income'], 'mapping_version' => 'B4-V1', 'effective_date' => '2027-07-01', 'reference' => $p['reference']];
         $config = app(Configuration::class);
         if ($action === 'revokeMapping') {
-            $p['mapping'] = $config->map($p['club'], 'member_charge', 'membership_dues', LedgerAccount::findOrFail($p['income']), 'B4-V1', '2027-07-01', 'INITIAL-MAP', User::findOrFail($p['actor']))->id;
+            $p['mapping'] = $config->map($p['club'], 'member_charge', 'membership_dues', LedgerAccount::findOrFail($p['income']), 'B4-V1', '2027-07-01', 'INITIAL-MAP-'.$p['reference'], User::findOrFail($p['actor']))->id;
         }
         if ($action === 'revokeActivation') {
-            $p['activation'] = $config->activate($p['club'], 'member_charge', '2027-07-01', 'B4-V1', 'INITIAL-ACT', User::findOrFail($p['actor']))->id;
+            $p['activation'] = $config->activate($p['club'], 'member_charge', '2027-07-01', 'B4-V1', 'INITIAL-ACT-'.$p['reference'], User::findOrFail($p['actor']))->id;
         }
         if (in_array($action, ['propose-replay', 'approve', 'reject', 'withdraw'], true)) {
             $p['proposal'] = app(Proposals::class)->propose(Club::findOrFail($p['club']), User::findOrFail($p['actor']), $p['proposal_input'])->id;
@@ -55,6 +55,8 @@ final class IntegrationConfigurationFixture
 
     public static function perform(array $p, ?OrganisationTransactionContext $context = null): mixed
     {
+        \Carbon\CarbonImmutable::setTestNow('2027-08-12 10:00:00');
+        \Carbon\Carbon::setTestNow('2027-08-12 10:00:00');
         $config = app(Configuration::class);
         $actor = User::findOrFail($p['actor']);
         $args = match ($p['action']) {
