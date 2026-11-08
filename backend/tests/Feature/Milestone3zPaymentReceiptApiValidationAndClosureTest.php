@@ -119,6 +119,7 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends FinancialPost
         $member = $this->createMember($club);
         $user = $this->createUserWithPaymentPermission($club);
 
+        config(['instance.organisation_code' => $club->code]);
         $payment = app(PaymentRecordingService::class)->record($user, $member, [
             'amount' => '925.50',
             'payment_date' => '2026-06-10',
@@ -162,6 +163,7 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends FinancialPost
         $member = $this->createMember($club);
         $user = $this->createUserWithPaymentPermission($club);
 
+        config(['instance.organisation_code' => $club->code]);
         $payment = app(PaymentRecordingService::class)->record($user, $member, [
             'amount' => '450',
             'payment_date' => '2026-06-10',
@@ -198,6 +200,7 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends FinancialPost
             'payment_mode' => 'cash',
         ]);
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $otherPayment = app(PaymentRecordingService::class)->record($issuer, $otherMember, [
             'amount' => '400',
             'payment_date' => '2026-06-10',
@@ -242,18 +245,21 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends FinancialPost
         $member = $this->createMember($club, 'MEM-3Z-001');
         $otherMember = $this->createMember($otherClub, 'MEM-OTHER-3Z-001');
 
+        config(['instance.organisation_code' => $club->code]);
         $payment = app(PaymentRecordingService::class)->record($user, $member, [
             'amount' => '700',
             'payment_date' => '2026-06-10',
             'payment_mode' => 'upi',
         ]);
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $otherPayment = app(PaymentRecordingService::class)->record($otherUser, $otherMember, [
             'amount' => '900',
             'payment_date' => '2026-06-10',
             'payment_mode' => 'cash',
         ]);
 
+        config(['instance.organisation_code' => $club->code]);
         app(ReceiptGenerationService::class)->generate($user, $payment);
 
         $token = $user->createToken('test-token')->plainTextToken;
@@ -309,7 +315,6 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends FinancialPost
             'timezone' => 'Asia/Kolkata',
             'is_active' => true,
         ]);
-        config(['instance.organisation_code' => $club->code]);
         config(['instance.organisation_code' => $club->code]);
         return $club;
     }

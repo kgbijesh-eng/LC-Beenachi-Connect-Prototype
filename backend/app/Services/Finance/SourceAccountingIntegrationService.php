@@ -123,7 +123,11 @@ final class SourceAccountingIntegrationService
     public function validateChargeReplayWithin(OrganisationTransactionContext $context, ClubCharge $charge): ?ClubAccountingSourceIntegration
     {
         $context->assertUsable((int) $charge->club_id);
+        $requestedVersion = $charge->lock_version;
         $charge = ClubCharge::query()->where('club_id', $context->organisationId)->whereKey($charge->id)->lockForUpdate()->firstOrFail();
+        if ($charge->lock_version !== $requestedVersion) {
+            throw new AccountingIntegrationConflictException('The source replay version changed.');
+        }
         $binding = $this->chargeBinding($charge);
 
         return $this->validateSourceReplay(['club_id' => $charge->club_id, 'source_type' => AccountingIntegrationConfigurationService::SOURCE_CHARGE, 'source_id' => $charge->public_id, 'source_version' => $charge->lock_version, 'date' => $charge->issued_at->toDateString(), 'source_key' => $charge->category, 'amount' => (int) collect($binding['member_charges'])->sum('original_amount_paise'), 'request_key' => null, 'binding' => $binding, 'terminal' => $charge->status === 'cancelled']);
@@ -137,7 +141,11 @@ final class SourceAccountingIntegrationService
     public function validatePaymentReplayWithin(OrganisationTransactionContext $context, MemberPayment $payment): ?ClubAccountingSourceIntegration
     {
         $context->assertUsable((int) $payment->club_id);
+        $requestedVersion = $payment->lock_version;
         $payment = MemberPayment::query()->where('club_id', $context->organisationId)->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+        if ($payment->lock_version !== $requestedVersion) {
+            throw new AccountingIntegrationConflictException('The source replay version changed.');
+        }
         $integration = ClubAccountingSourceIntegration::query()
             ->where('club_id', $payment->club_id)
             ->where('source_type', AccountingIntegrationConfigurationService::SOURCE_PAYMENT)

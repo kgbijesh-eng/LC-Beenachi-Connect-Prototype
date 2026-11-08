@@ -40,7 +40,7 @@ final class Milestone3iiztPostgresStatementSnapshotConcurrencyTest extends TestC
         ], JSON_THROW_ON_ERROR));
         $process = new Process([
             PHP_BINARY, base_path('tests/Support/Milestone3iiztPostgresStatementWorker.php'), $requestPath, $barrier,
-        ], base_path(), timeout: 40);
+        ], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $fixture['club']->code], timeout: 40);
         $process->start();
         $this->awaitFile($barrier.DIRECTORY_SEPARATOR.'snapshot.ready');
 
@@ -73,6 +73,7 @@ final class Milestone3iiztPostgresStatementSnapshotConcurrencyTest extends TestC
     private function fixture(): array
     {
         $club = Club::create(['name' => '3IIZT Snapshot Club', 'code' => 'STMT3IIZT', 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]);
         $officer = User::factory()->create();
         $period = ClubAccountingPeriod::create([
             'club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01',

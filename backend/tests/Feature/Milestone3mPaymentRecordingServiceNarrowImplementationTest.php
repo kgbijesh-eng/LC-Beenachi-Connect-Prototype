@@ -170,7 +170,6 @@ class Milestone3mPaymentRecordingServiceNarrowImplementationTest extends Financi
             'is_active' => true,
         ]);
         config(['instance.organisation_code' => $club->code]);
-        config(['instance.organisation_code' => $club->code]);
         return $club;
     }
 

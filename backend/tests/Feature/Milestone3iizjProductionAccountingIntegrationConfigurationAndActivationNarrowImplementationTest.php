@@ -39,6 +39,7 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         parent::setUp();
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
         $this->club = Club::create(['name' => 'Beenachi', 'code' => 'LCB']);
+        config(['instance.organisation_code' => $this->club->code]);
         $this->permission = Permission::where('slug', AccountingIntegrationProposalService::PERMISSION)->firstOrFail();
     }
 

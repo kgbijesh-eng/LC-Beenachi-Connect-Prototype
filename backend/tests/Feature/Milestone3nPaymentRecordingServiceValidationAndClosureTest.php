@@ -50,7 +50,8 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends Financi
         $this->assertStringContainsString('class PaymentRecordingService', $content);
         $this->assertStringContainsString('PERMISSION_RECORD_PAYMENT', $content);
         $this->assertStringContainsString('payments.record', $content);
-        $this->assertStringContainsString('DB::transaction', $content);
+        $this->assertStringContainsString('OrganisationTransactionGuard::class', $content);
+        $this->assertStringContainsString('->run(', $content);
         $this->assertStringContainsString('MemberLedgerEntry::ENTRY_TYPE_CREDIT', $content);
         $this->assertStringContainsString('MemberLedgerEntry::SOURCE_PAYMENT', $content);
         $this->assertStringContainsString("'ledger_entry_id' => \$ledgerEntry->id", $content);
@@ -261,7 +262,6 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends Financi
             'timezone' => 'Asia/Kolkata',
             'is_active' => true,
         ]);
-        config(['instance.organisation_code' => $club->code]);
         config(['instance.organisation_code' => $club->code]);
         return $club;
     }

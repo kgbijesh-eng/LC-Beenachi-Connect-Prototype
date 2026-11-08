@@ -101,6 +101,7 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends Financ
         $user = $this->createUserWithPaymentPermission($club);
         $otherUser = $this->createUserWithPaymentPermission($otherClub);
 
+        config(['instance.organisation_code' => $club->code]);
         $paymentOne = app(PaymentRecordingService::class)->record($user, $memberOne, [
             'amount' => '100',
             'payment_date' => '2026-06-10',
@@ -113,14 +114,17 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends Financ
             'payment_mode' => 'upi',
         ]);
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $otherPayment = app(PaymentRecordingService::class)->record($otherUser, $otherMember, [
             'amount' => '300',
             'payment_date' => '2026-06-12',
             'payment_mode' => 'cash',
         ]);
 
+        config(['instance.organisation_code' => $club->code]);
         $receiptOne = app(ReceiptGenerationService::class)->generate($user, $paymentOne);
         $receiptTwo = app(ReceiptGenerationService::class)->generate($user, $paymentTwo);
+        config(['instance.organisation_code' => $otherClub->code]);
         $otherReceipt = app(ReceiptGenerationService::class)->generate($otherUser, $otherPayment);
 
         $this->assertSame('LCB/2026-27/RCP/0001', $receiptOne->receipt_number);
@@ -216,6 +220,7 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends Financ
         $otherUser = $this->createUserWithPaymentPermission($otherClub);
         $otherMember = $this->createMember($otherClub, 'MEM-OTHER-001');
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $otherPayment = app(PaymentRecordingService::class)->record($otherUser, $otherMember, [
             'amount' => '700',
             'payment_date' => '2026-06-10',
@@ -278,7 +283,6 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends Financ
             'timezone' => 'Asia/Kolkata',
             'is_active' => true,
         ]);
-        config(['instance.organisation_code' => $club->code]);
         config(['instance.organisation_code' => $club->code]);
         return $club;
     }

@@ -55,7 +55,8 @@ class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends Financ
         $serviceContent = file_get_contents(app_path('Services/Finance/ReceiptGenerationService.php'));
 
         $this->assertStringContainsString('class ReceiptGenerationService', $serviceContent);
-        $this->assertStringContainsString('DB::transaction', $serviceContent);
+        $this->assertStringContainsString('OrganisationTransactionGuard::class', $serviceContent);
+        $this->assertStringContainsString('->run(', $serviceContent);
         $this->assertStringContainsString('lockForUpdate', $serviceContent);
         $this->assertStringContainsString('PERMISSION_GENERATE_RECEIPT', $serviceContent);
         $this->assertStringContainsString('PaymentRecordingService::PERMISSION_RECORD_PAYMENT', $serviceContent);
@@ -69,6 +70,7 @@ class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends Financ
         $member = $this->createMember($club);
         $user = $this->createUserWithPaymentPermission($club);
 
+        config(['instance.organisation_code' => $club->code]);
         $payment = app(PaymentRecordingService::class)->record($user, $member, [
             'amount' => '900',
             'payment_date' => '2026-06-12',
@@ -167,6 +169,7 @@ class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends Financ
         $unauthorizedUser = $this->createUserWithClubMembershipButNoPaymentPermission($club);
         $otherUser = $this->createUserWithPaymentPermission($otherClub);
 
+        config(['instance.organisation_code' => $club->code]);
         $payment = app(PaymentRecordingService::class)->record($authorizedUser, $member, [
             'amount' => '300',
             'payment_date' => '2026-06-12',
@@ -181,6 +184,7 @@ class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends Financ
             $this->assertStringContainsString('permission', $exception->getMessage());
         }
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $otherPayment = app(PaymentRecordingService::class)->record($otherUser, $otherMember, [
             'amount' => '400',
             'payment_date' => '2026-06-12',
@@ -243,7 +247,6 @@ class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends Financ
             'timezone' => 'Asia/Kolkata',
             'is_active' => true,
         ]);
-        config(['instance.organisation_code' => $club->code]);
         config(['instance.organisation_code' => $club->code]);
         return $club;
     }

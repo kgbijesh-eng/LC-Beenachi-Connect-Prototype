@@ -214,6 +214,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
             'name' => 'Unactivated Club', 'code' => 'UNACTIVATED',
             'timezone' => 'Asia/Kolkata', 'is_active' => true,
         ]);
+        config(['instance.organisation_code' => $club->code]);
         $membership = ClubMembership::query()->where('club_id', $fixture['club']->id)->where('user_id', $fixture['officer']->id)->firstOrFail();
         ClubMembership::create([
             'club_id' => $club->id, 'user_id' => $fixture['officer']->id,
@@ -406,6 +407,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
             'name' => 'Statement Test Club '.$suffix, 'code' => 'STATEMENT'.$suffix,
             'timezone' => 'Asia/Kolkata', 'is_active' => true,
         ]);
+        config(['instance.organisation_code' => $club->code]);
         $officer = User::factory()->create();
         $permission = Permission::firstOrCreate(['slug' => 'finance.club.statement.view'], [
             'name' => 'View Club Account Statements', 'slug' => 'finance.club.statement.view',

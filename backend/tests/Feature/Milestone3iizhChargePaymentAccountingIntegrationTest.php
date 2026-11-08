@@ -285,7 +285,7 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPost
         try {
             DB::table('club_accounting_source_integration_events')->where('source_integration_id', $integration->id)->where('event_type', 'integration_reversal')->update(['reversal_journal_entry_id' => ClubJournalEntry::where('club_id', $f['club']->id)->whereNull('reversal_of_entry_id')->oldest('id')->value('id')]);
             try {
-                app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => appWithin($context, SourceAccountingIntegrationService::class)->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Correction'));
+                app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->reverseWithin($context, $f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Correction'));
                 $this->fail('A corrupt reversal event must conflict.');
             } catch (AccountingIntegrationConflictException) {
                 $this->addToAssertionCount(1);
@@ -447,6 +447,7 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPost
     {
         $f = $this->fixture();
         $other = $this->fixture();
+        config(['instance.organisation_code' => $f['club']->code]);
         $config = app(AccountingIntegrationConfigurationService::class);
         $mapping = $config->map($f['club']->id, 'member_charge', 'membership_dues', $f['income'], 'MAP-V1', '2027-07-01', 'CROSS-MAP', $f['actor']);
         $activation = $config->activate($f['club']->id, 'member_charge', '2027-07-01', 'MAP-V1', 'CROSS-ACT', $f['actor']);
@@ -664,14 +665,14 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPost
             $this->addToAssertionCount(1);
         }
         $post = MemberPayment::create(['club_id' => $f['club']->id, 'member_id' => $f['member']->id, 'amount_paise' => 100, 'payment_date' => '2027-07-06', 'payment_mode' => 'bank_transfer', 'idempotency_key' => (string) Str::uuid(), 'request_hash' => str_repeat('b', 64), 'status' => 'recorded', 'recorded_by_user_id' => $f['actor']->id]);
-        app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => appWithin($context, SourceAccountingIntegrationService::class)->recordPaymentCoverageDecision($post, $f['actor']));
+        app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->recordPaymentCoverageDecisionWithin($context, $post, $f['actor']));
         $this->assertNull(app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $post)));
 
         $legacy = $this->fixture();
         $legacyCharge = app(FinanceWriteService::class)->issue($legacy['actor'], $legacy['club'], $this->draftCharge($legacy), 1);
         app(AccountingIntegrationConfigurationService::class)->map($legacy['club']->id, 'member_charge', 'membership_dues', $legacy['income'], 'MAP-V1', '2027-07-01', 'PRE-MAP', $legacy['actor']);
         app(AccountingIntegrationConfigurationService::class)->activate($legacy['club']->id, 'member_charge', '2027-07-10', 'MAP-V1', 'PRE-ACT', $legacy['actor']);
-        $this->assertNull(app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validateChargeReplayWithin($context, $legacyCharge)));
+        $this->assertNull(app(OrganisationTransactionGuard::class)->run($legacy['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validateChargeReplayWithin($context, $legacyCharge)));
     }
 
     public function test_source_and_journal_idempotency_are_separate_and_lifecycle_misuse_fails(): void
@@ -690,13 +691,13 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPost
 
         $draft = $this->draftCharge($f);
         try {
-            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => appWithin($context, SourceAccountingIntegrationService::class)->postCharge($draft, $f['actor']));
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->postChargeWithin($context, $draft, $f['actor']));
             $this->fail('Draft direct posting must fail.');
         } catch (AccountingIntegrationException) {
             $this->addToAssertionCount(1);
         }
         try {
-            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => appWithin($context, SourceAccountingIntegrationService::class)->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), '2027-07-06', $f['actor'], 'Invalid direct reversal'));
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->reverseWithin($context, $f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), '2027-07-06', $f['actor'], 'Invalid direct reversal'));
             $this->fail('Issued direct reversal must fail.');
         } catch (AccountingIntegrationException) {
             $this->addToAssertionCount(1);

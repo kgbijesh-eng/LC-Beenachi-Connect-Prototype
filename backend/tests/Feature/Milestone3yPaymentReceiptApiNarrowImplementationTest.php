@@ -347,7 +347,6 @@ class Milestone3yPaymentReceiptApiNarrowImplementationTest extends FinancialPost
             'is_active' => true,
         ]);
         config(['instance.organisation_code' => $club->code]);
-        config(['instance.organisation_code' => $club->code]);
         return $club;
     }
 
