@@ -12,6 +12,9 @@ abstract class FinancialPostgresTestCase extends TestCase
 {
     protected function setUp(): void
     {
+        if (getenv('B3_FIXTURE_POISON_FILE') && is_file(getenv('B3_FIXTURE_POISON_FILE'))) {
+            throw new \RuntimeException('Disposable fixture cluster discarded; no further database operations.');
+        }
         parent::setUp();
         $name = DB::connection()->getDatabaseName();
         $b3 = env('RUN_P02B3_FINANCE_POSTGRES') === '1' && $name === 'lcb_p02b3_finance_test';
@@ -30,4 +33,11 @@ abstract class FinancialPostgresTestCase extends TestCase
         $this->artisan('migrate:fresh', ['--force' => true])->assertExitCode(0);
         config(['instance.organisation_code' => null]);
     }
+    protected function tearDown(): void
+    {
+        // Explicitly release genuine-root sessions even when PHPUnit retains listener closures.
+        try { if ($this->app !== null) DB::disconnect(); }
+        finally { parent::tearDown(); }
+    }
+
 }

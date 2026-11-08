@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair', 'B3Fixtures', 'B3Poison', 'B3PoisonCommit')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
     [switch]$COnly,
     [switch]$CRegressionOnly,
@@ -31,6 +31,9 @@ $databases = @(switch ($Suite) {
     'B3' { @('lcb_p02b3_finance_test') }
     'B3Historical' { @('lcb_p02b3_finance_test') }
     'B3Repair' { @('lcb_p02b3_finance_test') }
+    'B3Fixtures' { @('lcb_p02b3_finance_test') }
+    'B3Poison' { @('lcb_p02b3_finance_test') }
+    'B3PoisonCommit' { @('lcb_p02b3_finance_test') }
     'Guard' { @('lcb_p02b1_transaction_guard_test') }
     'Finance' { @('lcb_3ijae_finance_p02b2ab', 'lcb_3iizt_statement_snapshot_concurrency_test') }
 })
@@ -39,6 +42,7 @@ $evidence.bootstrap_only=[bool]$BootstrapOnly
 $evidence.c_only=[bool]$COnly
 $evidence.c_regression_only=[bool]$CRegressionOnly
 $names = @('APP_ENV','DB_CONNECTION','DB_URL','DB_HOST','DB_PORT','DB_DATABASE','DB_USERNAME','DB_PASSWORD','DB_SSLMODE','PGPASSWORD','PGOPTIONS','PGSERVICE','PGSERVICEFILE','APP_CONFIG_CACHE','CACHE_STORE','SESSION_DRIVER','QUEUE_CONNECTION','INSTANCE_ORGANISATION_CODE','RUN_P02B2_CUTOVER_POSTGRES','RUN_P02B1_POSTGRES_TESTS','RUN_P02B3_FINANCE_POSTGRES','RUN_3IIZG_POSTGRES_CONCURRENCY','RUN_3IJAE_POSTGRES_CONCURRENCY','RUN_3IIZT_POSTGRES_CONCURRENCY')
+$names += @('B3_FIXTURE_PORT','B3_FIXTURE_STARTED','B3_FIXTURE_DATABASE_OID','B3_FIXTURE_POISON_FILE')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = @{ exists=(Test-Path "Env:$name"); value=[Environment]::GetEnvironmentVariable($name) } }
 $started = $false
@@ -70,6 +74,7 @@ function Assert-Fresh {
 }
 
 function Run-Tests([string]$Name, [string[]]$Paths, [string]$Database, [switch]$RecordFailures) {
+    if ($env:B3_FIXTURE_POISON_FILE -and (Test-Path -LiteralPath $env:B3_FIXTURE_POISON_FILE)) { throw 'Fixture cluster already discarded; no further database operations.' }
     $null = Assert-Fresh
     $env:DB_DATABASE=$Database
     $env:PGPASSWORD=$appPassword
@@ -82,6 +87,10 @@ function Run-Tests([string]$Name, [string[]]$Paths, [string]$Database, [switch]$
     $result = @{name=$Name;tests=[int]$root.tests;assertions=[int]$root.assertions;failures=[int]$root.failures;errors=[int]$root.errors;skipped=[int]$root.skipped;exit_code=$testExit}
     $evidence.results += $result
     $result | ConvertTo-Json -Compress | Write-Host
+    if ($env:B3_FIXTURE_POISON_FILE -and (Test-Path -LiteralPath $env:B3_FIXTURE_POISON_FILE)) {
+        $evidence.fixture_discard_requested=$true
+        if ($Suite -notin @('B3Poison','B3PoisonCommit')) { throw 'Fixture restoration/outcome uncertain; discard fresh cluster immediately.' }
+    }
     if ($testExit -ne 0 -or $result.failures -ne 0 -or $result.errors -ne 0 -or $result.skipped -ne 0) {
         if ($RecordFailures) { $evidence.recorded_test_failure=$true; return }
         throw "Test group $Name did not fully pass."
@@ -119,6 +128,14 @@ try {
     Remove-Item -LiteralPath $roleFile
     foreach ($database in $databases) { $null=Query-Fresh "CREATE DATABASE $database OWNER $appRole TEMPLATE template0 ENCODING 'UTF8';" }
     $evidence.before=Assert-Fresh
+    foreach ($name in @('B3_FIXTURE_PORT','B3_FIXTURE_STARTED','B3_FIXTURE_DATABASE_OID','B3_FIXTURE_POISON_FILE')) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
+    if ($databases.Count -eq 1 -and $databases[0] -ceq 'lcb_p02b3_finance_test') {
+        $env:B3_FIXTURE_PORT=[string]$Port
+        $env:B3_FIXTURE_STARTED=Query-Fresh 'SELECT extract(epoch FROM pg_postmaster_start_time())::text;' $databases[0] -Application
+        $env:B3_FIXTURE_DATABASE_OID=Query-Fresh 'SELECT oid::text FROM pg_database WHERE datname=current_database();' $databases[0] -Application
+        $env:B3_FIXTURE_POISON_FILE=Join-Path $output 'fixture-discard.json'
+        $evidence.fixture_attestation=@{port=$env:B3_FIXTURE_PORT;postmaster_started=$env:B3_FIXTURE_STARTED;database_oid=$env:B3_FIXTURE_DATABASE_OID;system_identifier=$evidence.system_identifier}
+    }
     $env:APP_ENV='testing';$env:DB_CONNECTION='pgsql';$env:DB_URL='';$env:DB_HOST='127.0.0.1';$env:DB_PORT=[string]$Port;$env:DB_USERNAME=$appRole;$env:DB_PASSWORD=$appPassword;$env:DB_SSLMODE='disable'
     $env:CACHE_STORE='array';$env:SESSION_DRIVER='array';$env:QUEUE_CONNECTION='sync';$env:INSTANCE_ORGANISATION_CODE='UNASSIGNED-SYNTHETIC'
     $env:RUN_P02B3_FINANCE_POSTGRES='1';$env:RUN_P02B2_CUTOVER_POSTGRES='1';$env:RUN_P02B1_POSTGRES_TESTS='1';$env:RUN_3IIZG_POSTGRES_CONCURRENCY='1';$env:RUN_3IJAE_POSTGRES_CONCURRENCY='1';$env:RUN_3IIZT_POSTGRES_CONCURRENCY='1'
@@ -157,6 +174,12 @@ try {
                 Run-Tests 'receipt-repair' @('tests/Feature/Milestone3zPaymentReceiptApiValidationAndClosureTest.php') $databases[0] -RecordFailures
                 Run-Tests 'statement-repair' @('tests/Feature/Milestone3iizzOrdinaryIncomeReceiptTest.php','tests/Feature/Milestone3iizkClubAccountStatementProjectionTest.php','tests/Feature/Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest.php') $databases[0] -RecordFailures
             }
+            'B3Fixtures' {
+                Run-Tests 'fixture-helper' @('tests/Feature/DisposableCorruptionFixtureTest.php') $databases[0] -RecordFailures
+                Run-Tests 'source-corruption' @('tests/Feature/Milestone3iizhChargePaymentAccountingIntegrationTest.php') $databases[0] -RecordFailures
+            }
+            'B3Poison' { Run-Tests 'fixture-uncertain' @('tests/Feature/DisposableCorruptionFixtureUncertainTest.php','--filter','test_unprovable_restoration') $databases[0] }
+            'B3PoisonCommit' { Run-Tests 'fixture-committed' @('tests/Feature/DisposableCorruptionFixtureUncertainTest.php','--filter','test_post_commit_failure') $databases[0] }
             'Opening' { Run-Tests 'opening-focused' @('tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0] }
             'Integration' {
                 Run-Tests 'de-focused' @('tests/Feature/CutoverLifecycleEligibilityTest.php','tests/Feature/CutoverExecutionAuditRecorderTest.php','tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0]
@@ -200,10 +223,13 @@ try {
             }
         }
     } finally { Pop-Location }
-    $evidence.after=Assert-Fresh
+    if ($evidence.fixture_discard_requested) {
+        if ($Suite -notin @('B3Poison','B3PoisonCommit') -or $evidence.recorded_test_failure) { throw 'Unexpected fixture discard.' }
+        $evidence.status='EXPECTED_DISCARD'
+    } else { $evidence.after=Assert-Fresh }
     foreach ($file in $sourcePaths) { if ((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -cne $before[$file.FullName]) { throw 'Source changed during validation.' } }
     $evidence.source_hashes_unchanged=$true
-    $evidence.status='PASS'
+    if (-not $evidence.fixture_discard_requested) { $evidence.status='PASS' }
     if ($evidence.recorded_test_failure) { $evidence.status='FAILED_OR_BLOCKED'; $evidence.reason='Recorded test failures, errors or skips prevent acceptance. Merge NO-GO.' }
     if ($Suite -in @('C','Integration') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
         $evidence.mixed_order_deadlock_observed=$true
@@ -226,4 +252,4 @@ try {
     Write-Host "Evidence: $output/evidence.json"
     Write-Host "Result: $($evidence.status). Shutdown exit: $($evidence.stop_exit_code). No existing server accessed."
 }
-if ($evidence.status -cne 'PASS') { throw 'Validation or fresh-cluster shutdown did not fully pass; inspect evidence.' }
+if ($evidence.status -notin @('PASS','EXPECTED_DISCARD')) { throw 'Validation or fresh-cluster shutdown did not fully pass; inspect evidence.' }
