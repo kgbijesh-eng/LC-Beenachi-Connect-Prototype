@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
     [switch]$COnly,
     [switch]$CRegressionOnly,
@@ -30,6 +30,7 @@ $databases = @(switch ($Suite) {
     'B3Foundation' { @('lcb_p02b3_finance_test') }
     'B3' { @('lcb_p02b3_finance_test') }
     'B3Historical' { @('lcb_p02b3_finance_test') }
+    'B3Repair' { @('lcb_p02b3_finance_test') }
     'Guard' { @('lcb_p02b1_transaction_guard_test') }
     'Finance' { @('lcb_3ijae_finance_p02b2ab', 'lcb_3iizt_statement_snapshot_concurrency_test') }
 })
@@ -149,6 +150,13 @@ try {
                 Run-Tests 'historical-15' @('tests/Feature/Milestone3vPaymentReceiptGenerationValidationAndClosureTest.php') $databases[0] -RecordFailures
                 Run-Tests 'historical-16' @('tests/Feature/Milestone3yPaymentReceiptApiNarrowImplementationTest.php') $databases[0] -RecordFailures
                 Run-Tests 'historical-17' @('tests/Feature/Milestone3zPaymentReceiptApiValidationAndClosureTest.php') $databases[0] -RecordFailures
+            }
+            'B3Repair' {
+                Run-Tests 'source-repair' @('tests/Feature/Milestone3iizhChargePaymentAccountingIntegrationTest.php') $databases[0] -RecordFailures
+                Run-Tests 'transfer-repair' @('tests/Feature/Milestone3iizxInternalCashBankTransferTest.php') $databases[0] -RecordFailures
+                Run-Tests 'receipt-repair' @('tests/Feature/Milestone3zPaymentReceiptApiValidationAndClosureTest.php') $databases[0] -RecordFailures
+                Run-Tests 'statement-repair' @('tests/Feature/Milestone3iizzOrdinaryIncomeReceiptTest.php','tests/Feature/Milestone3iizkClubAccountStatementProjectionTest.php','tests/Feature/Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest.php') $databases[0] -RecordFailures
+                Run-Tests 'http-security' @('tests/Feature/InstanceOrganisationTest.php','tests/Feature/OrganisationAccessTest.php') $databases[0] -RecordFailures
             }
             'Opening' { Run-Tests 'opening-focused' @('tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0] }
             'Integration' {

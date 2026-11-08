@@ -200,7 +200,7 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends FinancialPost
             'payment_mode' => 'cash',
         ]);
 
-        config(['instance.organisation_code' => $otherClub->code]);
+        config(['instance.organisation_code' => $club->code]);
         $otherPayment = app(PaymentRecordingService::class)->record($issuer, $otherMember, [
             'amount' => '400',
             'payment_date' => '2026-06-10',

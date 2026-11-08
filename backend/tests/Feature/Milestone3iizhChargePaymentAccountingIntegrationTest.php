@@ -659,14 +659,14 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPost
         CarbonImmutable::setTestNow('2027-07-06 10:00:00');
         $config->revokeActivation($activation, $f['actor'], 'HIST-REVOKE', 'Stopped');
         try {
-            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $covered));
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $covered->fresh()));
             $this->fail('Historically required missing linkage must fail.');
         } catch (AccountingIntegrationException) {
             $this->addToAssertionCount(1);
         }
         $post = MemberPayment::create(['club_id' => $f['club']->id, 'member_id' => $f['member']->id, 'amount_paise' => 100, 'payment_date' => '2027-07-06', 'payment_mode' => 'bank_transfer', 'idempotency_key' => (string) Str::uuid(), 'request_hash' => str_repeat('b', 64), 'status' => 'recorded', 'recorded_by_user_id' => $f['actor']->id]);
         app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->recordPaymentCoverageDecisionWithin($context, $post, $f['actor']));
-        $this->assertNull(app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $post)));
+        $this->assertNull(app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $post->fresh())));
 
         $legacy = $this->fixture();
         $legacyCharge = app(FinanceWriteService::class)->issue($legacy['actor'], $legacy['club'], $this->draftCharge($legacy), 1);
@@ -856,6 +856,23 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPost
             DB::unprepared("CREATE TRIGGER club_accounting_source_coverage_decisions_immutable_update BEFORE UPDATE ON club_accounting_source_coverage_decisions BEGIN SELECT RAISE(ABORT, 'club_accounting_source_coverage_decisions_immutable'); END");
             DB::unprepared("CREATE TRIGGER club_accounting_source_coverage_decisions_immutable_delete BEFORE DELETE ON club_accounting_source_coverage_decisions BEGIN SELECT RAISE(ABORT, 'club_accounting_source_coverage_decisions_immutable'); END");
         }
+    }
+
+    public function test_context_replay_rejects_a_stale_source_version_without_financial_effects(): void
+    {
+        $f = $this->fixture();
+        $payment = MemberPayment::create(['club_id' => $f['club']->id, 'member_id' => $f['member']->id, 'amount_paise' => 100, 'payment_date' => '2027-07-05', 'payment_mode' => 'bank_transfer', 'idempotency_key' => (string) Str::uuid(), 'request_hash' => str_repeat('a', 64), 'status' => 'recorded', 'recorded_by_user_id' => $f['actor']->id])->fresh();
+        $before = ClubJournalEntry::count();
+        DB::table('member_payments')->where('id', $payment->id)->update(['lock_version' => $payment->lock_version + 1]);
+        try {
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $payment));
+            $this->fail('A stale replay version must not be rebound.');
+        } catch (AccountingIntegrationConflictException $exception) {
+            $this->assertSame('The source replay version changed.', $exception->getMessage());
+        }
+        $this->assertSame($before, ClubJournalEntry::count());
+        $this->assertSame(0, ClubAccountingSourceIntegration::count());
+        $this->assertSame(0, DB::transactionLevel());
     }
 
     private function fixture(): array

@@ -22,15 +22,25 @@ final class Milestone3iizxInternalCashBankTransferTest extends FinancialPostgres
         $classes=collect($statement->json('data.funds'))->flatMap(fn($fund)=>$fund['classifications']);$accounts=$classes->flatMap(fn($class)=>$class['accounts']);$this->assertSame(500000,$accounts->firstWhere('account_code',$f['source']->code)['closing_balance_paise']);$this->assertSame(500000,$accounts->firstWhere('account_code',$f['destination']->code)['closing_balance_paise']);foreach(['INCOME','EXPENSES'] as $classification){$totals=$classes->firstWhere('classification',$classification)['totals'];$this->assertSame(0,$totals['period_debit_paise']);$this->assertSame(0,$totals['period_credit_paise']);}
         config(['instance.organisation_code' => $f['club']->code]);
         $this->postJson($this->endpoint($f),[...$payload,'amount_paise'=>500001])->assertConflict()->assertJsonPath('code','TRANSFER_IDEMPOTENCY_CONFLICT');
-        $b=$this->fixture('B'); $this->postJson($this->endpoint($f),[...$payload,'idempotency_key'=>(string)Str::uuid(),'destination_account'=>$b['destination']->public_id])->assertUnprocessable();
+        $b=$this->fixture('B'); config(['instance.organisation_code' => $f['club']->code]); $this->postJson($this->endpoint($f),[...$payload,'idempotency_key'=>(string)Str::uuid(),'destination_account'=>$b['destination']->public_id])->assertUnprocessable();
         config(['instance.organisation_code' => $b['club']->code]);
         $this->getJson("/api/v1/clubs/{$b['club']->id}/finance/transfers/{$id}")->assertForbidden();
     }
     public function test_failure_after_source_creation_rolls_back_source_and_journal(): void
     {
-        $f=$this->fixture('D'); DB::unprepared("CREATE TRIGGER reject_transfer_journal BEFORE INSERT ON club_journal_entries WHEN NEW.source_type = 'club_internal_transfer' BEGIN SELECT RAISE(ABORT, 'controlled transfer failure'); END");
+        $f=$this->fixture('D');
+        $injected = false;
+        // Genuine post-insert failure: no SQLite-only test trigger or production trigger override.
+        DB::listen(function ($query) use (&$injected, $f): void {
+            if (! $injected && str_starts_with($query->sql, 'insert into "club_journal_entries"') && in_array(ClubInternalTransferService::SOURCE_TYPE, $query->bindings, true)) {
+                $injected = true;
+                $this->assertSame(1, ClubInternalTransfer::where('club_id', $f['club']->id)->count());
+                throw new \RuntimeException('controlled transfer failure');
+            }
+        });
         try { app(ClubInternalTransferService::class)->record($f['club'],$f['actor'],$this->payload($f,(string)Str::uuid())); $this->fail('Controlled journal failure must propagate.'); } catch (\Throwable) { $this->assertSame(0,ClubInternalTransfer::query()->where('club_id',$f['club']->id)->count()); }
         $this->assertSame(0,DB::table('club_journal_entries')->where('club_id',$f['club']->id)->where('source_type',ClubInternalTransferService::SOURCE_TYPE)->count());
+        $this->assertTrue($injected, 'The financial insert must have been reached before rollback.');
     }
     public function test_exact_replay_rejects_material_persisted_transfer_provenance_corruption():void
     {
