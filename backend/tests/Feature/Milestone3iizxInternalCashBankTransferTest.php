@@ -3,15 +3,13 @@ declare(strict_types=1);
 namespace Tests\Feature;
 use App\Models\{Club,ClubAccountingCutoverPackage,ClubAccountingCutoverScheduleRow,ClubAccountingPeriod,ClubInternalTransfer,ClubMembership,LedgerAccount,Permission,Role,User};
 use App\Services\Finance\{ClubInternalTransferService,ClubJournalPostingService,JournalLineInput,JournalPostingRequest};
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-final class Milestone3iizxInternalCashBankTransferTest extends TestCase
+final class Milestone3iizxInternalCashBankTransferTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
     public function test_authorized_transfer_posts_exact_asset_movement_replays_and_is_tenant_scoped(): void
     {
         $f=$this->fixture('A'); Sanctum::actingAs($f['actor']); $key=(string)Str::uuid(); $payload=$this->payload($f,$key); config(['instance.organisation_code' => $f['club']->code]); $before=$this->getJson($this->statement($f))->assertOk()->json('data.snapshot_fingerprint');

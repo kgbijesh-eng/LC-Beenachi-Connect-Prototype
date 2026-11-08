@@ -28,19 +28,18 @@ use App\Services\Finance\Exceptions\AccountingIntegrationException;
 use App\Services\Finance\JournalLineInput;
 use App\Services\Finance\JournalPostingRequest;
 use App\Services\Finance\SourceAccountingIntegrationService;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Services\FinanceCollections\FinanceWriteService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
+class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_integrations_are_disabled_by_default_and_posted_opening_alone_changes_no_source_behaviour(): void
     {
@@ -262,10 +261,10 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
         $charge = $write->issue($f['actor'], $f['club'], $this->draftCharge($f), 1);
         $write->cancel($f['actor'], $f['club'], $charge, 2, 'Correction');
         $service = app(SourceAccountingIntegrationService::class);
-        DB::transaction(fn () => $service->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Correction'));
+        app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => $service->reverseWithin($context, $f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Correction'));
         $this->assertSame(1, DB::table('club_accounting_source_integration_events')->where('event_type', 'integration_reversal')->count());
         try {
-            DB::transaction(fn () => $service->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Changed'));
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => $service->reverseWithin($context, $f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Changed'));
             $this->fail('Changed reversal replay must conflict.');
         } catch (AccountingIntegrationConflictException) {
             $this->addToAssertionCount(1);
@@ -286,7 +285,7 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
         try {
             DB::table('club_accounting_source_integration_events')->where('source_integration_id', $integration->id)->where('event_type', 'integration_reversal')->update(['reversal_journal_entry_id' => ClubJournalEntry::where('club_id', $f['club']->id)->whereNull('reversal_of_entry_id')->oldest('id')->value('id')]);
             try {
-                DB::transaction(fn () => app(SourceAccountingIntegrationService::class)->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Correction'));
+                app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => appWithin($context, SourceAccountingIntegrationService::class)->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Correction'));
                 $this->fail('A corrupt reversal event must conflict.');
             } catch (AccountingIntegrationConflictException) {
                 $this->addToAssertionCount(1);
@@ -659,20 +658,20 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
         CarbonImmutable::setTestNow('2027-07-06 10:00:00');
         $config->revokeActivation($activation, $f['actor'], 'HIST-REVOKE', 'Stopped');
         try {
-            app(SourceAccountingIntegrationService::class)->validatePaymentReplay($covered);
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $covered));
             $this->fail('Historically required missing linkage must fail.');
         } catch (AccountingIntegrationException) {
             $this->addToAssertionCount(1);
         }
         $post = MemberPayment::create(['club_id' => $f['club']->id, 'member_id' => $f['member']->id, 'amount_paise' => 100, 'payment_date' => '2027-07-06', 'payment_mode' => 'bank_transfer', 'idempotency_key' => (string) Str::uuid(), 'request_hash' => str_repeat('b', 64), 'status' => 'recorded', 'recorded_by_user_id' => $f['actor']->id]);
-        DB::transaction(fn () => app(SourceAccountingIntegrationService::class)->recordPaymentCoverageDecision($post, $f['actor']));
-        $this->assertNull(app(SourceAccountingIntegrationService::class)->validatePaymentReplay($post));
+        app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => appWithin($context, SourceAccountingIntegrationService::class)->recordPaymentCoverageDecision($post, $f['actor']));
+        $this->assertNull(app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $post)));
 
         $legacy = $this->fixture();
         $legacyCharge = app(FinanceWriteService::class)->issue($legacy['actor'], $legacy['club'], $this->draftCharge($legacy), 1);
         app(AccountingIntegrationConfigurationService::class)->map($legacy['club']->id, 'member_charge', 'membership_dues', $legacy['income'], 'MAP-V1', '2027-07-01', 'PRE-MAP', $legacy['actor']);
         app(AccountingIntegrationConfigurationService::class)->activate($legacy['club']->id, 'member_charge', '2027-07-10', 'MAP-V1', 'PRE-ACT', $legacy['actor']);
-        $this->assertNull(app(SourceAccountingIntegrationService::class)->validateChargeReplay($legacyCharge));
+        $this->assertNull(app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validateChargeReplayWithin($context, $legacyCharge)));
     }
 
     public function test_source_and_journal_idempotency_are_separate_and_lifecycle_misuse_fails(): void
@@ -691,13 +690,13 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
 
         $draft = $this->draftCharge($f);
         try {
-            DB::transaction(fn () => app(SourceAccountingIntegrationService::class)->postCharge($draft, $f['actor']));
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => appWithin($context, SourceAccountingIntegrationService::class)->postCharge($draft, $f['actor']));
             $this->fail('Draft direct posting must fail.');
         } catch (AccountingIntegrationException) {
             $this->addToAssertionCount(1);
         }
         try {
-            DB::transaction(fn () => app(SourceAccountingIntegrationService::class)->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), '2027-07-06', $f['actor'], 'Invalid direct reversal'));
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => appWithin($context, SourceAccountingIntegrationService::class)->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), '2027-07-06', $f['actor'], 'Invalid direct reversal'));
             $this->fail('Issued direct reversal must fail.');
         } catch (AccountingIntegrationException) {
             $this->addToAssertionCount(1);
@@ -864,6 +863,7 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
         $actor = User::factory()->create();
         $sequence = Club::count() + 1;
         $club = Club::create(['name' => 'Beenachi '.$sequence, 'code' => 'LCB'.$sequence, 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]);
         $member = Member::create(['club_id' => $club->id, 'member_code' => 'M001', 'full_name' => 'Member One', 'status' => 'active']);
         $accounts = [];
         foreach ([['receivable', 'MEMBER-RECEIVABLES', 'asset', 'debit'], ['bank', 'BANK-OPERATING', 'asset', 'debit'], ['income', 'INCOME-MEMBERSHIP-DUES', 'income', 'credit'], ['equity', 'OPENING-BALANCE-EQUITY', 'equity', 'credit']] as [$key, $code, $type, $normal]) {

@@ -5,6 +5,8 @@ namespace App\Services\FinanceCollections;
 use App\Models\AccountingChargeCategory;
 use App\Models\AuditLog;
 use App\Models\Club;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Models\ClubCharge;
 use App\Models\Member;
 use App\Models\MemberCharge;
@@ -25,10 +27,9 @@ class FinanceWriteService
 
     public function createCharge(User $u, Club $c, array $v): ClubCharge
     {
-        $this->enabledCategory($v['category']);
-        $ids = $this->members($c, $v);
-
-        return DB::transaction(function () use ($u, $c, $v, $ids) {
+        return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $v) {
+            $this->enabledCategory($v['category']);
+            $ids = $this->members($c, $v);
             $r = ClubCharge::create(['club_id' => $c->id, 'title' => $v['title'], 'description' => $v['description'] ?? null, 'category' => $v['category'], 'amount_paise' => $v['amount_paise'], 'due_date' => $v['due_date'], 'financial_year' => $v['financial_year'], 'status' => 'draft', 'assignment_member_ids' => $ids, 'created_by_user_id' => $u->id]);
             $this->audit($u, $c, 'finance.charge.created', $r, ['amount_paise' => $r->amount_paise, 'member_ids' => $ids]);
 
@@ -38,9 +39,8 @@ class FinanceWriteService
 
     public function updateCharge(User $u, Club $c, ClubCharge $r, array $v): ClubCharge
     {
-        $this->enabledCategory($v['category']);
-
-        return DB::transaction(function () use ($u, $c, $r, $v) {
+        return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $r, $v) {
+            $this->enabledCategory($v['category']);
             $r = $this->lockCharge($c, $r, $v['lock_version']);
             if ($r->status !== 'draft') {
                 throw new ConflictHttpException('Only Draft charges may be updated.');
@@ -55,14 +55,14 @@ class FinanceWriteService
 
     public function issue(User $u, Club $c, ClubCharge $r, int $version): ClubCharge
     {
-        return DB::transaction(function () use ($u, $c, $r, $version) {
+        return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $r, $version) {
             Club::query()->whereKey($c->id)->lockForUpdate()->firstOrFail();
-            $r = ClubCharge::whereKey($r->id)->lockForUpdate()->firstOrFail();
+            $r = ClubCharge::where('club_id', $c->id)->whereKey($r->id)->lockForUpdate()->firstOrFail();
             if ($r->club_id !== $c->id) {
                 abort(404);
             }
             if ($r->status === 'issued') {
-                $integration = $this->accounting->validateChargeReplay($r);
+                $integration = $this->accounting->validateChargeReplayWithin($context, $r);
                 if (($integration === null || $integration->source_version === $r->lock_version) && $version === $r->lock_version - 1) {
                     return $r;
                 }
@@ -80,9 +80,9 @@ class FinanceWriteService
             }foreach ($members as $m) {
                 MemberCharge::create(['club_id' => $c->id, 'club_charge_id' => $r->id, 'member_id' => $m->id, 'original_amount_paise' => $r->amount_paise]);
             }$r->update(['status' => 'issued', 'fund_code' => $category->fund_code, 'issued_at' => now(), 'issued_by_user_id' => $u->id, 'lock_version' => $r->lock_version + 1]);
-            $requiresAccounting = $this->accounting->recordChargeCoverageDecision($r->fresh(), $u);
+            $requiresAccounting = $this->accounting->recordChargeCoverageDecisionWithin($context, $r->fresh(), $u);
             if ($requiresAccounting) {
-                $this->accounting->postCharge($r->fresh(), $u);
+                $this->accounting->postChargeWithin($context, $r->fresh(), $u);
             }
             $this->audit($u, $c, 'finance.charge.issued', $r, ['member_charge_count' => $members->count(), 'amount_paise' => $r->amount_paise]);
 
@@ -92,7 +92,7 @@ class FinanceWriteService
 
     public function close(User $u, Club $c, ClubCharge $r, int $version): ClubCharge
     {
-        return DB::transaction(function () use ($u, $c, $r, $version) {
+        return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $r, $version) {
             $r = $this->lockCharge($c, $r, $version);
             if ($r->status !== 'issued') {
                 throw new ConflictHttpException('Only Issued charges may close.');
@@ -107,7 +107,7 @@ class FinanceWriteService
 
     public function cancel(User $u, Club $c, ClubCharge $r, int $version, string $reason): ClubCharge
     {
-        return DB::transaction(function () use ($u, $c, $r, $version, $reason) {
+        return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $r, $version, $reason) {
             Club::query()->whereKey($c->id)->lockForUpdate()->firstOrFail();
             $r = $this->lockCharge($c, $r, $version);
             if (! in_array($r->status, ['draft', 'issued'], true)) {
@@ -119,7 +119,7 @@ class FinanceWriteService
                 $sourceDate = $r->issued_at->toDateString();
                 $sourceCommittedAt = $r->issued_at->toISOString();
                 $r->update(['status' => 'cancelled', 'cancelled_at' => now(), 'cancelled_by_user_id' => $u->id, 'cancellation_reason' => $reason, 'lock_version' => $r->lock_version + 1]);
-                $this->accounting->reverse($c->id, AccountingIntegrationConfigurationService::SOURCE_CHARGE, $r->public_id, $sourceDate, $sourceCommittedAt, now()->toDateString(), $u, $reason);
+                $this->accounting->reverseWithin($context, $c->id, AccountingIntegrationConfigurationService::SOURCE_CHARGE, $r->public_id, $sourceDate, $sourceCommittedAt, now()->toDateString(), $u, $reason);
             } else {
                 $r->update(['status' => 'cancelled', 'cancelled_at' => now(), 'cancelled_by_user_id' => $u->id, 'cancellation_reason' => $reason, 'lock_version' => $r->lock_version + 1]);
             }
@@ -131,11 +131,10 @@ class FinanceWriteService
 
     public function recordPayment(User $u, Club $c, Member $m, array $v): array
     {
-        if ($m->club_id !== $c->id || $m->status !== 'active') {
-            abort(404);
-        }$hash = hash('sha256', json_encode($this->canonical($v), JSON_UNESCAPED_SLASHES));
+        $hash = hash('sha256', json_encode($this->canonical($v), JSON_UNESCAPED_SLASHES));
 
-        return DB::transaction(function () use ($u, $c, $m, $v, $hash) {
+        return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $m, $v, $hash) {
+            $m = Member::query()->where('club_id', $context->organisationId)->whereKey($m->id)->where('status', 'active')->firstOrFail();
             Club::query()->whereKey($c->id)->lockForUpdate()->firstOrFail();
             $existing = MemberPayment::where('club_id', $c->id)->where('idempotency_key', $v['idempotency_key'])->lockForUpdate()->first();
             if ($existing) {
@@ -143,7 +142,7 @@ class FinanceWriteService
                     throw new ConflictHttpException('Idempotency key payload conflict.');
                 }
 
-                $this->accounting->validatePaymentReplay($existing);
+                $this->accounting->validatePaymentReplayWithin($context, $existing);
 
                 return ['payment' => $existing->load(['allocations', 'receipt']), 'replayed' => true];
             }
@@ -175,9 +174,9 @@ class FinanceWriteService
             }
             $fy = $this->fy($v['payment_date']);
             $receipt = PaymentReceipt::create(['club_id' => $c->id, 'member_payment_id' => $p->id, 'receipt_number' => $this->receiptNumber($c, $fy), 'receipt_date' => $v['payment_date'], 'financial_year' => $fy, 'status' => 'issued', 'issued_by_user_id' => $u->id]);
-            $requiresAccounting = $this->accounting->recordPaymentCoverageDecision($p->refresh(), $u);
+            $requiresAccounting = $this->accounting->recordPaymentCoverageDecisionWithin($context, $p->refresh(), $u);
             if ($requiresAccounting) {
-                $this->accounting->postPayment($p->refresh()->load('allocations'), $u);
+                $this->accounting->postPaymentWithin($context, $p->refresh()->load('allocations'), $u);
             }
             $this->audit($u, $c, 'finance.payment.recorded', $p, ['member_id' => $m->id, 'amount_paise' => $p->amount_paise, 'allocation_ids' => $p->allocations()->pluck('id'), 'receipt_id' => $receipt->id]);
 
@@ -197,9 +196,9 @@ class FinanceWriteService
 
     public function void(User $u, Club $c, MemberPayment $p, int $version, string $reason, ?int $replacement = null): MemberPayment
     {
-        return DB::transaction(function () use ($u, $c, $p, $version, $reason, $replacement) {
+        return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $p, $version, $reason, $replacement) {
             Club::query()->whereKey($c->id)->lockForUpdate()->firstOrFail();
-            $p = MemberPayment::whereKey($p->id)->lockForUpdate()->firstOrFail();
+            $p = MemberPayment::where('club_id', $c->id)->whereKey($p->id)->lockForUpdate()->firstOrFail();
             if ($p->club_id !== $c->id) {
                 abort(404);
             }if ($p->lock_version !== $version) {
@@ -207,7 +206,7 @@ class FinanceWriteService
             }if ($p->status !== 'recorded') {
                 throw new ConflictHttpException('Payment is already voided.');
             }foreach ($p->allocations as $a) {
-                MemberCharge::whereKey($a->member_charge_id)->lockForUpdate()->first();
+                MemberCharge::where('club_id', $c->id)->whereKey($a->member_charge_id)->lockForUpdate()->first();
             }if ($replacement) {
                 $r = MemberPayment::where('club_id', $c->id)->where('member_id', $p->member_id)->whereKey($replacement)->firstOrFail();
                 if ($r->status !== 'recorded') {
@@ -216,7 +215,7 @@ class FinanceWriteService
             }
             $p->update(['status' => 'voided', 'voided_at' => now(), 'voided_by_user_id' => $u->id, 'void_reason' => $reason, 'replacement_payment_id' => $replacement, 'lock_version' => $p->lock_version + 1]);
             $p->receipt()->update(['status' => 'voided', 'voided_at' => now()]);
-            $this->accounting->reverse($c->id, AccountingIntegrationConfigurationService::SOURCE_PAYMENT, $p->public_id, $p->payment_date->format('Y-m-d'), $p->created_at->toISOString(), now()->toDateString(), $u, $reason);
+            $this->accounting->reverseWithin($context, $c->id, AccountingIntegrationConfigurationService::SOURCE_PAYMENT, $p->public_id, $p->payment_date->format('Y-m-d'), $p->created_at->toISOString(), now()->toDateString(), $u, $reason);
             $this->audit($u, $c, 'finance.payment.voided', $p, ['reason' => $reason, 'replacement_payment_id' => $replacement]);
             if ($replacement) {
                 $this->audit($u, $c, 'finance.payment.replaced', $p, ['replacement_payment_id' => $replacement]);
@@ -228,7 +227,7 @@ class FinanceWriteService
 
     private function lockCharge(Club $c, ClubCharge $r, int $v): ClubCharge
     {
-        $r = ClubCharge::whereKey($r->id)->lockForUpdate()->firstOrFail();
+        $r = ClubCharge::where('club_id', $c->id)->whereKey($r->id)->lockForUpdate()->firstOrFail();
         if ($r->club_id !== $c->id) {
             abort(404);
         }if ($r->lock_version !== $v) {

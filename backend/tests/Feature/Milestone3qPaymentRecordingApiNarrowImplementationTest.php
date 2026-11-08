@@ -12,13 +12,11 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\Finance\PaymentRecordingService;
 use Database\Seeders\DatabaseSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3qPaymentRecordingApiNarrowImplementationTest extends TestCase
+class Milestone3qPaymentRecordingApiNarrowImplementationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_3q_document_records_narrow_api_implementation_boundary(): void
     {

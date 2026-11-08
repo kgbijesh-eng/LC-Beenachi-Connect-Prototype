@@ -15,6 +15,8 @@ use App\Models\User;
 use App\Services\Finance\Exceptions\ClubExpenseConflictException;
 use App\Services\Finance\Exceptions\ClubExpenseException;
 use Illuminate\Support\Facades\DB;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use Illuminate\Support\Str;
 
 final class ClubExpenseRecordingService
@@ -27,7 +29,7 @@ final class ClubExpenseRecordingService
     {
         $canonical = $this->canonical($input);
 
-        return DB::transaction(function () use ($club, $actor, $canonical): ClubExpense {
+        return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $actor, $canonical): ClubExpense {
             $lockedClub = Club::query()->whereKey($club->id)->lockForUpdate()->firstOrFail();
             $existing = ClubExpense::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();
             if ($existing) {
@@ -60,7 +62,7 @@ final class ClubExpenseRecordingService
                 }
             }
 
-            $accounts = LedgerAccount::query()->whereIn('public_id', [$canonical['expense_account'], $canonical['payment_account']])->lockForUpdate()->get()->keyBy(fn (LedgerAccount $account) => strtolower($account->public_id));
+            $accounts = LedgerAccount::query()->where('club_id', $lockedClub->id)->whereIn('public_id', [$canonical['expense_account'], $canonical['payment_account']])->lockForUpdate()->get()->keyBy(fn (LedgerAccount $account) => strtolower($account->public_id));
             $expenseAccount = $accounts->get($canonical['expense_account']);
             $paymentAccount = $accounts->get($canonical['payment_account']);
             $this->validateAccounts($lockedClub, $expenseAccount, $paymentAccount);
@@ -74,7 +76,7 @@ final class ClubExpenseRecordingService
                 'corrected_from_expense_id' => $correctedFrom?->id,
             ]);
 
-            $journal = $this->journals->post(new JournalPostingRequest(
+            $journal = $this->journals->postWithin($context, new JournalPostingRequest(
                 clubId: $lockedClub->id, accountingPeriodId: $period->id, effectiveDate: $canonical['accounting_date'],
                 description: $canonical['description'], currency: LedgerAccount::CURRENCY_INR,
                 sourceType: self::SOURCE_TYPE, sourceId: $expense->public_id, sourceEvent: 'recorded',

@@ -19,17 +19,15 @@ use App\Models\User;
 use App\Services\Finance\ClubJournalPostingService;
 use App\Services\Finance\JournalLineInput;
 use App\Services\Finance\JournalPostingRequest;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use LogicException;
 use RuntimeException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3iizwExpenseHistoryCorrectionTest extends TestCase
+class Milestone3iizwExpenseHistoryCorrectionTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_authorized_history_is_paginated_filterable_deterministic_and_tenant_scoped(): void
     {
@@ -105,7 +103,8 @@ class Milestone3iizwExpenseHistoryCorrectionTest extends TestCase
 
     private function fixture(string $suffix): array
     {
-        $club = Club::create(['name' => "Expense Correction {$suffix}", 'code' => substr('CW'.$suffix, 0, 10), 'timezone' => 'Asia/Kolkata', 'is_active' => true]); $officer = User::factory()->create();
+        $club = Club::create(['name' => "Expense Correction {$suffix}", 'code' => substr('CW'.$suffix, 0, 10), 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]); $officer = User::factory()->create();
         $permissions = collect(['finance.club.expenses.create', 'finance.club.expenses.view', 'finance.club.expenses.reverse', 'finance.club.statement.view'])->map(fn ($slug) => Permission::firstOrCreate(['slug' => $slug], ['name' => $slug, 'group' => 'finance', 'description' => $slug]));
         $role = Role::create(['name' => "Treasurer {$suffix}", 'slug' => 'correction-'.strtolower($suffix), 'description' => 'Treasurer']); $role->permissions()->attach($permissions->pluck('id')); ClubMembership::create(['club_id' => $club->id, 'user_id' => $officer->id, 'role_id' => $role->id, 'status' => 'active']);
         $period = ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $officer->id]);

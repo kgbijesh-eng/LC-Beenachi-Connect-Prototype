@@ -13,13 +13,11 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\Finance\PaymentRecordingService;
 use App\Services\Finance\ReceiptGenerationService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3adPaymentReceiptPdfNarrowImplementationTest extends TestCase
+class Milestone3adPaymentReceiptPdfNarrowImplementationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_3ad_document_exists_and_records_narrow_pdf_boundary(): void
     {
@@ -242,13 +240,16 @@ class Milestone3adPaymentReceiptPdfNarrowImplementationTest extends TestCase
 
     private function createClub(string $code = 'LCB', string $name = 'Lions Club Beenachi'): Club
     {
-        return Club::query()->create([
+        $club = Club::query()->create([
             'name' => $name,
             'code' => $code,
             'district' => '318E',
             'timezone' => 'Asia/Kolkata',
             'is_active' => true,
         ]);
+        config(['instance.organisation_code' => $club->code]);
+        config(['instance.organisation_code' => $club->code]);
+        return $club;
     }
 
     private function createMember(Club $club, string $memberCode = 'MEM-3AD-001', ?User $user = null): Member

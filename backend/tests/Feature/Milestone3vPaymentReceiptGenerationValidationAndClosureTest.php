@@ -14,14 +14,12 @@ use App\Models\User;
 use App\Services\Finance\PaymentRecordingService;
 use App\Services\Finance\ReceiptGenerationService;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends TestCase
+class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_3v_validation_document_exists_and_records_closure_boundary(): void
     {
@@ -238,13 +236,16 @@ class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends TestCa
 
     private function createClub(string $code = 'LCB', string $name = 'Lions Club Beenachi'): Club
     {
-        return Club::query()->create([
+        $club = Club::query()->create([
             'name' => $name,
             'code' => $code,
             'district' => '318E',
             'timezone' => 'Asia/Kolkata',
             'is_active' => true,
         ]);
+        config(['instance.organisation_code' => $club->code]);
+        config(['instance.organisation_code' => $club->code]);
+        return $club;
     }
 
     private function createMember(Club $club, string $memberCode = 'MEM-3V-000'): Member

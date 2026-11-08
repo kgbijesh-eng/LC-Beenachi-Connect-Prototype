@@ -6,6 +6,8 @@ namespace App\Services\Finance;
 use App\Models\{Club, ClubAccountingCutoverPackage, ClubAccountingPeriod, ClubInternalTransfer, ClubJournalEntry, ClubJournalLine, LedgerAccount, User};
 use App\Services\Finance\Exceptions\{ClubInternalTransferConflictException, ClubInternalTransferException};
 use Illuminate\Support\Facades\DB;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use Illuminate\Support\Str;
 
 final class ClubInternalTransferService
@@ -16,7 +18,7 @@ final class ClubInternalTransferService
     public function record(Club $club, User $actor, array $input): ClubInternalTransfer
     {
         $canonical = $this->canonical($input);
-        return DB::transaction(function () use ($club, $actor, $canonical): ClubInternalTransfer {
+        return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $actor, $canonical): ClubInternalTransfer {
             $lockedClub = Club::query()->whereKey($club->id)->lockForUpdate()->firstOrFail();
             $existing = ClubInternalTransfer::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();
             if ($existing) {
@@ -28,12 +30,12 @@ final class ClubInternalTransferService
             $period = ClubAccountingPeriod::query()->where('club_id', $lockedClub->id)->where('start_date', '<=', $canonical['accounting_date'])->where('end_date', '>=', $canonical['accounting_date'])->lockForUpdate()->first();
             if (! $period || $period->status !== ClubAccountingPeriod::STATUS_OPEN) throw new ClubInternalTransferException('The transfer date must belong to an open accounting period.');
             if (! ClubAccountingCutoverPackage::query()->where('club_id', $lockedClub->id)->where('status', 'posted')->whereNotNull('opening_journal_entry_id')->where('cutover_date', '<=', $canonical['accounting_date'])->lockForUpdate()->exists()) throw new ClubInternalTransferException('Authoritative accounting is not active for the selected date.');
-            $accounts = LedgerAccount::query()->whereIn('public_id', [$canonical['source_account'], $canonical['destination_account']])->lockForUpdate()->get()->keyBy(fn ($account) => strtolower($account->public_id));
+            $accounts = LedgerAccount::query()->where('club_id', $lockedClub->id)->whereIn('public_id', [$canonical['source_account'], $canonical['destination_account']])->lockForUpdate()->get()->keyBy(fn ($account) => strtolower($account->public_id));
             $source = $accounts->get($canonical['source_account']); $destination = $accounts->get($canonical['destination_account']);
             foreach ([$source, $destination] as $account) if (! $account || $account->club_id !== $lockedClub->id || ! $account->is_active || $account->currency !== LedgerAccount::CURRENCY_INR || $account->account_type !== LedgerAccount::TYPE_ASSET || $account->statement_classification !== StatementClassification::CASH_AND_BANK->value) throw new ClubInternalTransferException('The selected cash or bank account is not eligible for this club.');
             if ($source->is($destination)) throw new ClubInternalTransferException('Source and destination accounts must differ.');
             $transfer = ClubInternalTransfer::create(['club_id' => $lockedClub->id, 'accounting_date' => $canonical['accounting_date'], 'source_account_id' => $source->id, 'destination_account_id' => $destination->id, 'fund_code' => $canonical['fund_code'], 'amount_paise' => $canonical['amount_paise'], 'currency' => LedgerAccount::CURRENCY_INR, 'description' => $canonical['description'], 'external_reference' => $canonical['external_reference'], 'idempotency_key' => $canonical['idempotency_key'], 'request_digest' => $canonical['request_digest'], 'created_by_user_id' => $actor->id]);
-            $journal = $this->journals->post(new JournalPostingRequest($lockedClub->id, $period->id, $canonical['accounting_date'], $canonical['description'], LedgerAccount::CURRENCY_INR, self::SOURCE_TYPE, $transfer->public_id, 'recorded', $canonical['idempotency_key'], $actor->id, [new JournalLineInput($destination->id, ClubJournalLine::DIRECTION_DEBIT, $canonical['amount_paise'], $canonical['description'], $canonical['fund_code']), new JournalLineInput($source->id, ClubJournalLine::DIRECTION_CREDIT, $canonical['amount_paise'], $canonical['description'], $canonical['fund_code'])], metadata: ['transfer_public_id' => $transfer->public_id, 'external_reference' => $canonical['external_reference']]));
+            $journal = $this->journals->postWithin($context, new JournalPostingRequest($lockedClub->id, $period->id, $canonical['accounting_date'], $canonical['description'], LedgerAccount::CURRENCY_INR, self::SOURCE_TYPE, $transfer->public_id, 'recorded', $canonical['idempotency_key'], $actor->id, [new JournalLineInput($destination->id, ClubJournalLine::DIRECTION_DEBIT, $canonical['amount_paise'], $canonical['description'], $canonical['fund_code']), new JournalLineInput($source->id, ClubJournalLine::DIRECTION_CREDIT, $canonical['amount_paise'], $canonical['description'], $canonical['fund_code'])], metadata: ['transfer_public_id' => $transfer->public_id, 'external_reference' => $canonical['external_reference']]));
             $transfer->updateQuietly(['journal_entry_id' => $journal->id]);
             return $this->loaded($transfer);
         }, 3);

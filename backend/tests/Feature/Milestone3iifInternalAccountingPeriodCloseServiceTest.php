@@ -26,14 +26,12 @@ use App\Services\Finance\JournalReversalRequest;
 use App\Services\Finance\JournalReversalService;
 use App\Services\Finance\LedgerAccountProvisioningRequest;
 use App\Services\Finance\LedgerAccountProvisioningService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3iifInternalAccountingPeriodCloseServiceTest extends TestCase
+class Milestone3iifInternalAccountingPeriodCloseServiceTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_empty_or_balanced_period_closes_without_creating_or_mutating_journals(): void
     {
@@ -142,6 +140,7 @@ class Milestone3iifInternalAccountingPeriodCloseServiceTest extends TestCase
     {
         $actor = User::factory()->create();
         $club = Club::create(['name' => "Close Club {$suffix}", 'code' => $suffix]);
+        config(['instance.organisation_code' => $club->code]);
         $role = Role::create(['name' => "Internal close actor {$suffix}", 'slug' => "internal-close-actor-{$suffix}", 'is_system' => true]);
         ClubMembership::create(['club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => $role->id, 'status' => 'active', 'joined_at' => now()]);
         $period = (new ClubAccountingPeriodProvisioningService)->provision(new ClubAccountingPeriodProvisioningRequest($club->id, '2026-27', $actor->id));

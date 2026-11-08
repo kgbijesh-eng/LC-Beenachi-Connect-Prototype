@@ -11,7 +11,8 @@ trait BuildsMilestone3ijaeFixture
 {
     private function fixture3ijae(string $suffix, string $role = 'treasurer', array $permissionSlugs = ['finance.club.ordinary_income_receipts.create', 'finance.club.ordinary_income_receipts.view', 'finance.club.ordinary_income_receipts.reverse', 'finance.club.statement.view'], bool $includePriorPeriod = false): array
     {
-        $club = Club::create(['name' => "3IJAE {$suffix}", 'code' => substr("AE{$suffix}", 0, 10), 'timezone' => 'Asia/Kolkata', 'is_active' => true]); $actor = User::factory()->create();
+        $club = Club::create(['name' => "3IJAE {$suffix}", 'code' => substr("AE{$suffix}", 0, 10), 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]); $actor = User::factory()->create();
         $permissions = collect($permissionSlugs)->map(fn ($slug) => Permission::firstOrCreate(['slug' => $slug], ['name' => $slug, 'group' => 'finance', 'description' => $slug])); $roleModel = Role::create(['name' => "{$role} {$suffix}", 'slug' => strtolower("{$role}-{$suffix}"), 'description' => $role]); $roleModel->permissions()->attach($permissions->pluck('id')); ClubMembership::create(['club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => $roleModel->id, 'status' => 'active']);
         $period = ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $actor->id]);
         $priorPeriod = $includePriorPeriod ? ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2026-27', 'start_date' => '2026-07-01', 'end_date' => '2027-06-30', 'status' => 'open', 'created_by_user_id' => $actor->id]) : null;

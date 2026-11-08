@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
     [switch]$COnly,
     [switch]$CRegressionOnly,
@@ -29,6 +29,7 @@ $databases = @(switch ($Suite) {
     'F1' { @('lcb_p02b2_cutover_test') }
     'B3Foundation' { @('lcb_p02b3_finance_test') }
     'B3' { @('lcb_p02b3_finance_test') }
+    'B3Historical' { @('lcb_p02b3_finance_test') }
     'Guard' { @('lcb_p02b1_transaction_guard_test') }
     'Finance' { @('lcb_3ijae_finance_p02b2ab', 'lcb_3iizt_statement_snapshot_concurrency_test') }
 })
@@ -129,6 +130,26 @@ try {
             }
             'B3Foundation' { Run-Tests 'b3-foundation' @('tests/Feature/FinancialTransactionFoundationTest.php') $databases[0] }
             'B3' { Run-Tests 'b3-core' @('tests/Feature/FinancialOrganisationEnforcementTest.php','tests/Feature/FinancialTransactionFoundationTest.php','tests/Feature/Milestone3iicCoreJournalPostingServiceTest.php','tests/Feature/Milestone3iieInternalJournalReversalServiceTest.php','tests/Feature/Milestone3iizkACanonicalAccountingMetadataFundAttributionTest.php') $databases[0] }
+            'B3Historical' {
+                Run-Tests 'historical-0' @('tests/Feature/Milestone3adPaymentReceiptPdfNarrowImplementationTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-1' @('tests/Feature/Milestone3dsSeededPaymentPermissionDefectImplementationTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-2' @('tests/Feature/Milestone3duPaymentRefreshRetestExecutionTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-3' @('tests/Feature/Milestone3iifInternalAccountingPeriodCloseServiceTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-4' @('tests/Feature/Milestone3iizhChargePaymentAccountingIntegrationTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-5' @('tests/Feature/Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-6' @('tests/Feature/Milestone3iizvClubExpenseRecordingTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-7' @('tests/Feature/Milestone3iizwExpenseHistoryCorrectionTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-8' @('tests/Feature/Milestone3iizxInternalCashBankTransferTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-9' @('tests/Feature/Milestone3iizzOrdinaryIncomeReceiptTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-10' @('tests/Feature/Milestone3mPaymentRecordingServiceNarrowImplementationTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-11' @('tests/Feature/Milestone3nPaymentRecordingServiceValidationAndClosureTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-12' @('tests/Feature/Milestone3qPaymentRecordingApiNarrowImplementationTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-13' @('tests/Feature/Milestone3rPaymentRecordingApiValidationAndClosureTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-14' @('tests/Feature/Milestone3uPaymentReceiptGenerationNarrowImplementationTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-15' @('tests/Feature/Milestone3vPaymentReceiptGenerationValidationAndClosureTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-16' @('tests/Feature/Milestone3yPaymentReceiptApiNarrowImplementationTest.php') $databases[0] -RecordFailures
+                Run-Tests 'historical-17' @('tests/Feature/Milestone3zPaymentReceiptApiValidationAndClosureTest.php') $databases[0] -RecordFailures
+            }
             'Opening' { Run-Tests 'opening-focused' @('tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0] }
             'Integration' {
                 Run-Tests 'de-focused' @('tests/Feature/CutoverLifecycleEligibilityTest.php','tests/Feature/CutoverExecutionAuditRecorderTest.php','tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0]

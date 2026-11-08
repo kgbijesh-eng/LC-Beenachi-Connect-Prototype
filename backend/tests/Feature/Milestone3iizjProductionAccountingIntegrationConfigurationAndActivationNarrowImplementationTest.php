@@ -23,14 +23,12 @@ use App\Services\Finance\JournalPostingRequest;
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest extends TestCase
+class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     private Club $club;
 

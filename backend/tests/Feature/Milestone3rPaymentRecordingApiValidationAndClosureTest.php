@@ -12,13 +12,11 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\Finance\PaymentRecordingService;
 use Database\Seeders\DatabaseSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3rPaymentRecordingApiValidationAndClosureTest extends TestCase
+class Milestone3rPaymentRecordingApiValidationAndClosureTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_3r_validation_document_exists_and_records_closure_boundary(): void
     {

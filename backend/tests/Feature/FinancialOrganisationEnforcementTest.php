@@ -43,7 +43,7 @@ class FinancialOrganisationEnforcementTest extends FinancialPostgresTestCase
 {
     public static function rejectedStates(): array
     {
-        return [['suspended', 'ORGANISATION_SUSPENDED'], ['foreign', 'ORGANISATION_FOREIGN'], ['missing', 'ORGANISATION_UNAVAILABLE'], ['invalid', 'ORGANISATION_UNAVAILABLE']];
+        return [['suspended', 'ORGANISATION_SUSPENDED'], ['foreign', 'ORGANISATION_FOREIGN'], ['missing', 'ORGANISATION_CONFIGURATION_UNAVAILABLE'], ['invalid', 'ORGANISATION_CONFIGURATION_UNAVAILABLE']];
     }
 
     #[DataProvider('rejectedStates')]

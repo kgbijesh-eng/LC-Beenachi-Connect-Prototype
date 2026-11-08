@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services\Finance;
 
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationAccessRejected;
+
 use App\Models\ClubAccountingIntegrationActivation;
 use App\Models\ClubAccountingPeriod;
 use App\Models\ClubAccountingSourceIntegration;
@@ -33,27 +36,46 @@ final class SourceAccountingIntegrationService
 
     public function recordChargeCoverageDecision(ClubCharge $charge, User $actor): bool
     {
+        throw OrganisationAccessRejected::unsupported();
+    }
+
+    public function recordChargeCoverageDecisionWithin(OrganisationTransactionContext $context, ClubCharge $charge, User $actor): bool
+    {
+        $context->assertUsable((int) $charge->club_id);
+        $charge = ClubCharge::query()->where('club_id', $context->organisationId)->whereKey($charge->id)->lockForUpdate()->firstOrFail();
         if ($charge->status !== 'issued' || ! $charge->issued_at) {
             throw new AccountingIntegrationException('Coverage can be decided only for an issued charge.');
         }
 
-        return $this->recordCoverageDecision($charge->club_id, AccountingIntegrationConfigurationService::SOURCE_CHARGE, $charge->public_id, $charge->issued_at->toDateString(), $actor);
+        return $this->recordCoverageDecision($context, $charge->club_id, AccountingIntegrationConfigurationService::SOURCE_CHARGE, $charge->public_id, $charge->issued_at->toDateString(), $actor);
     }
 
     public function recordPaymentCoverageDecision(MemberPayment $payment, User $actor): bool
     {
+        throw OrganisationAccessRejected::unsupported();
+    }
+
+    public function recordPaymentCoverageDecisionWithin(OrganisationTransactionContext $context, MemberPayment $payment, User $actor): bool
+    {
+        $context->assertUsable((int) $payment->club_id);
+        $payment = MemberPayment::query()->where('club_id', $context->organisationId)->whereKey($payment->id)->lockForUpdate()->firstOrFail();
         if ($payment->status !== 'recorded') {
             throw new AccountingIntegrationException('Coverage can be decided only for a recorded payment.');
         }
 
-        return $this->recordCoverageDecision($payment->club_id, AccountingIntegrationConfigurationService::SOURCE_PAYMENT, $payment->public_id, $payment->payment_date->format('Y-m-d'), $actor);
+        return $this->recordCoverageDecision($context, $payment->club_id, AccountingIntegrationConfigurationService::SOURCE_PAYMENT, $payment->public_id, $payment->payment_date->format('Y-m-d'), $actor);
     }
 
     public function postCharge(ClubCharge $charge, User $actor): ClubAccountingSourceIntegration
     {
-        $this->requireOuterTransaction();
+        throw OrganisationAccessRejected::unsupported();
+    }
+
+    public function postChargeWithin(OrganisationTransactionContext $context, ClubCharge $charge, User $actor): ClubAccountingSourceIntegration
+    {
+        $context->assertUsable((int) $charge->club_id);
         $requestedVersion = $charge->lock_version;
-        $charge = ClubCharge::query()->whereKey($charge->id)->lockForUpdate()->firstOrFail();
+        $charge = ClubCharge::query()->where('club_id', $context->organisationId)->whereKey($charge->id)->lockForUpdate()->firstOrFail();
         if ($charge->status !== 'issued' || ! $charge->issued_at || $charge->lock_version !== $requestedVersion) {
             throw new AccountingIntegrationException('Only an issued charge may be posted.');
         }
@@ -63,14 +85,19 @@ final class SourceAccountingIntegrationService
             throw new AccountingIntegrationException('The issued charge lacks a canonical frozen fund.');
         }
 
-        return $this->post($charge->club_id, AccountingIntegrationConfigurationService::SOURCE_CHARGE, $charge->public_id, $charge->lock_version, $charge->issued_at->toDateString(), $charge->category, (int) collect($binding['member_charges'])->sum('original_amount_paise'), $actor, null, $binding, 'Charge issued', 'income', [$charge->fund_code => (int) collect($binding['member_charges'])->sum('original_amount_paise')]);
+        return $this->post($context, $charge->club_id, AccountingIntegrationConfigurationService::SOURCE_CHARGE, $charge->public_id, $charge->lock_version, $charge->issued_at->toDateString(), $charge->category, (int) collect($binding['member_charges'])->sum('original_amount_paise'), $actor, null, $binding, 'Charge issued', 'income', [$charge->fund_code => (int) collect($binding['member_charges'])->sum('original_amount_paise')]);
     }
 
     public function postPayment(MemberPayment $payment, User $actor): ClubAccountingSourceIntegration
     {
-        $this->requireOuterTransaction();
+        throw OrganisationAccessRejected::unsupported();
+    }
+
+    public function postPaymentWithin(OrganisationTransactionContext $context, MemberPayment $payment, User $actor): ClubAccountingSourceIntegration
+    {
+        $context->assertUsable((int) $payment->club_id);
         $requestedVersion = $payment->lock_version;
-        $payment = MemberPayment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+        $payment = MemberPayment::query()->where('club_id', $context->organisationId)->whereKey($payment->id)->lockForUpdate()->firstOrFail();
         if ($payment->status !== 'recorded' || $payment->lock_version !== $requestedVersion) {
             throw new AccountingIntegrationException('Only a recorded payment may be posted.');
         }
@@ -85,11 +112,18 @@ final class SourceAccountingIntegrationService
             throw new AccountingIntegrationException('Every payment allocation requires a canonical frozen fund.');
         }
 
-        return $this->post($payment->club_id, AccountingIntegrationConfigurationService::SOURCE_PAYMENT, $payment->public_id, $payment->lock_version, $payment->payment_date->format('Y-m-d'), $payment->payment_mode, $allocated, $actor, strtolower((string) $payment->idempotency_key), $binding, 'Member payment recorded', 'asset', $groups, $payment);
+        return $this->post($context, $payment->club_id, AccountingIntegrationConfigurationService::SOURCE_PAYMENT, $payment->public_id, $payment->lock_version, $payment->payment_date->format('Y-m-d'), $payment->payment_mode, $allocated, $actor, strtolower((string) $payment->idempotency_key), $binding, 'Member payment recorded', 'asset', $groups, $payment);
     }
 
     public function validateChargeReplay(ClubCharge $charge): ?ClubAccountingSourceIntegration
     {
+        throw OrganisationAccessRejected::unsupported();
+    }
+
+    public function validateChargeReplayWithin(OrganisationTransactionContext $context, ClubCharge $charge): ?ClubAccountingSourceIntegration
+    {
+        $context->assertUsable((int) $charge->club_id);
+        $charge = ClubCharge::query()->where('club_id', $context->organisationId)->whereKey($charge->id)->lockForUpdate()->firstOrFail();
         $binding = $this->chargeBinding($charge);
 
         return $this->validateSourceReplay(['club_id' => $charge->club_id, 'source_type' => AccountingIntegrationConfigurationService::SOURCE_CHARGE, 'source_id' => $charge->public_id, 'source_version' => $charge->lock_version, 'date' => $charge->issued_at->toDateString(), 'source_key' => $charge->category, 'amount' => (int) collect($binding['member_charges'])->sum('original_amount_paise'), 'request_key' => null, 'binding' => $binding, 'terminal' => $charge->status === 'cancelled']);
@@ -97,6 +131,13 @@ final class SourceAccountingIntegrationService
 
     public function validatePaymentReplay(MemberPayment $payment): ?ClubAccountingSourceIntegration
     {
+        throw OrganisationAccessRejected::unsupported();
+    }
+
+    public function validatePaymentReplayWithin(OrganisationTransactionContext $context, MemberPayment $payment): ?ClubAccountingSourceIntegration
+    {
+        $context->assertUsable((int) $payment->club_id);
+        $payment = MemberPayment::query()->where('club_id', $context->organisationId)->whereKey($payment->id)->lockForUpdate()->firstOrFail();
         $integration = ClubAccountingSourceIntegration::query()
             ->where('club_id', $payment->club_id)
             ->where('source_type', AccountingIntegrationConfigurationService::SOURCE_PAYMENT)
@@ -112,7 +153,12 @@ final class SourceAccountingIntegrationService
 
     public function reverse(int $clubId, string $sourceType, string $sourceId, string $sourceAccountingDate, string $sourceCommittedAt, string $reversalDate, User $actor, string $reason): void
     {
-        $this->requireOuterTransaction();
+        throw OrganisationAccessRejected::unsupported();
+    }
+
+    public function reverseWithin(OrganisationTransactionContext $context, int $clubId, string $sourceType, string $sourceId, string $sourceAccountingDate, string $sourceCommittedAt, string $reversalDate, User $actor, string $reason): void
+    {
+        $context->assertUsable((int) $clubId);
         $this->assertTerminalSource($clubId, $sourceType, $sourceId);
         $integration = ClubAccountingSourceIntegration::query()->with('journalEntry')->where('club_id', $clubId)->where('source_type', $sourceType)->where('source_identifier', $sourceId)->lockForUpdate()->first();
         if (! $integration) {
@@ -135,7 +181,7 @@ final class SourceAccountingIntegrationService
         }
         $journalKey = $this->journalKey($clubId, $sourceType, $sourceId, 'reversed');
         try {
-            $reversal = $this->reversals->reverse(new JournalReversalRequest($clubId, $integration->journal_entry_id, $periods->first()->id, $reversalDate, $actor->id, $reason, $sourceType, $sourceId, 'reversed', $journalKey));
+            $reversal = $this->reversals->reverseWithin($context, new JournalReversalRequest($clubId, $integration->journal_entry_id, $periods->first()->id, $reversalDate, $actor->id, $reason, $sourceType, $sourceId, 'reversed', $journalKey));
         } catch (JournalIdempotencyConflictException|JournalSourceEventConflictException $exception) {
             throw new AccountingIntegrationConflictException('The source reversal replay bindings changed.', 0, $exception);
         }
@@ -175,7 +221,7 @@ final class SourceAccountingIntegrationService
         return ['payment_public_id' => strtolower($payment->public_id), 'member_id' => $payment->member_id, 'payment_mode' => $payment->payment_mode, 'payment_amount_paise' => (int) $payment->amount_paise, 'source_request_idempotency_key' => strtolower((string) $payment->idempotency_key), 'source_version' => $sourceVersion ?? (int) $payment->lock_version, 'allocations' => $payment->allocations->map(fn ($row) => ['allocation_id' => $row->id, 'member_charge_id' => $row->member_charge_id, 'fund_code' => $row->fund_code, 'amount_paise' => (int) $row->amount_paise])->values()->all()];
     }
 
-    private function post(int $clubId, string $sourceType, string $sourceId, int $sourceVersion, string $date, string $sourceKey, int $amount, User $actor, ?string $sourceRequestKey, array $binding, string $description, string $mappedType, array $fundGroups, ?MemberPayment $payment = null): ClubAccountingSourceIntegration
+    private function post(OrganisationTransactionContext $context, int $clubId, string $sourceType, string $sourceId, int $sourceVersion, string $date, string $sourceKey, int $amount, User $actor, ?string $sourceRequestKey, array $binding, string $description, string $mappedType, array $fundGroups, ?MemberPayment $payment = null): ClubAccountingSourceIntegration
     {
         $existing = ClubAccountingSourceIntegration::query()->where('club_id', $clubId)->where('source_type', $sourceType)->where('source_identifier', $sourceId)->lockForUpdate()->first();
         if ($existing) {
@@ -208,7 +254,7 @@ final class SourceAccountingIntegrationService
             $lines[] = new JournalLineInput($debit, 'debit', $groupAmount, fundCode: $fund);
             $lines[] = new JournalLineInput($credit, 'credit', $groupAmount, fundCode: $fund);
         }
-        $journal = $this->journals->post(new JournalPostingRequest($clubId, $periods->first()->id, $date, $description, 'INR', $sourceType, $sourceId, 'committed', $journalKey, $actor->id, $lines, metadata: ['mapping_version' => $activation->mapping_version, 'integration_checksum' => $checksum, 'source_binding' => $binding]));
+        $journal = $this->journals->postWithin($context, new JournalPostingRequest($clubId, $periods->first()->id, $date, $description, 'INR', $sourceType, $sourceId, 'committed', $journalKey, $actor->id, $lines, metadata: ['mapping_version' => $activation->mapping_version, 'integration_checksum' => $checksum, 'source_binding' => $binding]));
         $integration = ClubAccountingSourceIntegration::create(['club_id' => $clubId, 'source_type' => $sourceType, 'source_identifier' => $sourceId, 'source_version' => $sourceVersion, 'accounting_date' => $date, 'integration_activation_id' => $activation->id, 'source_mapping_id' => $mapping->id, 'canonical_source_key' => $sourceKey, 'source_amount_paise' => $amount, 'source_binding' => $binding, 'mapping_version' => $activation->mapping_version, 'journal_entry_id' => $journal->id, 'journal_reference' => $journal->reference, 'source_request_idempotency_key' => $sourceRequestKey, 'journal_idempotency_key' => $journalKey, 'integration_checksum' => $checksum, 'committed_by_user_id' => $actor->id, 'committed_at' => now()]);
         ClubAccountingSourceIntegrationEvent::create(['club_id' => $clubId, 'source_integration_id' => $integration->id, 'event_type' => 'integration_success', 'payload' => ['journal_entry_id' => $journal->id, 'journal_public_id' => $journal->public_id, 'journal_reference' => $journal->reference, 'checksum' => $checksum], 'recorded_by_user_id' => $actor->id, 'recorded_at' => now()]);
         if ($payment) {
@@ -329,7 +375,7 @@ final class SourceAccountingIntegrationService
             throw new AccountingIntegrationException('One exact current accounting source mapping is required.');
         }
         $mapping = $rows->first();
-        $account = LedgerAccount::query()->whereKey($mapping->ledger_account_id)->lockForUpdate()->first();
+        $account = LedgerAccount::query()->where('club_id', $activation->club_id)->whereKey($mapping->ledger_account_id)->lockForUpdate()->first();
         if (! $account || ! $account->is_active || $account->club_id !== $activation->club_id || $account->currency !== 'INR' || $account->account_type !== $type || ($activation->source_type === AccountingIntegrationConfigurationService::SOURCE_PAYMENT && ! preg_match('/\A(?:CASH|BANK)-/', $account->code))) {
             throw new AccountingIntegrationException('The mapped ledger account is unavailable or invalid.');
         }
@@ -363,16 +409,8 @@ final class SourceAccountingIntegrationService
         return substr($hash, 0, 8).'-'.substr($hash, 8, 4).'-4'.substr($hash, 13, 3).'-8'.substr($hash, 17, 3).'-'.substr($hash, 20, 12);
     }
 
-    private function requireOuterTransaction(): void
+    private function recordCoverageDecision(OrganisationTransactionContext $context, int $clubId, string $sourceType, string $sourceId, string $accountingDate, User $actor): bool
     {
-        if (DB::transactionLevel() < 1) {
-            throw new AccountingIntegrationException('Source accounting must execute inside the authoritative source transaction.');
-        }
-    }
-
-    private function recordCoverageDecision(int $clubId, string $sourceType, string $sourceId, string $accountingDate, User $actor): bool
-    {
-        $this->requireOuterTransaction();
         $existing = DB::table('club_accounting_source_coverage_decisions')->where('club_id', $clubId)->where('source_type', $sourceType)->where('source_identifier', $sourceId)->lockForUpdate()->first();
         if ($existing) {
             return (bool) $existing->integration_required;
