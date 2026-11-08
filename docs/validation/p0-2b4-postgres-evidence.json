@@ -1,0 +1,2855 @@
+{
+  "baseline": "6691e5d4b7df46bb636df39e68067afe10f2f437",
+  "application_source_commit": "55d40444f12c96aeff2b7da45945d00b5ebfc12c",
+  "application_tree": "23f694b8caac69339d7e7a344aca6295e9285474",
+  "diagnostic_source_commit": "741abd58f7a7ee3460cda96e3df1c1a98669b483",
+  "status": "BLOCKED_OUT_OF_SCOPE_SOURCE_COVERAGE_DEPENDENCY",
+  "totals_all_actual_executions": {
+    "tests": 275,
+    "assertions": 3135,
+    "failures": 2,
+    "errors": 2,
+    "skipped": 0
+  },
+  "unique_cases": 270,
+  "latest_case_outcomes": {
+    "passed": 269,
+    "failed": 1
+  },
+  "note": "No backend acceptance or completion claimed. The same financial assertion failed twice; corrected fixture reference errors remain in history. Six independent fresh clusters shut down with exit zero. Full B1/B2/F1/B3/security/canonical regression expansion stopped on the mandatory scope gate. Historical 154-case compatibility suite is not the full regression matrix.",
+  "runs": [
+    {
+      "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b4-cf3e84ffa59747709564f42bd114036f",
+      "original_evidence": {
+        "databases": [
+          "lcb_p02b3_finance_test"
+        ],
+        "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b4-cf3e84ffa59747709564f42bd114036f",
+        "source_hashes_unchanged": true,
+        "suite": "B4",
+        "host": "127.0.0.1",
+        "c_only": false,
+        "head": "55d40444f12c96aeff2b7da45945d00b5ebfc12c",
+        "c_regression_only": false,
+        "status": "PASS",
+        "bootstrap_only": false,
+        "stop_exit_code": 0,
+        "fixture_attestation": {
+          "postmaster_started": "1794165281.609071",
+          "port": "55601",
+          "system_identifier": "7705881170680399120",
+          "database_oid": "16385"
+        },
+        "after": {
+          "memberships": 0,
+          "protected_names_present": 0,
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b4-cf3e84ffa59747709564f42bd114036f/data|127.0.0.1|55601",
+          "owner": "lc_beenachi_app",
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "elevated": false
+        },
+        "port": 55601,
+        "before": {
+          "memberships": 0,
+          "protected_names_present": 0,
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b4-cf3e84ffa59747709564f42bd114036f/data|127.0.0.1|55601",
+          "owner": "lc_beenachi_app",
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "elevated": false
+        },
+        "results": [
+          {
+            "name": "b4-enforcement",
+            "assertions": 739,
+            "exit_code": 0,
+            "skipped": 0,
+            "tests": 85,
+            "errors": 0,
+            "failures": 0
+          }
+        ],
+        "system_identifier": "7705881170680399120"
+      },
+      "groups": [
+        {
+          "name": "b4-enforcement",
+          "junit_sha256": "c4fd97fa8a8c8c28347e6a7ec54b66ceb2317607dacea1ae62a8f7d03ccc1425",
+          "totals": {
+            "tests": 85,
+            "assertions": 739,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"map-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"map-suspended\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"map-foreign\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"map-missing\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"map-invalid\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"activate-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"activate-suspended\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"activate-foreign\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"activate-missing\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"activate-invalid\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"revokeMapping-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"revokeMapping-suspended\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"revokeMapping-foreign\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"revokeMapping-missing\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"revokeMapping-invalid\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"revokeActivation-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"revokeActivation-suspended\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"revokeActivation-foreign\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"revokeActivation-missing\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"revokeActivation-invalid\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"propose-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"propose-suspended\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"propose-foreign\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"propose-missing\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"propose-invalid\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"propose-replay-active\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"propose-replay-suspended\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"propose-replay-foreign\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"propose-replay-missing\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"propose-replay-invalid\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"approve-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"approve-suspended\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"approve-foreign\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"approve-missing\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"approve-invalid\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"reject-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"reject-suspended\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"reject-foreign\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"reject-missing\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"reject-invalid\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"withdraw-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"withdraw-suspended\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"withdraw-foreign\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"withdraw-missing\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_standalone_mutations_and_replay_require_fresh_eligibility with data set \"withdraw-invalid\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"map-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"map-forged\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"map-committed\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"map-rolledback\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"map-foreign\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"map-ambient\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"map-nested-standalone\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"activate-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"activate-forged\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"activate-committed\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"activate-rolledback\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"activate-foreign\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"activate-ambient\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"activate-nested-standalone\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeMapping-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeMapping-forged\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeMapping-committed\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeMapping-rolledback\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeMapping-foreign\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeMapping-ambient\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeMapping-nested-standalone\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeActivation-active\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeActivation-forged\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeActivation-committed\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeActivation-rolledback\"",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeActivation-foreign\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeActivation-ambient\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_explicit_context_and_savepoint_contract with data set \"revokeActivation-nested-standalone\"",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_approval_failure_rolls_back_configuration_decision_and_audit with data set #0",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_approval_failure_rolls_back_configuration_decision_and_audit with data set #1",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_approval_failure_rolls_back_configuration_decision_and_audit with data set #2",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_approval_revalidates_proposer_authority_without_consuming_decision",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_genuine_serialization_abort_never_broadens_one_attempt_budget with data set #0",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_genuine_serialization_abort_never_broadens_one_attempt_budget with data set #1",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_genuine_serialization_abort_never_broadens_one_attempt_budget with data set #2",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_genuine_serialization_abort_never_broadens_one_attempt_budget with data set #3",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_genuine_serialization_abort_never_broadens_one_attempt_budget with data set #4",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_genuine_serialization_abort_never_broadens_one_attempt_budget with data set #5",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_genuine_serialization_abort_never_broadens_one_attempt_budget with data set #6",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationEnforcementTest::test_genuine_serialization_abort_never_broadens_one_attempt_budget with data set #7",
+              "state": "passed",
+              "assertions": 10
+            }
+          ]
+        }
+      ],
+      "postgres_deadlock_errors": 0,
+      "structured_proof": []
+    },
+    {
+      "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b4races-759786ac478040b0948d9d13fce7ced6",
+      "original_evidence": {
+        "source_hashes_unchanged": true,
+        "fixture_attestation": {
+          "postmaster_started": "1794165281.610492",
+          "port": "55602",
+          "system_identifier": "7705881170682530800",
+          "database_oid": "16385"
+        },
+        "suite": "B4Races",
+        "port": 55602,
+        "stop_exit_code": 0,
+        "after": {
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b4races-759786ac478040b0948d9d13fce7ced6/data|127.0.0.1|55602",
+          "owner": "lc_beenachi_app",
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "protected_names_present": 0,
+          "memberships": 0,
+          "elevated": false
+        },
+        "reason": "Recorded test failures, errors or skips prevent acceptance. Merge NO-GO.",
+        "host": "127.0.0.1",
+        "c_regression_only": false,
+        "bootstrap_only": false,
+        "head": "55d40444f12c96aeff2b7da45945d00b5ebfc12c",
+        "results": [
+          {
+            "skipped": 0,
+            "failures": 1,
+            "tests": 27,
+            "assertions": 325,
+            "exit_code": 1,
+            "errors": 0,
+            "name": "b4-races"
+          }
+        ],
+        "recorded_test_failure": true,
+        "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b4races-759786ac478040b0948d9d13fce7ced6",
+        "before": {
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b4races-759786ac478040b0948d9d13fce7ced6/data|127.0.0.1|55602",
+          "owner": "lc_beenachi_app",
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "protected_names_present": 0,
+          "memberships": 0,
+          "elevated": false
+        },
+        "system_identifier": "7705881170682530800",
+        "databases": [
+          "lcb_p02b3_finance_test"
+        ],
+        "c_only": false,
+        "status": "FAILED_OR_BLOCKED"
+      },
+      "groups": [
+        {
+          "name": "b4-races",
+          "junit_sha256": "33764015e3990460a382f2298979c26da53343eab6615ba3dc8124da6b76c91f",
+          "totals": {
+            "tests": 27,
+            "assertions": 325,
+            "failures": 1,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"map-suspend-first-1\"",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"map-suspend-first-0\"",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"activate-suspend-first-1\"",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"activate-suspend-first-0\"",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"revokeMapping-suspend-first-1\"",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"revokeMapping-suspend-first-0\"",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"revokeActivation-suspend-first-1\"",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"revokeActivation-suspend-first-0\"",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"propose-suspend-first-1\"",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"propose-suspend-first-0\"",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"propose-replay-suspend-first-1\"",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"propose-replay-suspend-first-0\"",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"approve-suspend-first-1\"",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"approve-suspend-first-0\"",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"reject-suspend-first-1\"",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"reject-suspend-first-0\"",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"withdraw-suspend-first-1\"",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_suspension_and_every_mutation_or_replay_linearise_on_club with data set \"withdraw-suspend-first-0\"",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_duplicate_requests_and_decisions_preserve_exact_winner_and_audit with data set #0",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_duplicate_requests_and_decisions_preserve_exact_winner_and_audit with data set #1",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_duplicate_requests_and_decisions_preserve_exact_winner_and_audit with data set #2",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_configuration_and_b3_source_posting_preserve_historical_coverage with data set \"activate-config-first-1\"",
+              "state": "failed",
+              "assertions": 10,
+              "detail": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_configuration_and_b3_source_posting_preserve_historical_coverage with data set \"activate-config-first-1\"\r\nFailed asserting that 1 is identical to 2.\n\r\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\tests\\Feature\\IntegrationConfigurationConcurrencyTest.php:107"
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_configuration_and_b3_source_posting_preserve_historical_coverage with data set \"activate-config-first-0\"",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_configuration_and_b3_source_posting_preserve_historical_coverage with data set \"revokeActivation-config-first-1\"",
+              "state": "passed",
+              "assertions": 14
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_configuration_and_b3_source_posting_preserve_historical_coverage with data set \"revokeActivation-config-first-0\"",
+              "state": "passed",
+              "assertions": 14
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_configuration_and_b3_source_posting_preserve_historical_coverage with data set \"revokeMapping-config-first-1\"",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_configuration_and_b3_source_posting_preserve_historical_coverage with data set \"revokeMapping-config-first-0\"",
+              "state": "passed",
+              "assertions": 13
+            }
+          ]
+        }
+      ],
+      "postgres_deadlock_errors": 0,
+      "structured_proof": [
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "suspend:map",
+              "operation:map"
+            ],
+            "holder": 8872,
+            "waiter": 10624,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:map",
+              "suspend:map"
+            ],
+            "holder": 27436,
+            "waiter": 26616,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "suspend:activate",
+              "operation:activate"
+            ],
+            "holder": 1960,
+            "waiter": 19004,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:activate",
+              "suspend:activate"
+            ],
+            "holder": 20588,
+            "waiter": 11036,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "suspend:revokeMapping",
+              "operation:revokeMapping"
+            ],
+            "holder": 15056,
+            "waiter": 24392,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:revokeMapping",
+              "suspend:revokeMapping"
+            ],
+            "holder": 25776,
+            "waiter": 24180,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "suspend:revokeActivation",
+              "operation:revokeActivation"
+            ],
+            "holder": 18856,
+            "waiter": 1776,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:revokeActivation",
+              "suspend:revokeActivation"
+            ],
+            "holder": 22336,
+            "waiter": 4064,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "suspend:propose",
+              "operation:propose"
+            ],
+            "holder": 6932,
+            "waiter": 21132,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:propose",
+              "suspend:propose"
+            ],
+            "holder": 17468,
+            "waiter": 7460,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "suspend:propose-replay",
+              "operation:propose-replay"
+            ],
+            "holder": 27728,
+            "waiter": 17740,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:propose-replay",
+              "suspend:propose-replay"
+            ],
+            "holder": 19272,
+            "waiter": 24244,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "suspend:approve",
+              "operation:approve"
+            ],
+            "holder": 4508,
+            "waiter": 5096,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:approve",
+              "suspend:approve"
+            ],
+            "holder": 4700,
+            "waiter": 16508,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "suspend:reject",
+              "operation:reject"
+            ],
+            "holder": 20560,
+            "waiter": 7648,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:reject",
+              "suspend:reject"
+            ],
+            "holder": 21144,
+            "waiter": 27792,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "suspend:withdraw",
+              "operation:withdraw"
+            ],
+            "holder": 14676,
+            "waiter": 1204,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:withdraw",
+              "suspend:withdraw"
+            ],
+            "holder": 19144,
+            "waiter": 10468,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:propose",
+              "operation:propose"
+            ],
+            "holder": 1980,
+            "waiter": 18952,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:approve",
+              "operation:approve"
+            ],
+            "holder": 28080,
+            "waiter": 2628,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "domain_rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:activate",
+              "operation:activate"
+            ],
+            "holder": 3920,
+            "waiter": 12712,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "domain_rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:activate",
+              "source:collections-issue"
+            ],
+            "holder": 11776,
+            "waiter": 20836,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "source:collections-issue",
+              "operation:activate"
+            ],
+            "holder": 12760,
+            "waiter": 17832,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "domain_rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:revokeActivation",
+              "source:collections-issue"
+            ],
+            "holder": 16068,
+            "waiter": 24136,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "source:collections-issue",
+              "operation:revokeActivation"
+            ],
+            "holder": 27664,
+            "waiter": 27556,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:revokeMapping",
+              "source:collections-issue"
+            ],
+            "holder": 10624,
+            "waiter": 17592,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "domain_rejected"
+            ]
+          }
+        },
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "source:collections-issue",
+              "operation:revokeMapping"
+            ],
+            "holder": 19376,
+            "waiter": 27696,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b4resources-e2cd9df0329e44918867076e32bd4471",
+      "original_evidence": {
+        "fixture_attestation": {
+          "postmaster_started": "1794165281.611996",
+          "port": "55603",
+          "database_oid": "16385",
+          "system_identifier": "7705881170684238596"
+        },
+        "reason": "Recorded test failures, errors or skips prevent acceptance. Merge NO-GO.",
+        "c_only": false,
+        "recorded_test_failure": true,
+        "databases": [
+          "lcb_p02b3_finance_test"
+        ],
+        "port": 55603,
+        "bootstrap_only": false,
+        "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b4resources-e2cd9df0329e44918867076e32bd4471",
+        "stop_exit_code": 0,
+        "source_hashes_unchanged": true,
+        "before": {
+          "protected_names_present": 0,
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b4resources-e2cd9df0329e44918867076e32bd4471/data|127.0.0.1|55603",
+          "elevated": false,
+          "owner": "lc_beenachi_app",
+          "memberships": 0
+        },
+        "after": {
+          "protected_names_present": 0,
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b4resources-e2cd9df0329e44918867076e32bd4471/data|127.0.0.1|55603",
+          "elevated": false,
+          "owner": "lc_beenachi_app",
+          "memberships": 0
+        },
+        "results": [
+          {
+            "failures": 0,
+            "errors": 2,
+            "tests": 4,
+            "name": "b4-resources",
+            "assertions": 24,
+            "exit_code": 2,
+            "skipped": 0
+          }
+        ],
+        "status": "FAILED_OR_BLOCKED",
+        "head": "55d40444f12c96aeff2b7da45945d00b5ebfc12c",
+        "suite": "B4Resources",
+        "system_identifier": "7705881170684238596",
+        "c_regression_only": false,
+        "host": "127.0.0.1"
+      },
+      "groups": [
+        {
+          "name": "b4-resources",
+          "junit_sha256": "0f8d76c300c382831a06822b4fb8604e00c10414f28e759bbd953157613f2fb5",
+          "totals": {
+            "tests": 4,
+            "assertions": 24,
+            "failures": 0,
+            "errors": 2,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationResourceScopeTest::test_foreign_rows_are_rejected_without_acquiring_their_locks with data set #0",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationResourceScopeTest::test_foreign_rows_are_rejected_without_acquiring_their_locks with data set #1",
+              "state": "error",
+              "assertions": 5,
+              "detail": "Tests\\Feature\\IntegrationConfigurationResourceScopeTest::test_foreign_rows_are_rejected_without_acquiring_their_locks with data set #1\r\nIlluminate\\Database\\UniqueConstraintViolationException: SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"club_accounting_source_mappings_approval_reference_unique\"\nDETAIL:  Key (approval_reference)=(INITIAL-MAP) already exists. (Connection: pgsql, Host: 127.0.0.1, Port: 55603, Database: lcb_p02b3_finance_test, SQL: insert into \"club_accounting_source_mappings\" (\"club_id\", \"source_type\", \"canonical_source_key\", \"ledger_account_id\", \"mapping_version\", \"effective_date\", \"expires_at\", \"approval_reference\", \"created_by_user_id\", \"approved_at\", \"public_id\", \"updated_at\", \"created_at\") values (2, member_charge, membership_dues, 7, B4-V1, 2027-07-01, ?, INITIAL-MAP, 3, 2027-08-12 10:00:00, a32daac8-9013-4afd-8815-a154e41be468, 2027-08-12 10:00:00, 2027-08-12 10:00:00) returning \"id\")\n\r\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Connection.php:857\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Connection.php:813\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Connection.php:426\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Connection.php:412\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Query\\Processors\\PostgresProcessor.php:24\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Query\\Builder.php:4313\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Builder.php:2303\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Model.php:1687\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Model.php:1603\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Model.php:1407\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Builder.php:1257\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Support\\helpers.php:393\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Builder.php:1256\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Support\\Traits\\ForwardsCalls.php:23\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Model.php:2871\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Model.php:2887\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\app\\Services\\Finance\\AccountingIntegrationConfigurationService.php:139\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\app\\Services\\Finance\\AccountingIntegrationConfigurationService.php:98\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\app\\Services\\Access\\OrganisationTransactionGuard.php:75\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Concerns\\ManagesTransactions.php:35\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\app\\Services\\Access\\OrganisationTransactionGuard.php:47\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\app\\Services\\Finance\\AccountingIntegrationConfigurationService.php:97\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\tests\\Support\\IntegrationConfigurationFixture.php:44\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\tests\\Feature\\IntegrationConfigurationResourceScopeTest.php:33"
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationResourceScopeTest::test_foreign_rows_are_rejected_without_acquiring_their_locks with data set #2",
+              "state": "error",
+              "assertions": 5,
+              "detail": "Tests\\Feature\\IntegrationConfigurationResourceScopeTest::test_foreign_rows_are_rejected_without_acquiring_their_locks with data set #2\r\nIlluminate\\Database\\UniqueConstraintViolationException: SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"club_accounting_integration_activations_activation_reference_un\"\nDETAIL:  Key (activation_reference)=(INITIAL-ACT) already exists. (Connection: pgsql, Host: 127.0.0.1, Port: 55603, Database: lcb_p02b3_finance_test, SQL: insert into \"club_accounting_integration_activations\" (\"club_id\", \"source_type\", \"coverage_start_date\", \"mapping_version\", \"opening_package_id\", \"opening_journal_entry_id\", \"activation_reference\", \"activated_by_user_id\", \"activated_at\", \"public_id\", \"updated_at\", \"created_at\") values (2, member_charge, 2027-07-01, B4-V1, 2, 2, INITIAL-ACT, 3, 2027-08-12 10:00:00, a32daacd-38cf-4a48-86ed-60ed356e0d8e, 2027-08-12 10:00:00, 2027-08-12 10:00:00) returning \"id\")\n\r\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Connection.php:857\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Connection.php:813\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Connection.php:426\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Connection.php:412\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Query\\Processors\\PostgresProcessor.php:24\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Query\\Builder.php:4313\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Builder.php:2303\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Model.php:1687\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Model.php:1603\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Model.php:1407\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Builder.php:1257\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Support\\helpers.php:393\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Builder.php:1256\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Support\\Traits\\ForwardsCalls.php:23\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Model.php:2871\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Eloquent\\Model.php:2887\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\app\\Services\\Finance\\AccountingIntegrationConfigurationService.php:79\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\app\\Services\\Finance\\AccountingIntegrationConfigurationService.php:37\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\app\\Services\\Access\\OrganisationTransactionGuard.php:75\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Database\\Concerns\\ManagesTransactions.php:35\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\app\\Services\\Access\\OrganisationTransactionGuard.php:47\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\app\\Services\\Finance\\AccountingIntegrationConfigurationService.php:36\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\tests\\Support\\IntegrationConfigurationFixture.php:47\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\tests\\Feature\\IntegrationConfigurationResourceScopeTest.php:33"
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationResourceScopeTest::test_foreign_rows_are_rejected_without_acquiring_their_locks with data set #3",
+              "state": "passed",
+              "assertions": 7
+            }
+          ]
+        }
+      ],
+      "postgres_deadlock_errors": 0,
+      "structured_proof": []
+    },
+    {
+      "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b3historical-b56a62354a6e414f964fccda78eb8d68",
+      "original_evidence": {
+        "head": "55d40444f12c96aeff2b7da45945d00b5ebfc12c",
+        "system_identifier": "7705881170677832476",
+        "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b3historical-b56a62354a6e414f964fccda78eb8d68",
+        "stop_exit_code": 0,
+        "fixture_attestation": {
+          "database_oid": "16385",
+          "postmaster_started": "1794165281.609576",
+          "system_identifier": "7705881170677832476",
+          "port": "55604"
+        },
+        "after": {
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b3historical-b56a62354a6e414f964fccda78eb8d68/data|127.0.0.1|55604",
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "owner": "lc_beenachi_app",
+          "elevated": false,
+          "protected_names_present": 0,
+          "memberships": 0
+        },
+        "suite": "B3Historical",
+        "results": [
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 9,
+            "assertions": 84,
+            "name": "historical-0",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 4,
+            "assertions": 59,
+            "name": "historical-1",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 4,
+            "assertions": 106,
+            "name": "historical-2",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 8,
+            "assertions": 63,
+            "name": "historical-3",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 33,
+            "assertions": 325,
+            "name": "historical-4",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 14,
+            "assertions": 178,
+            "name": "historical-5",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 4,
+            "assertions": 78,
+            "name": "historical-6",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 4,
+            "assertions": 90,
+            "name": "historical-7",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 4,
+            "assertions": 74,
+            "name": "historical-8",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 6,
+            "assertions": 65,
+            "name": "historical-9",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 5,
+            "assertions": 69,
+            "name": "historical-10",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 6,
+            "assertions": 118,
+            "name": "historical-11",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 10,
+            "assertions": 116,
+            "name": "historical-12",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 10,
+            "assertions": 153,
+            "name": "historical-13",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 8,
+            "assertions": 92,
+            "name": "historical-14",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 6,
+            "assertions": 87,
+            "name": "historical-15",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 10,
+            "assertions": 125,
+            "name": "historical-16",
+            "exit_code": 0
+          },
+          {
+            "skipped": 0,
+            "errors": 0,
+            "failures": 0,
+            "tests": 9,
+            "assertions": 127,
+            "name": "historical-17",
+            "exit_code": 0
+          }
+        ],
+        "before": {
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b3historical-b56a62354a6e414f964fccda78eb8d68/data|127.0.0.1|55604",
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "owner": "lc_beenachi_app",
+          "elevated": false,
+          "protected_names_present": 0,
+          "memberships": 0
+        },
+        "host": "127.0.0.1",
+        "databases": [
+          "lcb_p02b3_finance_test"
+        ],
+        "bootstrap_only": false,
+        "c_only": false,
+        "c_regression_only": false,
+        "port": 55604,
+        "source_hashes_unchanged": true,
+        "status": "PASS"
+      },
+      "groups": [
+        {
+          "name": "historical-0",
+          "junit_sha256": "6dce1b3ca2b41a668fa9ea0305de4d387382708be2ad7e38c62e2c942e2775d6",
+          "totals": {
+            "tests": 9,
+            "assertions": 84,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3adPaymentReceiptPdfNarrowImplementationTest::test_3ad_document_exists_and_records_narrow_pdf_boundary",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3adPaymentReceiptPdfNarrowImplementationTest::test_3ad_pdf_files_and_package_are_present",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3adPaymentReceiptPdfNarrowImplementationTest::test_3ad_pdf_route_is_registered_as_protected_receipt_route",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3adPaymentReceiptPdfNarrowImplementationTest::test_authorized_user_can_download_issued_receipt_pdf",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3adPaymentReceiptPdfNarrowImplementationTest::test_pdf_download_does_not_auto_generate_missing_receipt",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3adPaymentReceiptPdfNarrowImplementationTest::test_normal_member_can_download_only_own_issued_receipt_pdf",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3adPaymentReceiptPdfNarrowImplementationTest::test_cross_club_or_wrong_member_pdf_request_fails_closed",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3adPaymentReceiptPdfNarrowImplementationTest::test_unauthenticated_user_cannot_download_receipt_pdf",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3adPaymentReceiptPdfNarrowImplementationTest::test_3ad_does_not_add_blocked_frontend_storage_sharing_report_or_excel_files",
+              "state": "passed",
+              "assertions": 17
+            }
+          ]
+        },
+        {
+          "name": "historical-1",
+          "junit_sha256": "61a582b37942b7c93ab2754eed3d65eb5d257de9d3f4b74f96a9b90fc2976af3",
+          "totals": {
+            "tests": 4,
+            "assertions": 59,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3dsSeededPaymentPermissionDefectImplementationTest::test_3ds_document_records_seeded_payment_permission_implementation_scope",
+              "state": "passed",
+              "assertions": 23
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3dsSeededPaymentPermissionDefectImplementationTest::test_local_seeded_president_admin_has_payment_record_permission_and_member_does_not",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3dsSeededPaymentPermissionDefectImplementationTest::test_seeded_president_admin_can_record_synthetic_member_payment_and_normal_member_still_cannot",
+              "state": "passed",
+              "assertions": 18
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3dsSeededPaymentPermissionDefectImplementationTest::test_dn_010_logout_follow_up_auth_me_remains_unauthorized_after_logout",
+              "state": "passed",
+              "assertions": 8
+            }
+          ]
+        },
+        {
+          "name": "historical-10",
+          "junit_sha256": "57f075df17d137cc785a45ca65b5bb99e4f67c8e2998f28391fd26d6b6873280",
+          "totals": {
+            "tests": 5,
+            "assertions": 69,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3mPaymentRecordingServiceNarrowImplementationTest::test_milestone_3m_document_records_narrow_implementation_boundary",
+              "state": "passed",
+              "assertions": 14
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3mPaymentRecordingServiceNarrowImplementationTest::test_service_records_posted_payment_creates_posted_ledger_credit_and_links_them",
+              "state": "passed",
+              "assertions": 29
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3mPaymentRecordingServiceNarrowImplementationTest::test_service_rejects_user_without_payment_recording_permission",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3mPaymentRecordingServiceNarrowImplementationTest::test_service_rejects_cross_club_payment_recording",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3mPaymentRecordingServiceNarrowImplementationTest::test_service_validates_amount_payment_date_and_payment_mode",
+              "state": "passed",
+              "assertions": 10
+            }
+          ]
+        },
+        {
+          "name": "historical-11",
+          "junit_sha256": "cdcd28e5cacaa87415870da0fbc5dcbc15c41a12be1496f4bf0af3695d7e8e02",
+          "totals": {
+            "tests": 6,
+            "assertions": 118,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3nPaymentRecordingServiceValidationAndClosureTest::test_validation_document_exists_and_records_closure_boundary",
+              "state": "passed",
+              "assertions": 16
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3nPaymentRecordingServiceValidationAndClosureTest::test_3m_service_file_exists_and_contains_required_transaction_and_linkage_rules",
+              "state": "passed",
+              "assertions": 15
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3nPaymentRecordingServiceValidationAndClosureTest::test_service_still_records_posted_payment_and_posted_ledger_credit_with_linkage",
+              "state": "passed",
+              "assertions": 21
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3nPaymentRecordingServiceValidationAndClosureTest::test_service_permission_cross_club_and_validation_guards_remain_enforced",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3nPaymentRecordingServiceValidationAndClosureTest::test_3n_does_not_add_public_payment_receipt_or_finance_mutation_routes",
+              "state": "passed",
+              "assertions": 35
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3nPaymentRecordingServiceValidationAndClosureTest::test_3n_does_not_add_blocked_api_frontend_receipt_report_or_excel_files",
+              "state": "passed",
+              "assertions": 19
+            }
+          ]
+        },
+        {
+          "name": "historical-12",
+          "junit_sha256": "c2af685a24021c880e0bff640b9f61dbd26e02321a9e477353d9c48ad9d2fa22",
+          "totals": {
+            "tests": 10,
+            "assertions": 116,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3qPaymentRecordingApiNarrowImplementationTest::test_3q_document_records_narrow_api_implementation_boundary",
+              "state": "passed",
+              "assertions": 15
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3qPaymentRecordingApiNarrowImplementationTest::test_payment_recording_route_is_registered_as_single_post_route",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3qPaymentRecordingApiNarrowImplementationTest::test_president_admin_can_record_member_payment_through_api",
+              "state": "passed",
+              "assertions": 19
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3qPaymentRecordingApiNarrowImplementationTest::test_treasurer_can_record_member_payment_when_granted_payment_record_permission",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3qPaymentRecordingApiNarrowImplementationTest::test_normal_member_cannot_record_payment_through_api",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3qPaymentRecordingApiNarrowImplementationTest::test_unauthenticated_user_cannot_record_payment",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3qPaymentRecordingApiNarrowImplementationTest::test_cross_club_member_payment_recording_fails_closed",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3qPaymentRecordingApiNarrowImplementationTest::test_payment_api_validates_required_fields_and_rejects_backend_controlled_fields",
+              "state": "passed",
+              "assertions": 19
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3qPaymentRecordingApiNarrowImplementationTest::test_3q_does_not_add_unapproved_payment_receipt_or_finance_routes",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3qPaymentRecordingApiNarrowImplementationTest::test_3q_does_not_add_blocked_receipt_report_reminder_excel_or_frontend_files",
+              "state": "passed",
+              "assertions": 16
+            }
+          ]
+        },
+        {
+          "name": "historical-13",
+          "junit_sha256": "f01782e381c14d047e321d6604a8b62d362acc57a10e3194298263fdc45262a1",
+          "totals": {
+            "tests": 10,
+            "assertions": 153,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3rPaymentRecordingApiValidationAndClosureTest::test_3r_validation_document_exists_and_records_closure_boundary",
+              "state": "passed",
+              "assertions": 15
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3rPaymentRecordingApiValidationAndClosureTest::test_3q_route_exists_as_only_authorized_payment_route",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3rPaymentRecordingApiValidationAndClosureTest::test_controller_delegates_to_payment_recording_service_without_manual_posting_logic",
+              "state": "passed",
+              "assertions": 15
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3rPaymentRecordingApiValidationAndClosureTest::test_request_accepts_only_approved_fields_and_blocks_backend_controlled_fields",
+              "state": "passed",
+              "assertions": 21
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3rPaymentRecordingApiValidationAndClosureTest::test_resource_exposes_only_safe_payment_response_fields",
+              "state": "passed",
+              "assertions": 31
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3rPaymentRecordingApiValidationAndClosureTest::test_authorized_president_payment_api_flow_remains_validated",
+              "state": "passed",
+              "assertions": 17
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3rPaymentRecordingApiValidationAndClosureTest::test_normal_member_cross_club_and_invalid_input_guards_remain_enforced",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3rPaymentRecordingApiValidationAndClosureTest::test_invalid_payment_input_fails_request_validation",
+              "state": "passed",
+              "assertions": 15
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3rPaymentRecordingApiValidationAndClosureTest::test_receipt_cancellation_reversal_reports_reminders_excel_and_frontend_remain_absent",
+              "state": "passed",
+              "assertions": 18
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3rPaymentRecordingApiValidationAndClosureTest::test_3r_does_not_create_unapproved_routes",
+              "state": "passed",
+              "assertions": 6
+            }
+          ]
+        },
+        {
+          "name": "historical-14",
+          "junit_sha256": "3ca058b8409358d5fed2cf724d8dde0f26c1e1a0ec507484b6f6213d4a2fbb4e",
+          "totals": {
+            "tests": 8,
+            "assertions": 92,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3uPaymentReceiptGenerationNarrowImplementationTest::test_3u_document_records_narrow_backend_service_boundary",
+              "state": "passed",
+              "assertions": 20
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3uPaymentReceiptGenerationNarrowImplementationTest::test_service_generates_issued_receipt_for_posted_payment_without_extra_ledger_entries",
+              "state": "passed",
+              "assertions": 20
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3uPaymentReceiptGenerationNarrowImplementationTest::test_service_generates_sequential_receipt_numbers_scoped_by_club_and_financial_year",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3uPaymentReceiptGenerationNarrowImplementationTest::test_service_rejects_duplicate_receipt_for_same_payment",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3uPaymentReceiptGenerationNarrowImplementationTest::test_service_rejects_non_posted_payment_statuses",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3uPaymentReceiptGenerationNarrowImplementationTest::test_service_rejects_user_without_payment_permission",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3uPaymentReceiptGenerationNarrowImplementationTest::test_service_rejects_cross_club_receipt_generation",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3uPaymentReceiptGenerationNarrowImplementationTest::test_3u_does_not_register_receipt_routes_or_add_blocked_files",
+              "state": "passed",
+              "assertions": 14
+            }
+          ]
+        },
+        {
+          "name": "historical-15",
+          "junit_sha256": "dcc46adb2b517aae8a7e9c34e32b61c928409d10d5988e16f8c4bbbd172c9a4e",
+          "totals": {
+            "tests": 6,
+            "assertions": 87,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3vPaymentReceiptGenerationValidationAndClosureTest::test_3v_validation_document_exists_and_records_closure_boundary",
+              "state": "passed",
+              "assertions": 21
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3vPaymentReceiptGenerationValidationAndClosureTest::test_3u_receipt_generation_files_remain_present_for_validation",
+              "state": "passed",
+              "assertions": 16
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3vPaymentReceiptGenerationValidationAndClosureTest::test_receipt_generation_service_remains_transaction_safe_and_does_not_create_extra_ledger_entries",
+              "state": "passed",
+              "assertions": 18
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3vPaymentReceiptGenerationValidationAndClosureTest::test_receipt_numbering_duplicate_and_status_guards_remain_validated",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3vPaymentReceiptGenerationValidationAndClosureTest::test_permission_and_cross_club_guards_remain_validated",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3vPaymentReceiptGenerationValidationAndClosureTest::test_3v_closes_without_receipt_api_pdf_frontend_report_messaging_or_excel_scope",
+              "state": "passed",
+              "assertions": 14
+            }
+          ]
+        },
+        {
+          "name": "historical-16",
+          "junit_sha256": "e2e14701c0a536d1d15ab6d236e1a86b2a660f860e60218abc7adf51509a6f3d",
+          "totals": {
+            "tests": 10,
+            "assertions": 125,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3yPaymentReceiptApiNarrowImplementationTest::test_3y_document_records_narrow_api_implementation_boundary",
+              "state": "passed",
+              "assertions": 15
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3yPaymentReceiptApiNarrowImplementationTest::test_receipt_json_routes_remain_registered_after_later_pdf_expansion",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3yPaymentReceiptApiNarrowImplementationTest::test_authorized_user_can_generate_receipt_through_api",
+              "state": "passed",
+              "assertions": 19
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3yPaymentReceiptApiNarrowImplementationTest::test_get_receipt_returns_existing_receipt_without_auto_generation",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3yPaymentReceiptApiNarrowImplementationTest::test_normal_member_cannot_generate_receipt_but_can_view_own_generated_receipt",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3yPaymentReceiptApiNarrowImplementationTest::test_normal_member_cannot_view_other_members_receipt",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3yPaymentReceiptApiNarrowImplementationTest::test_duplicate_receipt_generation_through_api_fails_closed",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3yPaymentReceiptApiNarrowImplementationTest::test_cross_club_or_wrong_member_payment_receipt_request_fails_closed",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3yPaymentReceiptApiNarrowImplementationTest::test_generate_receipt_request_rejects_backend_controlled_fields",
+              "state": "passed",
+              "assertions": 22
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3yPaymentReceiptApiNarrowImplementationTest::test_3y_does_not_add_blocked_receipt_pdf_frontend_report_excel_or_workflow_files",
+              "state": "passed",
+              "assertions": 16
+            }
+          ]
+        },
+        {
+          "name": "historical-17",
+          "junit_sha256": "8061639de5cc19e38975a2d9b855f0e29c7d699ba3c8604a3f3f71eeabefe063",
+          "totals": {
+            "tests": 9,
+            "assertions": 127,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3zPaymentReceiptApiValidationAndClosureTest::test_3z_validation_document_exists_and_records_closure_boundary",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3zPaymentReceiptApiValidationAndClosureTest::test_3y_receipt_api_files_remain_present_for_validation",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3zPaymentReceiptApiValidationAndClosureTest::test_receipt_json_routes_remain_registered_after_later_pdf_expansion",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3zPaymentReceiptApiValidationAndClosureTest::test_controller_request_and_resource_preserve_3y_boundaries",
+              "state": "passed",
+              "assertions": 32
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3zPaymentReceiptApiValidationAndClosureTest::test_authorized_receipt_generation_and_view_flow_remains_validated",
+              "state": "passed",
+              "assertions": 18
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3zPaymentReceiptApiValidationAndClosureTest::test_get_receipt_does_not_auto_generate_receipt",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3zPaymentReceiptApiValidationAndClosureTest::test_normal_member_receipt_visibility_remains_privacy_safe",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3zPaymentReceiptApiValidationAndClosureTest::test_duplicate_and_cross_club_receipt_requests_remain_fail_closed",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3zPaymentReceiptApiValidationAndClosureTest::test_3z_does_not_add_blocked_later_scope_files",
+              "state": "passed",
+              "assertions": 16
+            }
+          ]
+        },
+        {
+          "name": "historical-2",
+          "junit_sha256": "5851ef0df78a063541972c368a9805d522281060ebf587fe846083072324f942",
+          "totals": {
+            "tests": 4,
+            "assertions": 106,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3duPaymentRefreshRetestExecutionTest::test_3du_creates_payment_refresh_retest_execution_document",
+              "state": "passed",
+              "assertions": 49
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3duPaymentRefreshRetestExecutionTest::test_3du_current_file_changes_are_limited_to_approved_retest_execution_files",
+              "state": "passed",
+              "assertions": 26
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3duPaymentRefreshRetestExecutionTest::test_3du_app_page_tsx_is_not_edited",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3duPaymentRefreshRetestExecutionTest::test_targeted_dn_047_payment_refresh_retest_execution",
+              "state": "passed",
+              "assertions": 25
+            }
+          ]
+        },
+        {
+          "name": "historical-3",
+          "junit_sha256": "83b9d19f48d016d874189901fee5413ffbff44808509fdf1acbe52925015bfee",
+          "totals": {
+            "tests": 8,
+            "assertions": 63,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3iifInternalAccountingPeriodCloseServiceTest::test_empty_or_balanced_period_closes_without_creating_or_mutating_journals",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iifInternalAccountingPeriodCloseServiceTest::test_replay_is_actor_bound_and_closed_period_rejects_posting",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iifInternalAccountingPeriodCloseServiceTest::test_draft_and_unbalanced_entries_block_close",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iifInternalAccountingPeriodCloseServiceTest::test_empty_period_wrong_scope_year_and_missing_or_foreign_actor_fail_closed",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iifInternalAccountingPeriodCloseServiceTest::test_service_closed_period_rejects_posting_and_generates_no_journal",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iifInternalAccountingPeriodCloseServiceTest::test_persisted_unbalanced_line_blocks_close_without_mutating_entry",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iifInternalAccountingPeriodCloseServiceTest::test_same_actor_conflicting_context_is_rejected_without_overwriting_metadata",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iifInternalAccountingPeriodCloseServiceTest::test_service_closed_target_rejects_reversal_and_closed_original_reverses_to_explicit_open_period",
+              "state": "passed",
+              "assertions": 7
+            }
+          ]
+        },
+        {
+          "name": "historical-4",
+          "junit_sha256": "e8c1628575c85cd3d200a7bfe3dbeae721623a58fc4be3f3ca7afb1ac5560cd6",
+          "totals": {
+            "tests": 33,
+            "assertions": 325,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_integrations_are_disabled_by_default_and_posted_opening_alone_changes_no_source_behaviour",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_enabled_charge_and_payment_post_exact_balanced_entries_and_replay_without_duplicates",
+              "state": "passed",
+              "assertions": 18
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_failure_after_journal_creation_rolls_back_payment_allocation_receipt_journal_link_and_event",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_journal_or_linkage_failure_rolls_back_charge_source_mutation",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_linkage_failure_rolls_back_charge_source_and_journal",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_audit_failure_rolls_back_source_journal_linkage_and_success_event",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_missing_ambiguous_invalid_cross_club_precoverage_and_closed_period_fail_atomically",
+              "state": "passed",
+              "assertions": 17
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_mapping_creation_rejects_wrong_type_and_cross_club_accounts",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_configuration_inputs_are_normalized_and_rejected_before_persistence",
+              "state": "passed",
+              "assertions": 16
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_enabled_reversal_uses_linked_journal_reversal",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_exact_reversal_event_replay_is_idempotent_and_changed_replay_conflicts",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_corrupt_reversal_event_cannot_short_circuit_authoritative_replay",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_activation_rejects_existing_unjournalled_covered_charge_and_payment",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_same_clock_revocation_and_source_commit_follow_lock_ordered_coverage_decisions",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_same_clock_later_activation_and_mapping_revocations_do_not_invalidate_history",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_integrated_charge_and_payment_reverse_after_activation_revocation",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_legacy_precoverage_and_post_revocation_unintegrated_sources_may_be_corrected",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_legacy_precoverage_and_post_revocation_unintegrated_payments_may_be_voided",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_missing_in_coverage_linkage_fails_closed_and_reversal_event_failure_rolls_back",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_database_rejects_cross_club_events_and_invalid_values",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_database_rejects_invalid_coverage_shapes_and_cross_source_bindings",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_scope_adds_no_delivery_surface_or_default_role_authority",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_payment_replay_uses_historical_coverage_after_revocation",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_exact_payment_request_replays_after_void_and_later_configuration_revocation",
+              "state": "passed",
+              "assertions": 11
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_draft_cancelled_charges_are_excluded_from_reconciliation_before_and_after_activation",
+              "state": "passed",
+              "assertions": 19
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_historical_replay_rejects_missing_required_links_but_allows_precoverage_and_post_revocation_sources",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_source_and_journal_idempotency_are_separate_and_lifecycle_misuse_fails",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_terminal_and_stage_events_are_unique_and_repeated_revocation_is_rejected",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_posting_relocks_and_revalidates_mapped_account_state",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_reconciliation_detects_child_binding_key_checksum_and_binding_corruption",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_exact_replay_rejects_every_material_source_and_journal_corruption",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_reconciliation_independently_detects_coverage_decision_corruption",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizhChargePaymentAccountingIntegrationTest::test_context_replay_rejects_a_stale_source_version_without_financial_effects",
+              "state": "passed",
+              "assertions": 9
+            }
+          ]
+        },
+        {
+          "name": "historical-5",
+          "junit_sha256": "2536b11e473c62d1254befb8fe07f2a24faba2bf0a2202b54056c3bc6018839c",
+          "totals": {
+            "tests": 14,
+            "assertions": 178,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_permission_is_catalogued_but_not_granted_to_any_default_role",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_only_active_same_club_president_or_treasurer_with_exact_permission_can_read",
+              "state": "passed",
+              "assertions": 19
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_readiness_and_configuration_are_side_effect_free_and_publish_stable_status_vocabulary",
+              "state": "passed",
+              "assertions": 21
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_mapping_proposal_is_club_scoped_validated_audited_and_idempotent",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_invalid_and_cross_club_mapping_inputs_fail_closed",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_proposer_cannot_decide_but_independent_officer_can_reject_once",
+              "state": "passed",
+              "assertions": 13
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_only_proposer_can_withdraw_and_terminal_proposal_is_immutable",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_independent_approval_uses_existing_mapping_service_and_commits_audit_atomically",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_routes_are_narrow_and_no_statement_or_direct_mutation_surface_exists",
+              "state": "passed",
+              "assertions": 15
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_exact_payload_shapes_reject_irrelevant_targets",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_target_snapshot_blocks_stale_approval_but_allows_rejection",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_authority_removed_before_transactional_decision_is_denied",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_database_current_activation_slot_is_unique_terminal_bound_and_reactivatable",
+              "state": "passed",
+              "assertions": 21
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest::test_readiness_reports_actual_missing_ready_invalid_active_and_revoked_states",
+              "state": "passed",
+              "assertions": 15
+            }
+          ]
+        },
+        {
+          "name": "historical-6",
+          "junit_sha256": "6e213f881460374a18016f80ad5e0aa2503546e6c7fb49475519fe6005c5e7d8",
+          "totals": {
+            "tests": 4,
+            "assertions": 78,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3iizvClubExpenseRecordingTest::test_expense_posts_once_and_flows_into_the_canonical_statement",
+              "state": "passed",
+              "assertions": 24
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizvClubExpenseRecordingTest::test_changed_replay_and_cross_club_accounts_fail_closed_with_tenant_scoped_idempotency",
+              "state": "passed",
+              "assertions": 12
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizvClubExpenseRecordingTest::test_exact_replay_rejects_material_persisted_expense_provenance_corruption",
+              "state": "passed",
+              "assertions": 24
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizvClubExpenseRecordingTest::test_permission_membership_account_period_amount_and_options_contracts_fail_closed",
+              "state": "passed",
+              "assertions": 18
+            }
+          ]
+        },
+        {
+          "name": "historical-7",
+          "junit_sha256": "d4173ff1533e577798a4714995790f4d07bd0c42ae4c24f4f8a494a6fb88f3b1",
+          "totals": {
+            "tests": 4,
+            "assertions": 90,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3iizwExpenseHistoryCorrectionTest::test_authorized_history_is_paginated_filterable_deterministic_and_tenant_scoped",
+              "state": "passed",
+              "assertions": 24
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizwExpenseHistoryCorrectionTest::test_full_reversal_is_exact_immutable_idempotent_and_changes_statement_fingerprint",
+              "state": "passed",
+              "assertions": 41
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizwExpenseHistoryCorrectionTest::test_closed_period_requires_an_explicit_date_in_an_open_period_and_replacement_is_new",
+              "state": "passed",
+              "assertions": 10
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizwExpenseHistoryCorrectionTest::test_permissions_inactive_membership_integrity_and_late_failure_all_fail_closed",
+              "state": "passed",
+              "assertions": 15
+            }
+          ]
+        },
+        {
+          "name": "historical-8",
+          "junit_sha256": "05eff6a60ef00ec2c425e322251fa82bd02153101c3f1de71ee1c2a496a27c1a",
+          "totals": {
+            "tests": 4,
+            "assertions": 74,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3iizxInternalCashBankTransferTest::test_authorized_transfer_posts_exact_asset_movement_replays_and_is_tenant_scoped",
+              "state": "passed",
+              "assertions": 29
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizxInternalCashBankTransferTest::test_failure_after_source_creation_rolls_back_source_and_journal",
+              "state": "passed",
+              "assertions": 9
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizxInternalCashBankTransferTest::test_exact_replay_rejects_material_persisted_transfer_provenance_corruption",
+              "state": "passed",
+              "assertions": 24
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizxInternalCashBankTransferTest::test_invalid_accounts_self_transfer_period_and_authority_fail_closed",
+              "state": "passed",
+              "assertions": 12
+            }
+          ]
+        },
+        {
+          "name": "historical-9",
+          "junit_sha256": "5fab8b4b170bed412b5ea1d5b155a67ecb2629d43ff6c29a3451459a26b105cc",
+          "totals": {
+            "tests": 6,
+            "assertions": 65,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\Milestone3iizzOrdinaryIncomeReceiptTest::test_receipt_posts_exact_same_fund_income_replays_and_changes_statement",
+              "state": "passed",
+              "assertions": 25
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizzOrdinaryIncomeReceiptTest::test_accounts_subtypes_amount_period_activation_and_tenant_scope_fail_closed",
+              "state": "passed",
+              "assertions": 8
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizzOrdinaryIncomeReceiptTest::test_permission_matrix_and_tenant_scoped_uuid_isolation",
+              "state": "passed",
+              "assertions": 6
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizzOrdinaryIncomeReceiptTest::test_controlled_journal_failure_rolls_back_source_and_journal",
+              "state": "passed",
+              "assertions": 5
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizzOrdinaryIncomeReceiptTest::test_exact_replay_fails_closed_when_persisted_journal_provenance_is_corrupt",
+              "state": "passed",
+              "assertions": 5
+            },
+            {
+              "id": "Tests\\Feature\\Milestone3iizzOrdinaryIncomeReceiptTest::test_linked_correction_is_exact_idempotent_and_supports_atomic_replacement",
+              "state": "passed",
+              "assertions": 16
+            }
+          ]
+        }
+      ],
+      "postgres_deadlock_errors": 0,
+      "structured_proof": [
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 1,
+            "transaction_id": "5271",
+            "outcome": "committed",
+            "selected_triggers": [
+              "club_accounting_source_integration_events_immutable"
+            ],
+            "catalogue_before_sha256": "c69790975f5776137a2e259f050a29bdfe07b37a422b2581bc11c43031dbeb57",
+            "catalogue_after_sha256": "c69790975f5776137a2e259f050a29bdfe07b37a422b2581bc11c43031dbeb57",
+            "restored": true
+          }
+        },
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 1,
+            "transaction_id": "7222",
+            "outcome": "committed",
+            "selected_triggers": [
+              "club_accounting_source_integrations_immutable"
+            ],
+            "catalogue_before_sha256": "22262e35ecdb8f66a7d71b15ec786bc023c8dd59a4430e073c7ce87ebec4f470",
+            "catalogue_after_sha256": "22262e35ecdb8f66a7d71b15ec786bc023c8dd59a4430e073c7ce87ebec4f470",
+            "restored": true
+          }
+        },
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 1,
+            "transaction_id": "7322",
+            "outcome": "committed",
+            "selected_triggers": [],
+            "catalogue_before_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "catalogue_after_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "restored": true
+          }
+        },
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 2,
+            "transaction_id": "7341",
+            "outcome": "committed",
+            "selected_triggers": [],
+            "catalogue_before_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "catalogue_after_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "restored": true
+          }
+        },
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 3,
+            "transaction_id": "7360",
+            "outcome": "committed",
+            "selected_triggers": [],
+            "catalogue_before_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "catalogue_after_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "restored": true
+          }
+        },
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 4,
+            "transaction_id": "7381",
+            "outcome": "committed",
+            "selected_triggers": [],
+            "catalogue_before_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "catalogue_after_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "restored": true
+          }
+        },
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 5,
+            "transaction_id": "7402",
+            "outcome": "committed",
+            "selected_triggers": [],
+            "catalogue_before_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "catalogue_after_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "restored": true
+          }
+        },
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 6,
+            "transaction_id": "7421",
+            "outcome": "committed",
+            "selected_triggers": [],
+            "catalogue_before_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "catalogue_after_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "restored": true
+          }
+        },
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 7,
+            "transaction_id": "7440",
+            "outcome": "committed",
+            "selected_triggers": [],
+            "catalogue_before_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "catalogue_after_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "restored": true
+          }
+        },
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 8,
+            "transaction_id": "7459",
+            "outcome": "committed",
+            "selected_triggers": [],
+            "catalogue_before_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "catalogue_after_sha256": "e7be6ea5aa358b944c1c5e8d723aef5b7154b73e0e303c5e592e13aa09fe13be",
+            "restored": true
+          }
+        },
+        {
+          "kind": "B3_FIXTURE_RESTORATION",
+          "evidence": {
+            "database": "lcb_p02b3_finance_test",
+            "organisation": 1,
+            "transaction_id": "7561",
+            "outcome": "committed",
+            "selected_triggers": [
+              "club_accounting_source_coverage_decisions_immutable"
+            ],
+            "catalogue_before_sha256": "0d4bf23cb0df14dcab7b666610f06deecfcd00e167bb044837269a960233d21f",
+            "catalogue_after_sha256": "0d4bf23cb0df14dcab7b666610f06deecfcd00e167bb044837269a960233d21f",
+            "restored": true
+          }
+        }
+      ]
+    },
+    {
+      "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b4resources-40fffabf4ede405f8f7d06388c66a072",
+      "original_evidence": {
+        "suite": "B4Resources",
+        "stop_exit_code": 0,
+        "fixture_attestation": {
+          "system_identifier": "7705883674596138408",
+          "port": "55603",
+          "postmaster_started": "1794165861.793943",
+          "database_oid": "16385"
+        },
+        "c_only": false,
+        "head": "741abd58f7a7ee3460cda96e3df1c1a98669b483",
+        "after": {
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "protected_names_present": 0,
+          "memberships": 0,
+          "owner": "lc_beenachi_app",
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b4resources-40fffabf4ede405f8f7d06388c66a072/data|127.0.0.1|55603",
+          "elevated": false
+        },
+        "c_regression_only": false,
+        "system_identifier": "7705883674596138408",
+        "results": [
+          {
+            "failures": 0,
+            "assertions": 28,
+            "name": "b4-resources",
+            "skipped": 0,
+            "errors": 0,
+            "tests": 4,
+            "exit_code": 0
+          }
+        ],
+        "databases": [
+          "lcb_p02b3_finance_test"
+        ],
+        "port": 55603,
+        "host": "127.0.0.1",
+        "source_hashes_unchanged": true,
+        "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b4resources-40fffabf4ede405f8f7d06388c66a072",
+        "bootstrap_only": false,
+        "status": "PASS",
+        "before": {
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "protected_names_present": 0,
+          "memberships": 0,
+          "owner": "lc_beenachi_app",
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b4resources-40fffabf4ede405f8f7d06388c66a072/data|127.0.0.1|55603",
+          "elevated": false
+        }
+      },
+      "groups": [
+        {
+          "name": "b4-resources",
+          "junit_sha256": "dc36f1aa9a67ac79b0f94e6d905724eae16a1ef040e96159f64439cc61dbf6e0",
+          "totals": {
+            "tests": 4,
+            "assertions": 28,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationResourceScopeTest::test_foreign_rows_are_rejected_without_acquiring_their_locks with data set #0",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationResourceScopeTest::test_foreign_rows_are_rejected_without_acquiring_their_locks with data set #1",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationResourceScopeTest::test_foreign_rows_are_rejected_without_acquiring_their_locks with data set #2",
+              "state": "passed",
+              "assertions": 7
+            },
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationResourceScopeTest::test_foreign_rows_are_rejected_without_acquiring_their_locks with data set #3",
+              "state": "passed",
+              "assertions": 7
+            }
+          ]
+        }
+      ],
+      "postgres_deadlock_errors": 0,
+      "structured_proof": []
+    },
+    {
+      "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b4reactivation-6096b5c239cb4b838ba44a228a8f2669",
+      "original_evidence": {
+        "before": {
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b4reactivation-6096b5c239cb4b838ba44a228a8f2669/data|127.0.0.1|55602",
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "elevated": false,
+          "protected_names_present": 0,
+          "memberships": 0,
+          "owner": "lc_beenachi_app"
+        },
+        "system_identifier": "7705883681467300908",
+        "fixture_attestation": {
+          "port": "55602",
+          "system_identifier": "7705883681467300908",
+          "database_oid": "16385",
+          "postmaster_started": "1794165863.459696"
+        },
+        "recorded_test_failure": true,
+        "results": [
+          {
+            "failures": 1,
+            "name": "b4-reactivation-blocker",
+            "exit_code": 1,
+            "skipped": 0,
+            "tests": 1,
+            "errors": 0,
+            "assertions": 10
+          }
+        ],
+        "suite": "B4Reactivation",
+        "c_regression_only": false,
+        "host": "127.0.0.1",
+        "stop_exit_code": 0,
+        "directory": "C:\\Users\\dell\\AppData\\Local\\Temp\\lc-p02b2-b4reactivation-6096b5c239cb4b838ba44a228a8f2669",
+        "bootstrap_only": false,
+        "port": 55602,
+        "source_hashes_unchanged": true,
+        "c_only": false,
+        "after": {
+          "identity": "C:/Users/dell/AppData/Local/Temp/lc-p02b2-b4reactivation-6096b5c239cb4b838ba44a228a8f2669/data|127.0.0.1|55602",
+          "inventory": "lcb_p02b3_finance_test,postgres,template0,template1",
+          "elevated": false,
+          "protected_names_present": 0,
+          "memberships": 0,
+          "owner": "lc_beenachi_app"
+        },
+        "status": "FAILED_OR_BLOCKED",
+        "head": "741abd58f7a7ee3460cda96e3df1c1a98669b483",
+        "reason": "Recorded test failures, errors or skips prevent acceptance. Merge NO-GO.",
+        "databases": [
+          "lcb_p02b3_finance_test"
+        ]
+      },
+      "groups": [
+        {
+          "name": "b4-reactivation-blocker",
+          "junit_sha256": "73d0d36daed06e849f33fc3104c4f3272a76a29b5c346eda8e2a4de44eb8ffb8",
+          "totals": {
+            "tests": 1,
+            "assertions": 10,
+            "failures": 1,
+            "errors": 0,
+            "skipped": 0
+          },
+          "cases": [
+            {
+              "id": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_configuration_and_b3_source_posting_preserve_historical_coverage with data set \"activate-config-first-1\"",
+              "state": "failed",
+              "assertions": 10,
+              "detail": "Tests\\Feature\\IntegrationConfigurationConcurrencyTest::test_configuration_and_b3_source_posting_preserve_historical_coverage with data set \"activate-config-first-1\"\r\nFailed asserting that 1 is identical to 2.\n\r\nC:\\CodexWork\\LC-Beenachi-Connect-Prototype\\backend\\tests\\Feature\\IntegrationConfigurationConcurrencyTest.php:116"
+            }
+          ]
+        }
+      ],
+      "postgres_deadlock_errors": 0,
+      "structured_proof": [
+        {
+          "kind": "B4_LOCK_EDGE",
+          "evidence": {
+            "actions": [
+              "operation:activate",
+              "source:collections-issue"
+            ],
+            "holder": 10368,
+            "waiter": 16448,
+            "edge_observed": true,
+            "outcomes": [
+              "success",
+              "success"
+            ]
+          }
+        },
+        {
+          "kind": "B4_SOURCE_COVERAGE_DIAGNOSTIC",
+          "evidence": {
+            "action": "activate",
+            "configuration_first": true,
+            "original_activation": 1,
+            "activations": [
+              {
+                "id": 1,
+                "coverage_start_date": "2027-07-01",
+                "activated_at": "2027-08-12 10:00:00"
+              },
+              {
+                "id": 3,
+                "coverage_start_date": "2027-07-01",
+                "activated_at": "2027-08-12 10:00:00"
+              }
+            ],
+            "terminal_events": [
+              {
+                "id": 1,
+                "integration_activation_id": 1,
+                "event_type": "revoked",
+                "recorded_at": "2027-08-12 10:00:00"
+              }
+            ],
+            "current_slot": {
+              "id": 3,
+              "club_id": 1,
+              "source_type": "member_charge",
+              "integration_activation_id": 3,
+              "created_at": "2027-08-12 10:00:00",
+              "updated_at": "2027-08-12 10:00:00"
+            },
+            "coverage": {
+              "id": 1,
+              "public_id": "a32dadf2-071f-47b8-b76a-b3a4ab748ca8",
+              "club_id": 1,
+              "source_type": "member_charge",
+              "source_identifier": "a32dadf0-4400-42be-96a1-27b07052b84d",
+              "accounting_date": "2027-08-12",
+              "integration_required": false,
+              "integration_activation_id": 1,
+              "terminal_activation_event_id": 1,
+              "decision_reason": "after_terminal_event",
+              "decided_by_user_id": 1,
+              "decided_at": "2027-08-12 10:00:00",
+              "created_at": "2027-08-12 10:00:00",
+              "updated_at": "2027-08-12 10:00:00"
+            },
+            "journal_before": 1,
+            "journal_after": 1
+          }
+        }
+      ]
+    }
+  ]
+}
