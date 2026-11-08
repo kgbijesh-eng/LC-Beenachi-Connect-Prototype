@@ -3,6 +3,8 @@
 namespace App\Services\Finance;
 
 use App\Models\Payment;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Models\Receipt;
 use App\Models\User;
 use App\Services\Access\ClubPermissionService;
@@ -37,8 +39,8 @@ class ReceiptGenerationService
     {
         $validated = $this->validateAttributes($attributes);
 
-        return DB::transaction(function () use ($issuedByUser, $payment, $validated): Receipt {
-            $lockedPayment = Payment::query()
+        return app(OrganisationTransactionGuard::class)->run((int) $payment->club_id, function (OrganisationTransactionContext $context) use ($issuedByUser, $payment, $validated): Receipt {
+            $lockedPayment = Payment::query()->where('club_id', $context->organisationId)
                 ->whereKey($payment->id)
                 ->lockForUpdate()
                 ->firstOrFail();

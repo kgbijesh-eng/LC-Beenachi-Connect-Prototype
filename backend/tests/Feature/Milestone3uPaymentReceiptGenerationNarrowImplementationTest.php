@@ -14,14 +14,12 @@ use App\Models\User;
 use App\Services\Finance\PaymentRecordingService;
 use App\Services\Finance\ReceiptGenerationService;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends TestCase
+class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_3u_document_records_narrow_backend_service_boundary(): void
     {
@@ -103,6 +101,7 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends TestCa
         $user = $this->createUserWithPaymentPermission($club);
         $otherUser = $this->createUserWithPaymentPermission($otherClub);
 
+        config(['instance.organisation_code' => $club->code]);
         $paymentOne = app(PaymentRecordingService::class)->record($user, $memberOne, [
             'amount' => '100',
             'payment_date' => '2026-06-10',
@@ -115,14 +114,17 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends TestCa
             'payment_mode' => 'upi',
         ]);
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $otherPayment = app(PaymentRecordingService::class)->record($otherUser, $otherMember, [
             'amount' => '300',
             'payment_date' => '2026-06-12',
             'payment_mode' => 'cash',
         ]);
 
+        config(['instance.organisation_code' => $club->code]);
         $receiptOne = app(ReceiptGenerationService::class)->generate($user, $paymentOne);
         $receiptTwo = app(ReceiptGenerationService::class)->generate($user, $paymentTwo);
+        config(['instance.organisation_code' => $otherClub->code]);
         $otherReceipt = app(ReceiptGenerationService::class)->generate($otherUser, $otherPayment);
 
         $this->assertSame('LCB/2026-27/RCP/0001', $receiptOne->receipt_number);
@@ -218,6 +220,7 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends TestCa
         $otherUser = $this->createUserWithPaymentPermission($otherClub);
         $otherMember = $this->createMember($otherClub, 'MEM-OTHER-001');
 
+        config(['instance.organisation_code' => $otherClub->code]);
         $otherPayment = app(PaymentRecordingService::class)->record($otherUser, $otherMember, [
             'amount' => '700',
             'payment_date' => '2026-06-10',
@@ -273,13 +276,15 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends TestCa
 
     private function createClub(string $code = 'LCB', string $name = 'Lions Club Beenachi'): Club
     {
-        return Club::query()->create([
+        $club = Club::query()->create([
             'name' => $name,
             'code' => $code,
             'district' => '318E',
             'timezone' => 'Asia/Kolkata',
             'is_active' => true,
         ]);
+        config(['instance.organisation_code' => $club->code]);
+        return $club;
     }
 
     private function createMember(Club $club, string $memberCode = 'MEM-3U-001'): Member

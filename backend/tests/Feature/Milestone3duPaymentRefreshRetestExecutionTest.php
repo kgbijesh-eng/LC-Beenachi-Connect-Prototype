@@ -11,13 +11,11 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\Finance\PaymentRecordingService;
 use Database\Seeders\DatabaseSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3duPaymentRefreshRetestExecutionTest extends TestCase
+class Milestone3duPaymentRefreshRetestExecutionTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     private string $docPath = __DIR__.'/../../docs/milestone_3du_payment_refresh_retest_execution.md';
 

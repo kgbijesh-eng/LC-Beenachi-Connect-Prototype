@@ -7,6 +7,8 @@ namespace App\Services\Finance;
 use App\Models\{Club, ClubAccountingPeriod, ClubJournalEntry, ClubJournalLine, ClubOrdinaryIncomeReceipt, ClubOrdinaryIncomeReceiptCorrection, LedgerAccount, User};
 use App\Services\Finance\Exceptions\{AlreadyReversedJournalException, ClubOrdinaryIncomeReceiptConflictException, ClubOrdinaryIncomeReceiptCorrectionConflictException, ClubOrdinaryIncomeReceiptCorrectionException, JournalPostingException, JournalReversalException};
 use Illuminate\Support\Facades\DB;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -22,7 +24,7 @@ final class ClubOrdinaryIncomeReceiptCorrectionService
         $canonical = $this->canonical($receiptPublicId, $input);
 
         try {
-            return DB::transaction(function () use ($club, $receiptPublicId, $actor, $canonical): ClubOrdinaryIncomeReceipt {
+            return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $receiptPublicId, $actor, $canonical): ClubOrdinaryIncomeReceipt {
                 $lockedClub = Club::query()->whereKey($club->id)->lockForUpdate()->firstOrFail();
                 $receipt = ClubOrdinaryIncomeReceipt::query()->where('club_id', $lockedClub->id)->where('public_id', $receiptPublicId)->lockForUpdate()->firstOrFail();
                 $existing = ClubOrdinaryIncomeReceiptCorrection::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();
@@ -33,17 +35,17 @@ final class ClubOrdinaryIncomeReceiptCorrectionService
                 }
                 if (ClubOrdinaryIncomeReceiptCorrection::query()->where('club_id', $lockedClub->id)->where('original_receipt_id', $receipt->id)->lockForUpdate()->exists()) throw new ClubOrdinaryIncomeReceiptCorrectionConflictException('The ordinary income receipt has already been corrected.', 'ORDINARY_INCOME_RECEIPT_ALREADY_CORRECTED');
 
-                $journal = ClubJournalEntry::query()->whereKey($receipt->journal_entry_id)->lockForUpdate()->first();
-                $lines = $journal ? ClubJournalLine::query()->where('journal_entry_id', $journal->id)->orderBy('line_number')->orderBy('id')->lockForUpdate()->get() : collect();
+                $journal = ClubJournalEntry::query()->where('club_id', $lockedClub->id)->whereKey($receipt->journal_entry_id)->lockForUpdate()->first();
+                $lines = $journal ? ClubJournalLine::query()->where('club_id', $lockedClub->id)->where('journal_entry_id', $journal->id)->orderBy('line_number')->orderBy('id')->lockForUpdate()->get() : collect();
                 $receipt->load(['receivingAccount', 'incomeAccount', 'journalEntry.lines', 'correctedFrom']);
                 try { $this->receipts->assertPersistedRequestProvenance($receipt); }
                 catch (ClubOrdinaryIncomeReceiptConflictException $exception) { throw new ClubOrdinaryIncomeReceiptCorrectionException('The ordinary income receipt accounting provenance is invalid.', 'ORDINARY_INCOME_RECEIPT_ORIGINAL_PROVENANCE_INVALID', 422, $exception); }
                 $this->assertOriginalIntegrity($lockedClub, $receipt, $journal, $lines);
-                ['period' => $period, 'covered' => $covered] = $this->receipts->lockedPostingWindow($lockedClub, $canonical['accounting_date']);
+                ['period' => $period, 'covered' => $covered] = $this->receipts->lockedPostingWindow($context, $lockedClub, $canonical['accounting_date']);
                 if (! $period || $period->status !== ClubAccountingPeriod::STATUS_OPEN) throw new ClubOrdinaryIncomeReceiptCorrectionException('The reversal date must belong to an available open Lions Year period.', 'ORDINARY_INCOME_RECEIPT_CORRECTION_PERIOD_INVALID');
                 if (! $covered) throw new ClubOrdinaryIncomeReceiptCorrectionException('Authoritative accounting is not active for the reversal date.', 'ORDINARY_INCOME_RECEIPT_CORRECTION_COVERAGE_MISSING');
 
-                try { $reversal = $this->reversals->reverse(new JournalReversalRequest(
+                try { $reversal = $this->reversals->reverseWithin($context, new JournalReversalRequest(
                     clubId: $lockedClub->id, originalEntryId: $journal->id, reversalAccountingPeriodId: $period->id,
                     effectiveDate: $canonical['accounting_date'], reversalActorUserId: $actor->id, reason: $canonical['reason'],
                     sourceType: self::SOURCE_TYPE, sourceId: $receipt->public_id, sourceEvent: 'reversed', idempotencyKey: $canonical['idempotency_key'],
@@ -58,7 +60,7 @@ final class ClubOrdinaryIncomeReceiptCorrectionService
                     $replacement = $canonical['replacement'];
                     $replacement['idempotency_key'] = (string) Str::uuid();
                     $replacement['corrected_from_receipt'] = $receipt->public_id;
-                    $replacementReceipt = $this->receipts->record($lockedClub, $actor, $replacement);
+                    $replacementReceipt = $this->receipts->recordWithin($context, $lockedClub, $actor, $replacement);
                     $correction->bindReplacementDuringConstruction($replacementReceipt);
                 }
                 return $this->loaded($receipt);
@@ -111,16 +113,16 @@ final class ClubOrdinaryIncomeReceiptCorrectionService
 
     private function assertReplayIntegrity(Club $club, ClubOrdinaryIncomeReceipt $receipt, ClubOrdinaryIncomeReceiptCorrection $correction, array $canonical): void
     {
-        $original = ClubJournalEntry::query()->whereKey($correction->original_journal_entry_id)->lockForUpdate()->first();
-        $originalLines = $original ? ClubJournalLine::query()->where('journal_entry_id', $original->id)->orderBy('line_number')->lockForUpdate()->get() : collect();
+        $original = ClubJournalEntry::query()->where('club_id', $club->id)->whereKey($correction->original_journal_entry_id)->lockForUpdate()->first();
+        $originalLines = $original ? ClubJournalLine::query()->where('club_id', $club->id)->where('journal_entry_id', $original->id)->orderBy('line_number')->lockForUpdate()->get() : collect();
         $receipt->load(['receivingAccount', 'incomeAccount', 'correctedFrom']);
         try { $this->receipts->assertPersistedRequestProvenance($receipt); }
         catch (ClubOrdinaryIncomeReceiptConflictException $exception) { throw new ClubOrdinaryIncomeReceiptCorrectionException('The stored correction provenance is invalid.', 'ORDINARY_INCOME_RECEIPT_CORRECTION_PROVENANCE_INVALID', 422, $exception); }
         if (! $original || $original->status !== ClubJournalEntry::STATUS_REVERSED) throw new ClubOrdinaryIncomeReceiptCorrectionException('The stored correction provenance is invalid.', 'ORDINARY_INCOME_RECEIPT_CORRECTION_PROVENANCE_INVALID');
         $original->status = ClubJournalEntry::STATUS_POSTED;
         $this->assertOriginalIntegrity($club, $receipt, $original, $originalLines);
-        $reversal = ClubJournalEntry::query()->whereKey($correction->reversal_journal_entry_id)->lockForUpdate()->first();
-        $reversalLines = $reversal ? ClubJournalLine::query()->where('journal_entry_id', $reversal->id)->orderBy('line_number')->lockForUpdate()->get() : collect();
+        $reversal = ClubJournalEntry::query()->where('club_id', $club->id)->whereKey($correction->reversal_journal_entry_id)->lockForUpdate()->first();
+        $reversalLines = $reversal ? ClubJournalLine::query()->where('club_id', $club->id)->where('journal_entry_id', $reversal->id)->orderBy('line_number')->lockForUpdate()->get() : collect();
         $reversalPeriod = $reversal ? ClubAccountingPeriod::query()->whereKey($reversal->accounting_period_id)->lockForUpdate()->first() : null;
         $expectedDescription = sprintf('Reversal of %s: %s', $original->reference, $canonical['reason']);
         $valid = Str::isUuid((string) $correction->public_id) && $correction->created_at !== null && $correction->updated_at !== null

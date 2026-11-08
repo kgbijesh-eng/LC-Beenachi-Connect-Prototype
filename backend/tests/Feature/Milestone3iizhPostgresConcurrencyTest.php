@@ -160,8 +160,8 @@ class Milestone3iizhPostgresConcurrencyTest extends TestCase
             file_put_contents($barrier.DIRECTORY_SEPARATOR.$name.'.json', json_encode($request, JSON_THROW_ON_ERROR));
         }
         $worker = base_path('tests/Support/Milestone3iizhPostgresConcurrencyWorker.php');
-        $one = new Process([PHP_BINARY, $worker, $barrier.DIRECTORY_SEPARATOR.'one.json', $barrier, 'one'], base_path(), timeout: 40);
-        $two = new Process([PHP_BINARY, $worker, $barrier.DIRECTORY_SEPARATOR.'two.json', $barrier, 'two'], base_path(), timeout: 40);
+        $one = new Process([PHP_BINARY, $worker, $barrier.DIRECTORY_SEPARATOR.'one.json', $barrier, 'one'], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => Club::findOrFail($oneRequest['club_id'])->code], timeout: 40);
+        $two = new Process([PHP_BINARY, $worker, $barrier.DIRECTORY_SEPARATOR.'two.json', $barrier, 'two'], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => Club::findOrFail($twoRequest['club_id'])->code], timeout: 40);
         DB::beginTransaction();
         DB::select("select id from {$lock[0]} where id = ? for update", [$lock[1]]);
         try {
@@ -207,6 +207,7 @@ class Milestone3iizhPostgresConcurrencyTest extends TestCase
         CarbonImmutable::setTestNow('2027-07-05 10:00:00');
         $actor = User::factory()->create();
         $club = Club::create(['name' => $key, 'code' => 'C'.substr(hash('sha256', $key), 0, 6), 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]);
         $member = Member::create(['club_id' => $club->id, 'member_code' => 'M'.$club->id, 'full_name' => 'Member', 'status' => 'active']);
         foreach ([['receivable', 'MEMBER-RECEIVABLES', 'asset', 'debit'], ['bank', 'BANK-OPERATING', 'asset', 'debit'], ['income', 'INCOME-DUES', 'income', 'credit'], ['equity', 'OPENING-BALANCE-EQUITY', 'equity', 'credit']] as [$name, $code, $type, $normal]) {
             $$name = LedgerAccount::create(['club_id' => $club->id, 'code' => $code, 'name' => $code, 'account_type' => $type, 'normal_balance' => $normal, 'currency' => 'INR', 'is_active' => true, 'created_by_user_id' => $actor->id]);

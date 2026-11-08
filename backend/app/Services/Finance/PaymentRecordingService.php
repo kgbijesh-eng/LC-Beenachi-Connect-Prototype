@@ -3,6 +3,8 @@
 namespace App\Services\Finance;
 
 use App\Models\Member;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Models\MemberLedgerEntry;
 use App\Models\Payment;
 use App\Models\User;
@@ -30,16 +32,15 @@ class PaymentRecordingService
      */
     public function record(User $receivedByUser, Member $member, array $attributes): Payment
     {
-        $member->loadMissing('club');
-
-        $this->authorizeRecording($receivedByUser, $member);
-
         $validated = $this->validateAttributes($attributes);
 
         $amount = $this->formatAmount((float) $validated['amount']);
         $paymentDate = CarbonImmutable::parse($validated['payment_date'])->toDateString();
 
-        return DB::transaction(function () use ($receivedByUser, $member, $validated, $amount, $paymentDate): Payment {
+        return app(OrganisationTransactionGuard::class)->run((int) $member->club_id, function (OrganisationTransactionContext $context) use ($receivedByUser, $member, $validated, $amount, $paymentDate): Payment {
+            $member = Member::query()->where('club_id', $context->organisationId)->whereKey($member->id)->firstOrFail();
+            $member->load('club');
+            $this->authorizeRecording($receivedByUser, $member);
             $payment = Payment::query()->create([
                 'club_id' => $member->club_id,
                 'member_id' => $member->id,

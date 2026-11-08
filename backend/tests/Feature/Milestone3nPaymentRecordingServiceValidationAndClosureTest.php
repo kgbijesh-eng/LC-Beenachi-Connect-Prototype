@@ -12,14 +12,12 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\Finance\PaymentRecordingService;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCase
+class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_validation_document_exists_and_records_closure_boundary(): void
     {
@@ -52,7 +50,8 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCas
         $this->assertStringContainsString('class PaymentRecordingService', $content);
         $this->assertStringContainsString('PERMISSION_RECORD_PAYMENT', $content);
         $this->assertStringContainsString('payments.record', $content);
-        $this->assertStringContainsString('DB::transaction', $content);
+        $this->assertStringContainsString('OrganisationTransactionGuard::class', $content);
+        $this->assertStringContainsString('->run(', $content);
         $this->assertStringContainsString('MemberLedgerEntry::ENTRY_TYPE_CREDIT', $content);
         $this->assertStringContainsString('MemberLedgerEntry::SOURCE_PAYMENT', $content);
         $this->assertStringContainsString("'ledger_entry_id' => \$ledgerEntry->id", $content);
@@ -256,13 +255,15 @@ class Milestone3nPaymentRecordingServiceValidationAndClosureTest extends TestCas
 
     private function createClub(string $code = 'LCB-3N', string $name = 'Lions Club Beenachi'): Club
     {
-        return Club::query()->create([
+        $club = Club::query()->create([
             'name' => $name,
             'code' => $code,
             'district' => '318E',
             'timezone' => 'Asia/Kolkata',
             'is_active' => true,
         ]);
+        config(['instance.organisation_code' => $club->code]);
+        return $club;
     }
 
     private function createMember(Club $club, string $memberCode = 'MEM-3N-001'): Member

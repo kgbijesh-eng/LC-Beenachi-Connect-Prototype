@@ -14,6 +14,8 @@ use App\Models\User;
 use App\Services\Finance\Exceptions\ClubExpenseReversalConflictException;
 use App\Services\Finance\Exceptions\ClubExpenseReversalException;
 use Illuminate\Support\Facades\DB;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use Illuminate\Support\Str;
 
 final class ClubExpenseReversalService
@@ -25,7 +27,7 @@ final class ClubExpenseReversalService
     public function reverse(Club $club, string $expensePublicId, User $actor, array $input): ClubExpense
     {
         $canonical = $this->canonical($input);
-        return DB::transaction(function () use ($club, $expensePublicId, $actor, $canonical): ClubExpense {
+        return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $expensePublicId, $actor, $canonical): ClubExpense {
             $lockedClub = Club::query()->whereKey($club->id)->lockForUpdate()->firstOrFail();
             $expense = ClubExpense::query()->where('club_id', $lockedClub->id)->where('public_id', strtolower(trim($expensePublicId)))->lockForUpdate()->firstOrFail();
             $existingByKey = ClubExpenseReversal::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();
@@ -40,15 +42,15 @@ final class ClubExpenseReversalService
                 throw new ClubExpenseReversalConflictException('The expense has already been reversed.');
             }
 
-            $journal = ClubJournalEntry::query()->whereKey($expense->journal_entry_id)->lockForUpdate()->first();
-            $lines = $journal ? ClubJournalLine::query()->where('journal_entry_id', $journal->id)->orderBy('line_number')->lockForUpdate()->get() : collect();
+            $journal = ClubJournalEntry::query()->where('club_id', $lockedClub->id)->whereKey($expense->journal_entry_id)->lockForUpdate()->first();
+            $lines = $journal ? ClubJournalLine::query()->where('club_id', $lockedClub->id)->where('journal_entry_id', $journal->id)->orderBy('line_number')->lockForUpdate()->get() : collect();
             $this->assertIntegrity($lockedClub, $expense, $journal, $lines);
             $period = ClubAccountingPeriod::query()->where('club_id', $lockedClub->id)->where('start_date', '<=', $canonical['accounting_date'])->where('end_date', '>=', $canonical['accounting_date'])->lockForUpdate()->first();
             if (! $period || $period->status !== ClubAccountingPeriod::STATUS_OPEN) {
                 throw new ClubExpenseReversalException('The reversal date must belong to an available open Lions Year period.');
             }
 
-            $reversalJournal = $this->reversals->reverse(new JournalReversalRequest(
+            $reversalJournal = $this->reversals->reverseWithin($context, new JournalReversalRequest(
                 clubId: $lockedClub->id, originalEntryId: $journal->id, reversalAccountingPeriodId: $period->id,
                 effectiveDate: $canonical['accounting_date'], reversalActorUserId: $actor->id,
                 reason: $canonical['reason'], sourceType: self::SOURCE_TYPE, sourceId: $expense->public_id,
@@ -81,9 +83,9 @@ final class ClubExpenseReversalService
 
     private function assertReplayIntegrity(Club $club, ClubExpense $expense, ClubExpenseReversal $record): void
     {
-        $original = ClubJournalEntry::query()->whereKey($expense->journal_entry_id)->lockForUpdate()->first();
-        $reversal = ClubJournalEntry::query()->whereKey($record->reversal_journal_entry_id)->lockForUpdate()->first();
-        $lines = $reversal ? ClubJournalLine::query()->where('journal_entry_id', $reversal->id)->orderBy('line_number')->lockForUpdate()->get() : collect();
+        $original = ClubJournalEntry::query()->where('club_id', $club->id)->whereKey($expense->journal_entry_id)->lockForUpdate()->first();
+        $reversal = ClubJournalEntry::query()->where('club_id', $club->id)->whereKey($record->reversal_journal_entry_id)->lockForUpdate()->first();
+        $lines = $reversal ? ClubJournalLine::query()->where('club_id', $club->id)->where('journal_entry_id', $reversal->id)->orderBy('line_number')->lockForUpdate()->get() : collect();
         if (! $original || ! $reversal || $original->club_id !== $club->id || $original->status !== ClubJournalEntry::STATUS_REVERSED || $reversal->club_id !== $club->id || $reversal->reversal_of_entry_id !== $original->id || $reversal->source_type !== self::SOURCE_TYPE || $reversal->source_id !== $expense->public_id || $reversal->source_event !== 'reversed' || $reversal->idempotency_key !== $record->idempotency_key || $lines->count() !== 2) {
             throw new ClubExpenseReversalException('The expense reversal provenance is invalid.');
         }

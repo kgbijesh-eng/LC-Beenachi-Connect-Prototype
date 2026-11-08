@@ -19,6 +19,7 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 $app = require dirname(__DIR__, 2).'/bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
+Tests\Support\FinancialWorkerSafety::assert(['lcb_3iizh_concurrency_test']);
 [$script, $requestPath, $barrier, $name] = $argv;
 $request = json_decode((string) file_get_contents($requestPath), true, flags: JSON_THROW_ON_ERROR);
 CarbonImmutable::setTestNow('2027-07-05 10:00:00');

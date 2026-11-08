@@ -88,6 +88,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
     {
         $fixture = $this->fixture();
         $club = Club::create(['name' => 'Inactive Accounting Club', 'code' => '3IIZL-NOACT', 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]);
         $membership = ClubMembership::where('club_id', $fixture['club']->id)->where('user_id', $fixture['officer']->id)->firstOrFail();
         ClubMembership::create(['club_id' => $club->id, 'user_id' => $fixture['officer']->id, 'role_id' => $membership->role_id, 'status' => 'active']);
         ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $fixture['officer']->id]);
@@ -197,6 +198,7 @@ class Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest exten
     private function fixture(): array
     {
         $club = Club::create(['name' => '3IIZL Club', 'code' => '3IIZL', 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]);
         $officer = User::factory()->create();
         $permission = Permission::create(['name' => 'View Club Account Statements', 'slug' => 'finance.club.statement.view', 'group' => 'finance', 'description' => 'View statements.']);
         $role = Role::create(['name' => 'Treasurer', 'slug' => 'treasurer', 'description' => 'Treasurer']);

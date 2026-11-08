@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Finance;
 
 use App\Models\Club;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Models\ClubAccountingPeriod;
 use App\Models\ClubJournalEntry;
 use App\Models\ClubJournalLine;
@@ -35,109 +37,128 @@ final class ClubJournalPostingService
     {
         $normalized = $this->validateAndNormalize($request);
 
-        return DB::transaction(function () use ($request, $normalized): ClubJournalEntry {
-            $club = Club::query()->whereKey($request->clubId)->lockForUpdate()->first();
-            if (! $club) {
-                throw new InvalidJournalRequestException('The journal posting request is invalid.');
-            }
+        return app(OrganisationTransactionGuard::class)->run($request->clubId,
+            fn (OrganisationTransactionContext $context): ClubJournalEntry => $this->postBody($context, $request, $normalized), 3);
+    }
 
-            $clubCode = trim((string) $club->code);
-            if (! preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]{0,39}\z/', $clubCode)) {
-                throw new JournalSequenceException('A journal reference cannot be allocated.');
-            }
+    public function postWithin(OrganisationTransactionContext $context, JournalPostingRequest $request): ClubJournalEntry
+    {
+        $normalized = $this->validateAndNormalize($request);
 
-            $period = ClubAccountingPeriod::query()
-                ->whereKey($request->accountingPeriodId)
-                ->lockForUpdate()
-                ->first();
-            if (! $period) {
-                throw new InvalidAccountingPeriodException('The accounting period is invalid.');
-            }
-            if ($period->club_id !== $club->id) {
+        return app(OrganisationTransactionGuard::class)->within($context, $request->clubId,
+            fn (): ClubJournalEntry => DB::transaction(
+                fn (): ClubJournalEntry => $this->postBody($context, $request, $normalized), 3));
+    }
+
+    private function postBody(OrganisationTransactionContext $context, JournalPostingRequest $request, array $normalized): ClubJournalEntry
+    {
+        $club = Club::query()->whereKey($request->clubId)->lockForUpdate()->first();
+        if (! $club) {
+            throw new InvalidJournalRequestException('The journal posting request is invalid.');
+        }
+
+        $clubCode = trim((string) $club->code);
+        if (! preg_match('/\A[A-Za-z0-9][A-Za-z0-9_-]{0,39}\z/', $clubCode)) {
+            throw new JournalSequenceException('A journal reference cannot be allocated.');
+        }
+
+        $periodOwner = ClubAccountingPeriod::query()->whereKey($request->accountingPeriodId)->value('club_id');
+        if ($periodOwner !== null && (int) $periodOwner !== $club->id) {
+            throw new JournalClubScopeViolationException('The journal request violates club scope.');
+        }
+        $period = ClubAccountingPeriod::query()
+            ->where('club_id', $club->id)
+            ->whereKey($request->accountingPeriodId)
+            ->lockForUpdate()
+            ->first();
+        if (! $period) {
+            throw new InvalidAccountingPeriodException('The accounting period is invalid.');
+        }
+        if ($period->club_id !== $club->id) {
+            throw new JournalClubScopeViolationException('The journal request violates club scope.');
+        }
+        if ($period->status !== ClubAccountingPeriod::STATUS_OPEN) {
+            throw new ClosedAccountingPeriodException('The accounting period is closed.');
+        }
+        if ($normalized['effective_date'] < $period->start_date->format('Y-m-d')
+            || $normalized['effective_date'] > $period->end_date->format('Y-m-d')) {
+            throw new InvalidEffectiveDateException('The effective date is outside the accounting period.');
+        }
+
+        if (! User::query()->whereKey($request->postingActorUserId)->exists()) {
+            throw new InvalidJournalRequestException('The journal posting request is invalid.');
+        }
+
+        if ($request->reversalOfEntryId !== null) {
+            $reversalOf = ClubJournalEntry::query()->where('club_id', $club->id)->whereKey($request->reversalOfEntryId)->lockForUpdate()->first();
+            if (! $reversalOf || $reversalOf->club_id !== $club->id) {
                 throw new JournalClubScopeViolationException('The journal request violates club scope.');
             }
-            if ($period->status !== ClubAccountingPeriod::STATUS_OPEN) {
-                throw new ClosedAccountingPeriodException('The accounting period is closed.');
-            }
-            if ($normalized['effective_date'] < $period->start_date->format('Y-m-d')
-                || $normalized['effective_date'] > $period->end_date->format('Y-m-d')) {
-                throw new InvalidEffectiveDateException('The effective date is outside the accounting period.');
-            }
+        }
 
-            if (! User::query()->whereKey($request->postingActorUserId)->exists()) {
-                throw new InvalidJournalRequestException('The journal posting request is invalid.');
-            }
+        $accounts = $this->lockAndValidateAccounts($request, $club);
+        $this->validateFundUsage($normalized['lines'], $accounts);
+        $existing = $this->resolveReplay($club, $normalized);
+        if ($existing) {
+            return $existing;
+        }
 
-            if ($request->reversalOfEntryId !== null) {
-                $reversalOf = ClubJournalEntry::query()->whereKey($request->reversalOfEntryId)->lockForUpdate()->first();
-                if (! $reversalOf || $reversalOf->club_id !== $club->id) {
-                    throw new JournalClubScopeViolationException('The journal request violates club scope.');
-                }
-            }
+        $lastSequence = (int) ClubJournalEntry::query()
+            ->where('club_id', $club->id)
+            ->where('accounting_period_id', $period->id)
+            ->max('sequence_number');
+        $sequence = $lastSequence + 1;
+        if ($sequence < 1 || $sequence > self::MAX_SEQUENCE) {
+            throw new JournalSequenceException('A journal reference cannot be allocated.');
+        }
 
-            $accounts = $this->lockAndValidateAccounts($request, $club);
-            $this->validateFundUsage($normalized['lines'], $accounts);
-            $existing = $this->resolveReplay($club, $normalized);
-            if ($existing) {
-                return $existing;
-            }
+        $reference = sprintf('%s/%s/JRN/%06d', $clubCode, $period->lions_year, $sequence);
+        if (strlen($reference) > 80) {
+            throw new JournalSequenceException('A journal reference cannot be allocated.');
+        }
 
-            $lastSequence = (int) ClubJournalEntry::query()
-                ->where('club_id', $club->id)
-                ->where('accounting_period_id', $period->id)
-                ->max('sequence_number');
-            $sequence = $lastSequence + 1;
-            if ($sequence < 1 || $sequence > self::MAX_SEQUENCE) {
-                throw new JournalSequenceException('A journal reference cannot be allocated.');
-            }
+        $entry = ClubJournalEntry::create([
+            'club_id' => $club->id,
+            'accounting_period_id' => $period->id,
+            'sequence_number' => $sequence,
+            'reference' => $reference,
+            'effective_date' => $normalized['effective_date'],
+            'posting_date' => $normalized['effective_date'],
+            'status' => ClubJournalEntry::STATUS_DRAFT,
+            'description' => $normalized['description'],
+            'currency' => ClubJournalEntry::CURRENCY_INR,
+            'source_type' => $normalized['source_type'],
+            'source_id' => $normalized['source_id'],
+            'source_event' => $normalized['source_event'],
+            'idempotency_key' => $normalized['idempotency_key'],
+            'reversal_of_entry_id' => $normalized['reversal_of_entry_id'],
+            'created_by_user_id' => $request->postingActorUserId,
+            'metadata' => $normalized['metadata'],
+        ]);
 
-            $reference = sprintf('%s/%s/JRN/%06d', $clubCode, $period->lions_year, $sequence);
-            if (strlen($reference) > 80) {
-                throw new JournalSequenceException('A journal reference cannot be allocated.');
-            }
-
-            $entry = ClubJournalEntry::create([
+        foreach ($normalized['lines'] as $index => $line) {
+            ClubJournalLine::create([
                 'club_id' => $club->id,
-                'accounting_period_id' => $period->id,
-                'sequence_number' => $sequence,
-                'reference' => $reference,
-                'effective_date' => $normalized['effective_date'],
-                'posting_date' => $normalized['effective_date'],
-                'status' => ClubJournalEntry::STATUS_DRAFT,
-                'description' => $normalized['description'],
-                'currency' => ClubJournalEntry::CURRENCY_INR,
-                'source_type' => $normalized['source_type'],
-                'source_id' => $normalized['source_id'],
-                'source_event' => $normalized['source_event'],
-                'idempotency_key' => $normalized['idempotency_key'],
-                'reversal_of_entry_id' => $normalized['reversal_of_entry_id'],
-                'created_by_user_id' => $request->postingActorUserId,
-                'metadata' => $normalized['metadata'],
+                'journal_entry_id' => $entry->id,
+                'ledger_account_id' => $accounts->get($line['account_id'])->id,
+                'line_number' => $index + 1,
+                'direction' => $line['direction'],
+                'amount_paise' => $line['amount_paise'],
+                'description' => $line['description'],
+                'fund_code' => $line['fund_code'],
+                'opening_schedule_row_id' => $line['opening_schedule_row_id'],
+                'reversal_of_line_id' => $line['reversal_of_line_id'],
             ]);
+        }
 
-            foreach ($normalized['lines'] as $index => $line) {
-                ClubJournalLine::create([
-                    'club_id' => $club->id,
-                    'journal_entry_id' => $entry->id,
-                    'ledger_account_id' => $accounts->get($line['account_id'])->id,
-                    'line_number' => $index + 1,
-                    'direction' => $line['direction'],
-                    'amount_paise' => $line['amount_paise'],
-                    'description' => $line['description'],
-                    'fund_code' => $line['fund_code'],
-                    'opening_schedule_row_id' => $line['opening_schedule_row_id'],
-                    'reversal_of_line_id' => $line['reversal_of_line_id'],
-                ]);
-            }
+        $entry->update([
+            'status' => ClubJournalEntry::STATUS_POSTED,
+            'posted_at' => now(),
+            'posted_by_user_id' => $request->postingActorUserId,
+        ]);
 
-            $entry->update([
-                'status' => ClubJournalEntry::STATUS_POSTED,
-                'posted_at' => now(),
-                'posted_by_user_id' => $request->postingActorUserId,
-            ]);
+        return $this->canonicalEntry($entry);
 
-            return $this->canonicalEntry($entry);
-        }, 3);
     }
 
     private function validateAndNormalize(JournalPostingRequest $request): array
@@ -246,7 +267,14 @@ final class ClubJournalPostingService
     private function lockAndValidateAccounts(JournalPostingRequest $request, Club $club): Collection
     {
         $accountIds = collect($request->lines)->map(fn (JournalLineInput $line): int => $line->accountId)->unique()->values();
-        $accounts = LedgerAccount::query()->whereIn('id', $accountIds)->lockForUpdate()->get()->keyBy('id');
+        $owners = LedgerAccount::query()->whereIn('id', $accountIds)->pluck('club_id', 'id');
+        if ($owners->count() !== $accountIds->count()) {
+            throw new InvalidJournalRequestException('A journal account is invalid.');
+        }
+        if ($owners->contains(fn ($owner): bool => (int) $owner !== $club->id)) {
+            throw new JournalClubScopeViolationException('The journal request violates club scope.');
+        }
+        $accounts = LedgerAccount::query()->where('club_id', $club->id)->whereIn('id', $accountIds)->lockForUpdate()->get()->keyBy('id');
         if ($accounts->count() !== $accountIds->count()) {
             throw new InvalidJournalRequestException('A journal account is invalid.');
         }

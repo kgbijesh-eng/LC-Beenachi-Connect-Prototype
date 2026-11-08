@@ -27,15 +27,13 @@ use App\Services\Finance\JournalLineInput;
 use App\Services\Finance\JournalPostingRequest;
 use App\Services\Finance\JournalReversalRequest;
 use App\Services\Finance\JournalReversalService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use LogicException;
 use RuntimeException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3iieInternalJournalReversalServiceTest extends TestCase
+class Milestone3iieInternalJournalReversalServiceTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_posted_entry_reverses_to_one_linked_balanced_opposite_entry(): void
     {
@@ -177,8 +175,11 @@ class Milestone3iieInternalJournalReversalServiceTest extends TestCase
     {
         $fixtureA = $this->fixture('A');
         $fixtureB = $this->fixture('B');
+        config(['instance.organisation_code' => $fixtureA['club']->code]);
         $originalA = $this->postOriginal($fixtureA);
+        config(['instance.organisation_code' => $fixtureB['club']->code]);
         $originalB = $this->postOriginal($fixtureB);
+        config(['instance.organisation_code' => $fixtureA['club']->code]);
 
         foreach ([
             [$fixtureA, $originalB, [], ReversalClubScopeViolationException::class],
@@ -281,6 +282,7 @@ class Milestone3iieInternalJournalReversalServiceTest extends TestCase
     private function fixture(string $suffix = 'REV'): array
     {
         $club = Club::create(['name' => "Reversal {$suffix}", 'code' => $suffix]);
+        config(['instance.organisation_code' => $club->code]);
         $actor = User::factory()->create();
         $period = $this->period(['club' => $club, 'actor' => $actor], '2026-27', '2026-07-01', '2027-06-30');
         $cash = $this->account($club, $actor, 'CASH', LedgerAccount::TYPE_ASSET, LedgerAccount::NORMAL_DEBIT);

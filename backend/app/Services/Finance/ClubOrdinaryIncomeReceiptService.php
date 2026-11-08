@@ -7,6 +7,8 @@ namespace App\Services\Finance;
 use App\Models\{Club, ClubAccountingCutoverPackage, ClubAccountingPeriod, ClubJournalLine, ClubOrdinaryIncomeReceipt, LedgerAccount, User};
 use App\Services\Finance\Exceptions\{ClubOrdinaryIncomeReceiptConflictException, ClubOrdinaryIncomeReceiptException};
 use Illuminate\Support\Facades\DB;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use Illuminate\Support\Str;
 
 final class ClubOrdinaryIncomeReceiptService
@@ -19,45 +21,58 @@ final class ClubOrdinaryIncomeReceiptService
     public function record(Club $club, User $actor, array $input): ClubOrdinaryIncomeReceipt
     {
         $canonical = $this->canonical($input);
-        return DB::transaction(function () use ($club, $actor, $canonical): ClubOrdinaryIncomeReceipt {
-            $lockedClub = Club::query()->whereKey($club->id)->lockForUpdate()->firstOrFail();
-            $existing = ClubOrdinaryIncomeReceipt::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();
-            if ($existing) {
-                if (! hash_equals($existing->request_digest, $canonical['request_digest'])) throw new ClubOrdinaryIncomeReceiptConflictException('The ordinary income receipt idempotency key conflicts with a changed request.');
-                $loaded = $this->loaded($existing);
-                $this->assertReplayProvenance($loaded, $canonical);
-                return $loaded;
-            }
-            ['period' => $period, 'covered' => $covered] = $this->lockedPostingWindow($lockedClub, $canonical['accounting_date']);
-            if (! $period || $period->status !== ClubAccountingPeriod::STATUS_OPEN) throw new ClubOrdinaryIncomeReceiptException('The receipt date must belong to an open accounting period.');
-            if (! $covered) throw new ClubOrdinaryIncomeReceiptException('Authoritative accounting is not active for the selected date.');
-            $correctedFrom = null;
-            if ($canonical['corrected_from_receipt'] ?? null) {
-                $correctedFrom = ClubOrdinaryIncomeReceipt::query()->where('club_id', $lockedClub->id)->where('public_id', $canonical['corrected_from_receipt'])->lockForUpdate()->first();
-                if (! $correctedFrom || ! $correctedFrom->correction()->exists() || $correctedFrom->correctedReplacement()->exists()) throw new ClubOrdinaryIncomeReceiptConflictException('The corrected ordinary income receipt is unavailable or already has a replacement.');
-            }
-            $accounts = LedgerAccount::query()->whereIn('public_id', [$canonical['receiving_account'], $canonical['income_account']])->lockForUpdate()->get()->keyBy(fn ($account) => strtolower($account->public_id));
-            $receiving = $accounts->get($canonical['receiving_account']); $income = $accounts->get($canonical['income_account']);
-            $this->validateAccounts($lockedClub, $receiving, $income);
-            $receipt = ClubOrdinaryIncomeReceipt::create([
-                'club_id' => $lockedClub->id, 'subtype' => $canonical['subtype'], 'accounting_date' => $canonical['accounting_date'],
-                'receiving_account_id' => $receiving->id, 'income_account_id' => $income->id, 'fund_code' => $canonical['fund_code'],
-                'amount_paise' => $canonical['amount_paise'], 'currency' => LedgerAccount::CURRENCY_INR, 'description' => $canonical['description'],
-                'payer_name' => $canonical['payer_name'], 'external_reference' => $canonical['external_reference'], 'event_label' => $canonical['event_label'],
-                'idempotency_key' => $canonical['idempotency_key'], 'request_digest' => $canonical['request_digest'], 'created_by_user_id' => $actor->id, 'corrected_from_receipt_id' => $correctedFrom?->id,
-            ]);
-            $journal = $this->journals->post(new JournalPostingRequest(
-                clubId: $lockedClub->id, accountingPeriodId: $period->id, effectiveDate: $canonical['accounting_date'], description: $canonical['description'], currency: LedgerAccount::CURRENCY_INR,
-                sourceType: self::SOURCE_TYPE, sourceId: $receipt->public_id, sourceEvent: 'recorded', idempotencyKey: $canonical['idempotency_key'], postingActorUserId: $actor->id,
-                lines: [
-                    new JournalLineInput($receiving->id, ClubJournalLine::DIRECTION_DEBIT, $canonical['amount_paise'], $canonical['description'], $canonical['fund_code']),
-                    new JournalLineInput($income->id, ClubJournalLine::DIRECTION_CREDIT, $canonical['amount_paise'], $canonical['description'], $canonical['fund_code']),
-                ],
-                metadata: ['ordinary_income_receipt_public_id' => $receipt->public_id, 'subtype' => $canonical['subtype'], 'payer_name' => $canonical['payer_name'], 'external_reference' => $canonical['external_reference'], 'event_label' => $canonical['event_label']],
-            ));
-            $receipt->updateQuietly(['journal_entry_id' => $journal->id]);
-            return $this->loaded($receipt);
-        }, 3);
+        return app(OrganisationTransactionGuard::class)->run($club,
+            fn (OrganisationTransactionContext $context): ClubOrdinaryIncomeReceipt => $this->recordBody($context, $club, $actor, $canonical), 3);
+    }
+
+    public function recordWithin(OrganisationTransactionContext $context, Club $club, User $actor, array $input): ClubOrdinaryIncomeReceipt
+    {
+        $canonical = $this->canonical($input);
+        return app(OrganisationTransactionGuard::class)->within($context, $club,
+            fn (): ClubOrdinaryIncomeReceipt => DB::transaction(
+                fn (): ClubOrdinaryIncomeReceipt => $this->recordBody($context, $club, $actor, $canonical), 3));
+    }
+
+    private function recordBody(OrganisationTransactionContext $context, Club $club, User $actor, array $canonical): ClubOrdinaryIncomeReceipt
+    {
+        $lockedClub = Club::query()->whereKey($club->id)->lockForUpdate()->firstOrFail();
+        $existing = ClubOrdinaryIncomeReceipt::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();
+        if ($existing) {
+            if (! hash_equals($existing->request_digest, $canonical['request_digest'])) throw new ClubOrdinaryIncomeReceiptConflictException('The ordinary income receipt idempotency key conflicts with a changed request.');
+            $loaded = $this->loaded($existing);
+            $this->assertReplayProvenance($loaded, $canonical);
+            return $loaded;
+        }
+        ['period' => $period, 'covered' => $covered] = $this->lockedPostingWindow($context, $lockedClub, $canonical['accounting_date']);
+        if (! $period || $period->status !== ClubAccountingPeriod::STATUS_OPEN) throw new ClubOrdinaryIncomeReceiptException('The receipt date must belong to an open accounting period.');
+        if (! $covered) throw new ClubOrdinaryIncomeReceiptException('Authoritative accounting is not active for the selected date.');
+        $correctedFrom = null;
+        if ($canonical['corrected_from_receipt'] ?? null) {
+            $correctedFrom = ClubOrdinaryIncomeReceipt::query()->where('club_id', $lockedClub->id)->where('public_id', $canonical['corrected_from_receipt'])->lockForUpdate()->first();
+            if (! $correctedFrom || ! $correctedFrom->correction()->exists() || $correctedFrom->correctedReplacement()->exists()) throw new ClubOrdinaryIncomeReceiptConflictException('The corrected ordinary income receipt is unavailable or already has a replacement.');
+        }
+        $accounts = LedgerAccount::query()->where('club_id', $lockedClub->id)->whereIn('public_id', [$canonical['receiving_account'], $canonical['income_account']])->lockForUpdate()->get()->keyBy(fn ($account) => strtolower($account->public_id));
+        $receiving = $accounts->get($canonical['receiving_account']); $income = $accounts->get($canonical['income_account']);
+        $this->validateAccounts($lockedClub, $receiving, $income);
+        $receipt = ClubOrdinaryIncomeReceipt::create([
+            'club_id' => $lockedClub->id, 'subtype' => $canonical['subtype'], 'accounting_date' => $canonical['accounting_date'],
+            'receiving_account_id' => $receiving->id, 'income_account_id' => $income->id, 'fund_code' => $canonical['fund_code'],
+            'amount_paise' => $canonical['amount_paise'], 'currency' => LedgerAccount::CURRENCY_INR, 'description' => $canonical['description'],
+            'payer_name' => $canonical['payer_name'], 'external_reference' => $canonical['external_reference'], 'event_label' => $canonical['event_label'],
+            'idempotency_key' => $canonical['idempotency_key'], 'request_digest' => $canonical['request_digest'], 'created_by_user_id' => $actor->id, 'corrected_from_receipt_id' => $correctedFrom?->id,
+        ]);
+        $journal = $this->journals->postWithin($context, new JournalPostingRequest(
+            clubId: $lockedClub->id, accountingPeriodId: $period->id, effectiveDate: $canonical['accounting_date'], description: $canonical['description'], currency: LedgerAccount::CURRENCY_INR,
+            sourceType: self::SOURCE_TYPE, sourceId: $receipt->public_id, sourceEvent: 'recorded', idempotencyKey: $canonical['idempotency_key'], postingActorUserId: $actor->id,
+            lines: [
+                new JournalLineInput($receiving->id, ClubJournalLine::DIRECTION_DEBIT, $canonical['amount_paise'], $canonical['description'], $canonical['fund_code']),
+                new JournalLineInput($income->id, ClubJournalLine::DIRECTION_CREDIT, $canonical['amount_paise'], $canonical['description'], $canonical['fund_code']),
+            ],
+            metadata: ['ordinary_income_receipt_public_id' => $receipt->public_id, 'subtype' => $canonical['subtype'], 'payer_name' => $canonical['payer_name'], 'external_reference' => $canonical['external_reference'], 'event_label' => $canonical['event_label']],
+        ));
+        $receipt->updateQuietly(['journal_entry_id' => $journal->id]);
+        return $this->loaded($receipt);
+
     }
 
     public function options(Club $club): array
@@ -68,8 +83,9 @@ final class ClubOrdinaryIncomeReceiptService
     }
 
     /** @return array{period: ?ClubAccountingPeriod, covered: bool} */
-    public function lockedPostingWindow(Club $club, string $accountingDate): array
+    public function lockedPostingWindow(OrganisationTransactionContext $context, Club $club, string $accountingDate): array
     {
+        $context->assertUsable($club);
         $period = ClubAccountingPeriod::query()->where('club_id', $club->id)->where('start_date', '<=', $accountingDate)->where('end_date', '>=', $accountingDate)->lockForUpdate()->first();
         $covered = ClubAccountingCutoverPackage::query()->where('club_id', $club->id)->where('status', 'posted')->whereNotNull('opening_journal_entry_id')->where('cutover_date', '<=', $accountingDate)->lockForUpdate()->exists();
         return compact('period', 'covered');

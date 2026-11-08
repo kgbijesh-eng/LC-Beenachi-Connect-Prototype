@@ -12,13 +12,11 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\Finance\PaymentRecordingService;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3mPaymentRecordingServiceNarrowImplementationTest extends TestCase
+class Milestone3mPaymentRecordingServiceNarrowImplementationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_milestone_3m_document_records_narrow_implementation_boundary(): void
     {
@@ -164,13 +162,15 @@ class Milestone3mPaymentRecordingServiceNarrowImplementationTest extends TestCas
 
     private function createClub(string $code = 'LCB', string $name = 'Lions Club Beenachi'): Club
     {
-        return Club::query()->create([
+        $club = Club::query()->create([
             'name' => $name,
             'code' => $code,
             'district' => '318E',
             'timezone' => 'Asia/Kolkata',
             'is_active' => true,
         ]);
+        config(['instance.organisation_code' => $club->code]);
+        return $club;
     }
 
     private function createMember(Club $club, string $memberCode = 'MEM-3M-001'): Member

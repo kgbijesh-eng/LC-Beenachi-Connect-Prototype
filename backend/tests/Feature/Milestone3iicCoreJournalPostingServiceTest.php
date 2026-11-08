@@ -28,16 +28,14 @@ use App\Services\Finance\Exceptions\UnbalancedJournalException;
 use App\Services\Finance\Exceptions\UnsupportedJournalCurrencyException;
 use App\Services\Finance\JournalLineInput;
 use App\Services\Finance\JournalPostingRequest;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use LogicException;
 use RuntimeException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 use TypeError;
 
-class Milestone3iicCoreJournalPostingServiceTest extends TestCase
+class Milestone3iicCoreJournalPostingServiceTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     private const VERIFIED_3IIC_COMMIT = 'b72848c';
 
@@ -174,7 +172,9 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
         $fixtureB = $this->fixture('LCX');
         $key = (string) Str::uuid();
 
+        config(['instance.organisation_code' => $fixtureA['club']->code]);
         $entryA = $this->service()->post($this->request($fixtureA, ['idempotencyKey' => $key]));
+        config(['instance.organisation_code' => $fixtureB['club']->code]);
         $entryB = $this->service()->post($this->request($fixtureB, ['idempotencyKey' => $key]));
 
         $this->assertSame(1, $entryA->sequence_number);
@@ -271,6 +271,7 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
     {
         $fixtureA = $this->fixture('AAA');
         $fixtureB = $this->fixture('BBB');
+        config(['instance.organisation_code' => $fixtureA['club']->code]);
 
         foreach ([
             ['accountingPeriodId' => $fixtureB['period']->id],
@@ -459,7 +460,9 @@ class Milestone3iicCoreJournalPostingServiceTest extends TestCase
     private function fixture(string $clubCode = 'LCB'): array
     {
         $club = Club::create(['name' => "Posting Test {$clubCode}", 'code' => $clubCode.'-'.Str::lower(Str::random(6))]);
+        config(['instance.organisation_code' => $club->code]);
         $club->update(['code' => $clubCode]);
+        config(['instance.organisation_code' => $club->code]);
         $actor = User::factory()->create();
         $period = ClubAccountingPeriod::create([
             'club_id' => $club->id,

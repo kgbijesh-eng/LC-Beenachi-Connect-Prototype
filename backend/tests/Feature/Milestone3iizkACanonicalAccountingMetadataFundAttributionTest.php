@@ -16,14 +16,12 @@ use App\Services\Finance\JournalLineInput;
 use App\Services\Finance\JournalPostingRequest;
 use App\Services\Finance\JournalReversalRequest;
 use App\Services\Finance\JournalReversalService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3iizkACanonicalAccountingMetadataFundAttributionTest extends TestCase
+class Milestone3iizkACanonicalAccountingMetadataFundAttributionTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_registry_installs_exact_approved_and_disabled_categories(): void
     {
@@ -95,6 +93,7 @@ class Milestone3iizkACanonicalAccountingMetadataFundAttributionTest extends Test
     private function fixture(): array
     {
         $club = Club::create(['name' => 'Fund Test', 'code' => 'FUND']);
+        config(['instance.organisation_code' => $club->code]);
         $user = User::factory()->create();
         $period = ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2026-27', 'start_date' => '2026-07-01', 'end_date' => '2027-06-30', 'status' => 'open', 'created_by_user_id' => $user->id]);
         $cash = LedgerAccount::create(['club_id' => $club->id, 'code' => 'CASH', 'name' => 'Cash', 'account_type' => 'asset', 'normal_balance' => 'debit', 'currency' => 'INR', 'is_active' => true, 'created_by_user_id' => $user->id]);

@@ -47,11 +47,14 @@ final class Milestone3iizvPostgresExpenseConcurrencyTest extends TestCase
     public function test_tenant_key_and_account_isolation_and_atomic_failure_hold_on_postgres(): void
     {
         $this->requireDisposablePostgres(); $a = $this->fixture('TENANTA'); $b = $this->fixture('TENANTB'); $key = (string) Str::uuid();
+        config(['instance.organisation_code' => $a['club']->code]);
         $aExpense = app(ClubExpenseRecordingService::class)->record($a['club'], $a['actor'], $this->payload($a, $key, 101));
+        config(['instance.organisation_code' => $b['club']->code]);
         $bExpense = app(ClubExpenseRecordingService::class)->record($b['club'], $b['actor'], $this->payload($b, $key, 202));
         $this->assertNotSame($aExpense->public_id, $bExpense->public_id);
         $this->assertSame(1, ClubExpense::query()->where('club_id', $a['club']->id)->where('idempotency_key', $key)->count());
         $this->assertSame(1, ClubExpense::query()->where('club_id', $b['club']->id)->where('idempotency_key', $key)->count());
+        config(['instance.organisation_code' => $a['club']->code]);
         foreach ([['expense_account' => $b['expense']->public_id], ['payment_account' => $b['bank']->public_id]] as $change) {
             try { app(ClubExpenseRecordingService::class)->record($a['club'], $a['actor'], [...$this->payload($a, (string) Str::uuid(), 303), ...$change]); $this->fail('Cross-club account selection must fail.'); }
             catch (ClubExpenseException) { $this->assertTrue(true); }
@@ -99,7 +102,7 @@ final class Milestone3iizvPostgresExpenseConcurrencyTest extends TestCase
         foreach ([$first, $second] as $index => $payload) {
             $request = $barrier.DIRECTORY_SEPARATOR."request.{$index}.json";
             file_put_contents($request, json_encode(['club' => $fixture['club']->id, 'actor' => $fixture['actor']->id, 'payload' => $payload], JSON_THROW_ON_ERROR));
-            $processes[$index] = new Process([PHP_BINARY, base_path('tests/Support/Milestone3iizvExpenseWorker.php'), $request, $barrier, (string) $index], base_path(), timeout: 40);
+            $processes[$index] = new Process([PHP_BINARY, base_path('tests/Support/Milestone3iizvExpenseWorker.php'), $request, $barrier, (string) $index], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $fixture['club']->code], timeout: 40);
             $processes[$index]->start();
         }
         $this->await(fn () => file_exists($barrier.DIRECTORY_SEPARATOR.'ready.0') && file_exists($barrier.DIRECTORY_SEPARATOR.'ready.1'));
@@ -110,7 +113,8 @@ final class Milestone3iizvPostgresExpenseConcurrencyTest extends TestCase
 
     private function fixture(string $suffix, bool $catalogueExpense = false): array
     {
-        $club = Club::create(['name' => "3IIZV {$suffix}", 'code' => "3IIZV{$suffix}", 'timezone' => 'Asia/Kolkata', 'is_active' => true]); $actor = User::factory()->create();
+        $club = Club::create(['name' => "3IIZV {$suffix}", 'code' => "3IIZV{$suffix}", 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]); $actor = User::factory()->create();
         $period = ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $actor->id]);
         $bank = $this->account($club, $actor, "BANK-{$suffix}", 'asset', 'debit', 'CASH_AND_BANK'); $equity = $this->account($club, $actor, "EQUITY-{$suffix}", 'equity', 'credit', 'FUND_BALANCE_EQUITY');
         $expense = $this->account($club, $actor, $catalogueExpense ? 'EXPENSE-SERVICE-ACTIVITY' : "EXPENSE-{$suffix}", 'expense', 'debit', 'EXPENSES', $catalogueExpense ? 'catalogue' : 'custom', $catalogueExpense ? 'EXPENSE-SERVICE-ACTIVITY' : null);

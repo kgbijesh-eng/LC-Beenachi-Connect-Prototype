@@ -214,6 +214,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
             'name' => 'Unactivated Club', 'code' => 'UNACTIVATED',
             'timezone' => 'Asia/Kolkata', 'is_active' => true,
         ]);
+        config(['instance.organisation_code' => $club->code]);
         $membership = ClubMembership::query()->where('club_id', $fixture['club']->id)->where('user_id', $fixture['officer']->id)->firstOrFail();
         ClubMembership::create([
             'club_id' => $club->id, 'user_id' => $fixture['officer']->id,
@@ -270,10 +271,12 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
 
         $before = $this->getJson($this->endpoint($first))->assertOk()->json('data.snapshot_fingerprint');
         User::factory()->create();
+        config(['instance.organisation_code' => $second['club']->code]);
         $this->postJournal($second['club'], $second['period'], $second['officer'], '2027-07-20', 'other-club-change', [
             new JournalLineInput($second['cash']->id, 'debit', 75, fundCode: 'GENERAL_CLUB_FUND'),
             new JournalLineInput($second['income']->id, 'credit', 75, fundCode: 'GENERAL_CLUB_FUND'),
         ]);
+        config(['instance.organisation_code' => $first['club']->code]);
         $after = $this->getJson($this->endpoint($first))->assertOk()->json('data.snapshot_fingerprint');
         config(['instance.organisation_code' => $second['club']->code]); Sanctum::actingAs($second['officer']);
         $other = $this->getJson($this->endpoint($second))->assertOk()->json('data.snapshot_fingerprint');
@@ -406,6 +409,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
             'name' => 'Statement Test Club '.$suffix, 'code' => 'STATEMENT'.$suffix,
             'timezone' => 'Asia/Kolkata', 'is_active' => true,
         ]);
+        config(['instance.organisation_code' => $club->code]);
         $officer = User::factory()->create();
         $permission = Permission::firstOrCreate(['slug' => 'finance.club.statement.view'], [
             'name' => 'View Club Account Statements', 'slug' => 'finance.club.statement.view',

@@ -28,19 +28,19 @@ use App\Services\Finance\Exceptions\AccountingIntegrationException;
 use App\Services\Finance\JournalLineInput;
 use App\Services\Finance\JournalPostingRequest;
 use App\Services\Finance\SourceAccountingIntegrationService;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Services\FinanceCollections\FinanceWriteService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
+use Tests\Support\DisposableCorruptionFixture;
 
-class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
+class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_integrations_are_disabled_by_default_and_posted_opening_alone_changes_no_source_behaviour(): void
     {
@@ -262,10 +262,10 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
         $charge = $write->issue($f['actor'], $f['club'], $this->draftCharge($f), 1);
         $write->cancel($f['actor'], $f['club'], $charge, 2, 'Correction');
         $service = app(SourceAccountingIntegrationService::class);
-        DB::transaction(fn () => $service->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Correction'));
+        app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => $service->reverseWithin($context, $f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Correction'));
         $this->assertSame(1, DB::table('club_accounting_source_integration_events')->where('event_type', 'integration_reversal')->count());
         try {
-            DB::transaction(fn () => $service->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Changed'));
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => $service->reverseWithin($context, $f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Changed'));
             $this->fail('Changed reversal replay must conflict.');
         } catch (AccountingIntegrationConflictException) {
             $this->addToAssertionCount(1);
@@ -274,25 +274,19 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
 
     public function test_corrupt_reversal_event_cannot_short_circuit_authoritative_replay(): void
     {
-        if (DB::getDriverName() !== 'sqlite') {
-            $this->markTestSkipped('Controlled corrupt-fixture test uses a disposable SQLite trigger override.');
-        }
         $f = $this->fixture();
         $this->enable($f);
         $charge = app(FinanceWriteService::class)->issue($f['actor'], $f['club'], $this->draftCharge($f), 1);
         app(FinanceWriteService::class)->cancel($f['actor'], $f['club'], $charge, 2, 'Correction');
         $integration = ClubAccountingSourceIntegration::where('source_identifier', $charge->public_id)->firstOrFail();
-        DB::unprepared('DROP TRIGGER club_accounting_source_integration_events_immutable_update');
+        $event = DB::table('club_accounting_source_integration_events')->where('club_id', $f['club']->id)->where('source_integration_id', $integration->id)->where('event_type', 'integration_reversal')->first();
+        (new DisposableCorruptionFixture)->corrupt($f['club'], [['table' => 'club_accounting_source_integration_events', 'id' => (int) $event->id, 'values' => ['reversal_journal_entry_id' => ClubJournalEntry::where('club_id', $f['club']->id)->whereNull('reversal_of_entry_id')->oldest('id')->value('id')]]]);
+        (new DisposableCorruptionFixture)->assertRestored();
         try {
-            DB::table('club_accounting_source_integration_events')->where('source_integration_id', $integration->id)->where('event_type', 'integration_reversal')->update(['reversal_journal_entry_id' => ClubJournalEntry::where('club_id', $f['club']->id)->whereNull('reversal_of_entry_id')->oldest('id')->value('id')]);
-            try {
-                DB::transaction(fn () => app(SourceAccountingIntegrationService::class)->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Correction'));
-                $this->fail('A corrupt reversal event must conflict.');
-            } catch (AccountingIntegrationConflictException) {
-                $this->addToAssertionCount(1);
-            }
-        } finally {
-            DB::unprepared("CREATE TRIGGER club_accounting_source_integration_events_immutable_update BEFORE UPDATE ON club_accounting_source_integration_events BEGIN SELECT RAISE(ABORT, 'club_accounting_source_integration_events_immutable'); END");
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->reverseWithin($context, $f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), now()->toDateString(), $f['actor'], 'Correction'));
+            $this->fail('A corrupt reversal event must conflict.');
+        } catch (AccountingIntegrationConflictException) {
+            $this->addToAssertionCount(1);
         }
     }
 
@@ -448,6 +442,7 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
     {
         $f = $this->fixture();
         $other = $this->fixture();
+        config(['instance.organisation_code' => $f['club']->code]);
         $config = app(AccountingIntegrationConfigurationService::class);
         $mapping = $config->map($f['club']->id, 'member_charge', 'membership_dues', $f['income'], 'MAP-V1', '2027-07-01', 'CROSS-MAP', $f['actor']);
         $activation = $config->activate($f['club']->id, 'member_charge', '2027-07-01', 'MAP-V1', 'CROSS-ACT', $f['actor']);
@@ -504,58 +499,6 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
         foreach (['app/Http/Controllers', 'app/Console/Commands', 'app/Jobs'] as $path) {
             $files = glob(base_path($path.'/*')) ?: [];
             $this->assertFalse(collect($files)->contains(fn ($file) => str_contains(strtolower(basename($file)), 'accountingintegration')));
-        }
-    }
-
-    public function test_sqlite_public_source_identity_guards_are_canonical_null_aware_and_immutable(): void
-    {
-        if (DB::getDriverName() !== 'sqlite') {
-            $this->markTestSkipped('SQLite-specific trigger verification.');
-        }
-        $f = $this->fixture();
-        $chargeBase = ['club_id' => $f['club']->id, 'title' => 'Direct', 'category' => 'membership_dues', 'amount_paise' => 1, 'due_date' => '2027-07-31', 'financial_year' => '2027-28', 'status' => 'draft', 'assignment_member_ids' => '[]', 'created_by_user_id' => $f['actor']->id, 'lock_version' => 1, 'created_at' => now(), 'updated_at' => now()];
-        $paymentBase = ['club_id' => $f['club']->id, 'member_id' => $f['member']->id, 'amount_paise' => 1, 'payment_date' => '2027-07-05', 'payment_mode' => 'cash', 'request_hash' => str_repeat('a', 64), 'status' => 'recorded', 'recorded_by_user_id' => $f['actor']->id, 'lock_version' => 1, 'created_at' => now(), 'updated_at' => now()];
-        $invalid = [null, '-2345678-1234-1234-1234-123456789012', '1234567--1234-1234-1234-123456789012', '12345678-1234-1234-1234-12345678901-', '12345678-1234-1234-1234-12345678901G', '12345678-1234-1234-1234-12345678901A'];
-        foreach (['club_charges' => $chargeBase, 'member_payments' => $paymentBase] as $table => $base) {
-            foreach ($invalid as $publicId) {
-                try {
-                    $row = $base + ['public_id' => $publicId];
-                    if ($table === 'member_payments') {
-                        $row['idempotency_key'] = (string) Str::uuid();
-                    }
-                    DB::transaction(fn () => DB::table($table)->insert($row));
-                    $this->fail('Invalid public identity insert must be rejected.');
-                } catch (QueryException) {
-                    $this->addToAssertionCount(1);
-                }
-            }
-        }
-        $charge = $this->draftCharge($f);
-        $payment = MemberPayment::create($paymentBase + ['idempotency_key' => (string) Str::uuid()]);
-        foreach ([['club_charges', $charge->id], ['member_payments', $payment->id]] as [$table, $id]) {
-            foreach ([(string) Str::uuid(), null] as $replacement) {
-                try {
-                    DB::transaction(fn () => DB::table($table)->where('id', $id)->update(['public_id' => $replacement]));
-                    $this->fail('Public identity mutation must be rejected.');
-                } catch (QueryException) {
-                    $this->addToAssertionCount(1);
-                }
-            }
-        }
-        $payment->delete();
-        $this->enable($f);
-        app(FinanceWriteService::class)->issue($f['actor'], $f['club'], $charge, 1);
-        $copy = (array) DB::table('club_accounting_source_integrations')->first();
-        unset($copy['id']);
-        $copy['public_id'] = (string) Str::uuid();
-        $copy['source_identifier'] = (string) Str::uuid();
-        $copy['journal_idempotency_key'] = (string) Str::uuid();
-        $copy['integration_checksum'] = str_repeat('A', 64);
-        try {
-            DB::transaction(fn () => DB::table('club_accounting_source_integrations')->insert($copy));
-            $this->fail('Uppercase checksum content must be rejected.');
-        } catch (QueryException) {
-            $this->addToAssertionCount(1);
         }
     }
 
@@ -659,20 +602,20 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
         CarbonImmutable::setTestNow('2027-07-06 10:00:00');
         $config->revokeActivation($activation, $f['actor'], 'HIST-REVOKE', 'Stopped');
         try {
-            app(SourceAccountingIntegrationService::class)->validatePaymentReplay($covered);
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $covered->fresh()));
             $this->fail('Historically required missing linkage must fail.');
         } catch (AccountingIntegrationException) {
             $this->addToAssertionCount(1);
         }
         $post = MemberPayment::create(['club_id' => $f['club']->id, 'member_id' => $f['member']->id, 'amount_paise' => 100, 'payment_date' => '2027-07-06', 'payment_mode' => 'bank_transfer', 'idempotency_key' => (string) Str::uuid(), 'request_hash' => str_repeat('b', 64), 'status' => 'recorded', 'recorded_by_user_id' => $f['actor']->id]);
-        DB::transaction(fn () => app(SourceAccountingIntegrationService::class)->recordPaymentCoverageDecision($post, $f['actor']));
-        $this->assertNull(app(SourceAccountingIntegrationService::class)->validatePaymentReplay($post));
+        app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->recordPaymentCoverageDecisionWithin($context, $post, $f['actor']));
+        $this->assertNull(app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $post->fresh())));
 
         $legacy = $this->fixture();
         $legacyCharge = app(FinanceWriteService::class)->issue($legacy['actor'], $legacy['club'], $this->draftCharge($legacy), 1);
         app(AccountingIntegrationConfigurationService::class)->map($legacy['club']->id, 'member_charge', 'membership_dues', $legacy['income'], 'MAP-V1', '2027-07-01', 'PRE-MAP', $legacy['actor']);
         app(AccountingIntegrationConfigurationService::class)->activate($legacy['club']->id, 'member_charge', '2027-07-10', 'MAP-V1', 'PRE-ACT', $legacy['actor']);
-        $this->assertNull(app(SourceAccountingIntegrationService::class)->validateChargeReplay($legacyCharge));
+        $this->assertNull(app(OrganisationTransactionGuard::class)->run($legacy['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validateChargeReplayWithin($context, $legacyCharge)));
     }
 
     public function test_source_and_journal_idempotency_are_separate_and_lifecycle_misuse_fails(): void
@@ -691,13 +634,13 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
 
         $draft = $this->draftCharge($f);
         try {
-            DB::transaction(fn () => app(SourceAccountingIntegrationService::class)->postCharge($draft, $f['actor']));
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->postChargeWithin($context, $draft, $f['actor']));
             $this->fail('Draft direct posting must fail.');
         } catch (AccountingIntegrationException) {
             $this->addToAssertionCount(1);
         }
         try {
-            DB::transaction(fn () => app(SourceAccountingIntegrationService::class)->reverse($f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), '2027-07-06', $f['actor'], 'Invalid direct reversal'));
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->reverseWithin($context, $f['club']->id, 'member_charge', $charge->public_id, $charge->issued_at->toDateString(), $charge->issued_at->toISOString(), '2027-07-06', $f['actor'], 'Invalid direct reversal'));
             $this->fail('Issued direct reversal must fail.');
         } catch (AccountingIntegrationException) {
             $this->addToAssertionCount(1);
@@ -755,9 +698,6 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
 
     public function test_reconciliation_detects_child_binding_key_checksum_and_binding_corruption(): void
     {
-        if (DB::getDriverName() !== 'sqlite') {
-            $this->markTestSkipped('Controlled corrupt-fixture test uses a disposable SQLite trigger override.');
-        }
         $f = $this->fixture();
         $this->enable($f);
         $write = app(FinanceWriteService::class);
@@ -767,44 +707,40 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
         $otherMember = Member::create(['club_id' => $f['club']->id, 'member_code' => 'M002', 'full_name' => 'Other', 'status' => 'active']);
         $changedMember = Member::create(['club_id' => $f['club']->id, 'member_code' => 'M003', 'full_name' => 'Changed', 'status' => 'active']);
         $otherObligation = MemberCharge::create(['club_id' => $f['club']->id, 'club_charge_id' => $charge->id, 'member_id' => $otherMember->id, 'original_amount_paise' => 50000]);
-        PaymentAllocation::where('member_payment_id', $payment->id)->update(['member_charge_id' => $otherObligation->id]);
-        $obligation->update(['member_id' => $changedMember->id, 'original_amount_paise' => 25000]);
-
-        DB::unprepared('DROP TRIGGER club_accounting_source_integrations_immutable_update');
-        try {
-            $integration = ClubAccountingSourceIntegration::where('source_type', 'member_charge')->firstOrFail();
-            DB::table('club_accounting_source_integrations')->where('id', $integration->id)->update(['canonical_source_key' => 'corrupt', 'integration_checksum' => str_repeat('A', 64), 'source_binding' => json_encode(['corrupt' => true])]);
-            DB::table('club_journal_lines')->where('journal_entry_id', $integration->journal_entry_id)->where('line_number', 1)->update(['line_number' => 99]);
-            DB::table('club_journal_lines')->where('journal_entry_id', $integration->journal_entry_id)->where('line_number', 2)->update(['line_number' => 1]);
-            DB::table('club_journal_lines')->where('journal_entry_id', $integration->journal_entry_id)->where('line_number', 99)->update(['line_number' => 2]);
-            $types = collect(app(AccountingIntegrationReconciliationService::class)->defects($f['club']->id))->pluck('type');
-            $this->assertTrue($types->contains('canonical_source_binding_mismatch'));
-            $this->assertTrue($types->contains('canonical_source_key_mismatch'));
-            $this->assertTrue($types->contains('integration_checksum_mismatch'));
-            $this->assertTrue($types->contains('journal_lines_mismatch'));
-        } finally {
-            DB::unprepared("CREATE TRIGGER club_accounting_source_integrations_immutable_update BEFORE UPDATE ON club_accounting_source_integrations BEGIN SELECT RAISE(ABORT, 'club_accounting_source_integrations_immutable'); END");
-        }
+        $allocation = PaymentAllocation::where('club_id', $f['club']->id)->where('member_payment_id', $payment->id)->firstOrFail();
+        $integration = ClubAccountingSourceIntegration::where('club_id', $f['club']->id)->where('source_type', 'member_charge')->firstOrFail();
+        $lines = DB::table('club_journal_lines')->where('club_id', $f['club']->id)->where('journal_entry_id', $integration->journal_entry_id)->orderBy('line_number')->get();
+        (new DisposableCorruptionFixture)->corrupt($f['club'], [
+            ['table' => 'payment_allocations', 'id' => $allocation->id, 'values' => ['member_charge_id' => $otherObligation->id]],
+            ['table' => 'member_charges', 'id' => $obligation->id, 'values' => ['member_id' => $changedMember->id, 'original_amount_paise' => 25000]],
+            ['table' => 'club_accounting_source_integrations', 'id' => $integration->id, 'values' => ['canonical_source_key' => 'corrupt', 'integration_checksum' => str_repeat('f', 64), 'source_binding' => json_encode(['corrupt' => true])]],
+            ['table' => 'club_journal_lines', 'id' => (int) $lines[0]->id, 'values' => ['line_number' => 99]],
+            ['table' => 'club_journal_lines', 'id' => (int) $lines[1]->id, 'values' => ['line_number' => 1]],
+            ['table' => 'club_journal_lines', 'id' => (int) $lines[0]->id, 'values' => ['line_number' => 2]],
+        ]);
+        (new DisposableCorruptionFixture)->assertRestored();
+        $types = collect(app(AccountingIntegrationReconciliationService::class)->defects($f['club']->id))->pluck('type');
+        $this->assertTrue($types->contains('canonical_source_binding_mismatch'));
+        $this->assertTrue($types->contains('canonical_source_key_mismatch'));
+        $this->assertTrue($types->contains('integration_checksum_mismatch'));
+        $this->assertTrue($types->contains('journal_lines_mismatch'));
     }
 
     public function test_exact_replay_rejects_every_material_source_and_journal_corruption(): void
     {
-        if (DB::getDriverName() !== 'sqlite') {
-            $this->markTestSkipped('Controlled replay corruption uses disposable SQLite fixtures.');
-        }
 
         $cases = [
-            ['payment', 'payment date', fn (MemberPayment $source, ClubAccountingSourceIntegration $integration) => DB::table('member_payments')->where('id', $source->id)->update(['payment_date' => '2027-07-07'])],
-            ['charge', 'charge issued date', fn (ClubCharge $source, ClubAccountingSourceIntegration $integration) => DB::table('club_charges')->where('id', $source->id)->update(['issued_at' => '2027-07-06 10:00:00'])],
-            ['charge', 'canonical source key', fn (ClubCharge $source, ClubAccountingSourceIntegration $integration) => DB::table('club_charges')->where('id', $source->id)->update(['category' => 'service_activity'])],
-            ['payment', 'source amount', fn (MemberPayment $source, ClubAccountingSourceIntegration $integration) => DB::table('member_payments')->where('id', $source->id)->update(['amount_paise' => 49999])],
-            ['payment', 'source request idempotency key', fn (MemberPayment $source, ClubAccountingSourceIntegration $integration) => DB::table('member_payments')->where('id', $source->id)->update(['idempotency_key' => (string) Str::uuid()])],
-            ['charge', 'journal source event', fn (ClubCharge $source, ClubAccountingSourceIntegration $integration) => DB::table('club_journal_entries')->where('id', $integration->journal_entry_id)->update(['source_event' => 'corrupt'])],
-            ['charge', 'journal idempotency key', fn (ClubCharge $source, ClubAccountingSourceIntegration $integration) => DB::table('club_journal_entries')->where('id', $integration->journal_entry_id)->update(['idempotency_key' => (string) Str::uuid()])],
-            ['charge', 'journal metadata checksum', function (ClubCharge $source, ClubAccountingSourceIntegration $integration): void {
+            ['payment', 'payment date', fn (MemberPayment $source, ClubAccountingSourceIntegration $integration) => ['table' => 'member_payments', 'id' => $source->id, 'values' => ['payment_date' => '2027-07-07']]],
+            ['charge', 'charge issued date', fn (ClubCharge $source, ClubAccountingSourceIntegration $integration) => ['table' => 'club_charges', 'id' => $source->id, 'values' => ['issued_at' => '2027-07-06 10:00:00']]],
+            ['charge', 'canonical source key', fn (ClubCharge $source, ClubAccountingSourceIntegration $integration) => ['table' => 'club_charges', 'id' => $source->id, 'values' => ['category' => 'service_activity']]],
+            ['payment', 'source amount', fn (MemberPayment $source, ClubAccountingSourceIntegration $integration) => ['table' => 'member_payments', 'id' => $source->id, 'values' => ['amount_paise' => 49999]]],
+            ['payment', 'source request idempotency key', fn (MemberPayment $source, ClubAccountingSourceIntegration $integration) => ['table' => 'member_payments', 'id' => $source->id, 'values' => ['idempotency_key' => (string) Str::uuid()]]],
+            ['charge', 'journal source event', fn (ClubCharge $source, ClubAccountingSourceIntegration $integration) => ['table' => 'club_journal_entries', 'id' => $integration->journal_entry_id, 'values' => ['source_event' => 'corrupt']]],
+            ['charge', 'journal idempotency key', fn (ClubCharge $source, ClubAccountingSourceIntegration $integration) => ['table' => 'club_journal_entries', 'id' => $integration->journal_entry_id, 'values' => ['idempotency_key' => (string) Str::uuid()]]],
+            ['charge', 'journal metadata checksum', function (ClubCharge $source, ClubAccountingSourceIntegration $integration): array {
                 $metadata = $integration->journalEntry->metadata;
                 $metadata['integration_checksum'] = str_repeat('f', 64);
-                DB::table('club_journal_entries')->where('id', $integration->journal_entry_id)->update(['metadata' => json_encode($metadata, JSON_THROW_ON_ERROR)]);
+                return ['table' => 'club_journal_entries', 'id' => $integration->journal_entry_id, 'values' => ['metadata' => json_encode($metadata, JSON_THROW_ON_ERROR)]];
             }],
         ];
 
@@ -817,11 +753,12 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
                 ? $charge
                 : $write->recordPayment($f['actor'], $f['club'], $f['member'], $this->paymentPayload(MemberCharge::where('club_charge_id', $charge->id)->firstOrFail()))['payment'];
             $integration = ClubAccountingSourceIntegration::with('journalEntry')->where('club_id', $f['club']->id)->where('source_type', "member_{$type}")->firstOrFail();
-            $corrupt($source, $integration);
+            (new DisposableCorruptionFixture)->corrupt($f['club'], [$corrupt($source, $integration)]);
+            (new DisposableCorruptionFixture)->assertRestored();
 
             try {
                 $service = app(SourceAccountingIntegrationService::class);
-                $type === 'charge' ? $service->validateChargeReplay($source->fresh()) : $service->validatePaymentReplay($source->fresh());
+                app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => $type === 'charge' ? $service->validateChargeReplayWithin($context, $source->fresh()) : $service->validatePaymentReplayWithin($context, $source->fresh()));
                 $this->fail("Replay must reject {$label} corruption.");
             } catch (AccountingIntegrationConflictException) {
                 $this->addToAssertionCount(1);
@@ -831,31 +768,45 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
 
     public function test_reconciliation_independently_detects_coverage_decision_corruption(): void
     {
-        if (DB::getDriverName() !== 'sqlite') {
-            $this->markTestSkipped('Controlled decision corruption uses disposable SQLite trigger overrides.');
-        }
         $f = $this->fixture();
         $this->enable($f);
         $write = app(FinanceWriteService::class);
         $charge = $write->issue($f['actor'], $f['club'], $this->draftCharge($f), 1);
         $payment = $write->recordPayment($f['actor'], $f['club'], $f['member'], $this->paymentPayload(MemberCharge::firstOrFail()))['payment'];
         $activation = ClubAccountingIntegrationActivation::where('club_id', $f['club']->id)->where('source_type', 'member_charge')->firstOrFail();
-        DB::unprepared('DROP TRIGGER club_accounting_source_coverage_decisions_immutable_update');
-        DB::unprepared('DROP TRIGGER club_accounting_source_coverage_decisions_immutable_delete');
-        try {
-            DB::table('club_accounting_source_coverage_decisions')->where('source_identifier', $charge->public_id)->update(['integration_required' => false, 'decision_reason' => 'before_coverage']);
-            DB::table('club_accounting_source_coverage_decisions')->where('source_identifier', $payment->public_id)->delete();
-            $missingIntegration = ClubCharge::create(['club_id' => $f['club']->id, 'title' => 'Missing integration', 'category' => 'membership_dues', 'amount_paise' => 100, 'due_date' => '2027-07-31', 'financial_year' => '2027-28', 'status' => 'issued', 'assignment_member_ids' => [$f['member']->id], 'created_by_user_id' => $f['actor']->id, 'issued_at' => now(), 'issued_by_user_id' => $f['actor']->id, 'lock_version' => 2]);
-            DB::table('club_accounting_source_coverage_decisions')->insert(['public_id' => (string) Str::uuid(), 'club_id' => $f['club']->id, 'source_type' => 'member_charge', 'source_identifier' => $missingIntegration->public_id, 'accounting_date' => '2027-07-04', 'integration_required' => true, 'integration_activation_id' => $activation->id, 'terminal_activation_event_id' => null, 'decision_reason' => 'integration_required', 'decided_by_user_id' => $f['actor']->id, 'decided_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
-            DB::table('club_accounting_source_coverage_decisions')->insert(['public_id' => (string) Str::uuid(), 'club_id' => $f['club']->id, 'source_type' => 'member_charge', 'source_identifier' => (string) Str::uuid(), 'accounting_date' => '2027-07-05', 'integration_required' => false, 'integration_activation_id' => null, 'terminal_activation_event_id' => null, 'decision_reason' => 'not_activated', 'decided_by_user_id' => $f['actor']->id, 'decided_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
-            $types = collect(app(AccountingIntegrationReconciliationService::class)->defects($f['club']->id))->pluck('type');
-            foreach (['outside_coverage_source_has_integration', 'source_without_coverage_decision', 'covered_source_without_integration', 'coverage_decision_source_missing', 'coverage_decision_source_mismatch'] as $type) {
-                $this->assertTrue($types->contains($type), $type);
-            }
-        } finally {
-            DB::unprepared("CREATE TRIGGER club_accounting_source_coverage_decisions_immutable_update BEFORE UPDATE ON club_accounting_source_coverage_decisions BEGIN SELECT RAISE(ABORT, 'club_accounting_source_coverage_decisions_immutable'); END");
-            DB::unprepared("CREATE TRIGGER club_accounting_source_coverage_decisions_immutable_delete BEFORE DELETE ON club_accounting_source_coverage_decisions BEGIN SELECT RAISE(ABORT, 'club_accounting_source_coverage_decisions_immutable'); END");
+        app(OrganisationTransactionGuard::class)->run($f['club'], function ($context) use ($f, $activation): void {
+        $missingIntegration = ClubCharge::create(['club_id' => $f['club']->id, 'title' => 'Missing integration', 'category' => 'membership_dues', 'amount_paise' => 100, 'due_date' => '2027-07-31', 'financial_year' => '2027-28', 'status' => 'issued', 'assignment_member_ids' => [$f['member']->id], 'created_by_user_id' => $f['actor']->id, 'issued_at' => now(), 'issued_by_user_id' => $f['actor']->id, 'lock_version' => 2]);
+        DB::table('club_accounting_source_coverage_decisions')->insert(['public_id' => (string) Str::uuid(), 'club_id' => $f['club']->id, 'source_type' => 'member_charge', 'source_identifier' => $missingIntegration->public_id, 'accounting_date' => '2027-07-04', 'integration_required' => true, 'integration_activation_id' => $activation->id, 'terminal_activation_event_id' => null, 'decision_reason' => 'integration_required', 'decided_by_user_id' => $f['actor']->id, 'decided_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('club_accounting_source_coverage_decisions')->insert(['public_id' => (string) Str::uuid(), 'club_id' => $f['club']->id, 'source_type' => 'member_charge', 'source_identifier' => (string) Str::uuid(), 'accounting_date' => '2027-07-05', 'integration_required' => false, 'integration_activation_id' => null, 'terminal_activation_event_id' => null, 'decision_reason' => 'not_activated', 'decided_by_user_id' => $f['actor']->id, 'decided_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        });
+        $chargeDecision = DB::table('club_accounting_source_coverage_decisions')->where('club_id', $f['club']->id)->where('source_identifier', $charge->public_id)->first();
+        $paymentDecision = DB::table('club_accounting_source_coverage_decisions')->where('club_id', $f['club']->id)->where('source_identifier', $payment->public_id)->first();
+        (new DisposableCorruptionFixture)->corrupt($f['club'], [
+            ['table' => 'club_accounting_source_coverage_decisions', 'id' => (int) $chargeDecision->id, 'values' => ['integration_required' => false, 'decision_reason' => 'before_coverage']],
+            ['table' => 'club_accounting_source_coverage_decisions', 'id' => (int) $paymentDecision->id, 'delete' => true],
+        ]);
+        (new DisposableCorruptionFixture)->assertRestored();
+        $types = collect(app(AccountingIntegrationReconciliationService::class)->defects($f['club']->id))->pluck('type');
+        foreach (['outside_coverage_source_has_integration', 'source_without_coverage_decision', 'covered_source_without_integration', 'coverage_decision_source_missing', 'coverage_decision_source_mismatch'] as $type) {
+            $this->assertTrue($types->contains($type), $type);
         }
+    }
+
+    public function test_context_replay_rejects_a_stale_source_version_without_financial_effects(): void
+    {
+        $f = $this->fixture();
+        $payment = MemberPayment::create(['club_id' => $f['club']->id, 'member_id' => $f['member']->id, 'amount_paise' => 100, 'payment_date' => '2027-07-05', 'payment_mode' => 'bank_transfer', 'idempotency_key' => (string) Str::uuid(), 'request_hash' => str_repeat('a', 64), 'status' => 'recorded', 'recorded_by_user_id' => $f['actor']->id])->fresh();
+        $before = ClubJournalEntry::count();
+        DB::table('member_payments')->where('id', $payment->id)->update(['lock_version' => $payment->lock_version + 1]);
+        try {
+            app(OrganisationTransactionGuard::class)->run($f['club'], fn ($context) => app(SourceAccountingIntegrationService::class)->validatePaymentReplayWithin($context, $payment));
+            $this->fail('A stale replay version must not be rebound.');
+        } catch (AccountingIntegrationConflictException $exception) {
+            $this->assertSame('The source replay version changed.', $exception->getMessage());
+        }
+        $this->assertSame($before, ClubJournalEntry::count());
+        $this->assertSame(0, ClubAccountingSourceIntegration::count());
+        $this->assertSame(0, DB::transactionLevel());
     }
 
     private function fixture(): array
@@ -864,6 +815,7 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends TestCase
         $actor = User::factory()->create();
         $sequence = Club::count() + 1;
         $club = Club::create(['name' => 'Beenachi '.$sequence, 'code' => 'LCB'.$sequence, 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]);
         $member = Member::create(['club_id' => $club->id, 'member_code' => 'M001', 'full_name' => 'Member One', 'status' => 'active']);
         $accounts = [];
         foreach ([['receivable', 'MEMBER-RECEIVABLES', 'asset', 'debit'], ['bank', 'BANK-OPERATING', 'asset', 'debit'], ['income', 'INCOME-MEMBERSHIP-DUES', 'income', 'credit'], ['equity', 'OPENING-BALANCE-EQUITY', 'equity', 'credit']] as [$key, $code, $type, $normal]) {

@@ -10,6 +10,7 @@ use App\Services\Finance\Exceptions\ClubExpenseConflictException;
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 $app = require dirname(__DIR__, 2).'/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+Tests\Support\FinancialWorkerSafety::assert(['lcb_3iizv_expense_concurrency_test','lcb_3ijab_replay_provenance_hardening_test']);
 
 [$requestPath, $barrier, $worker] = array_slice($argv, 1);
 $request = json_decode((string) file_get_contents($requestPath), true, flags: JSON_THROW_ON_ERROR);

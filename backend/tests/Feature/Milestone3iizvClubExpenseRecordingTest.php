@@ -17,17 +17,15 @@ use App\Models\User;
 use App\Services\Finance\ClubJournalPostingService;
 use App\Services\Finance\JournalLineInput;
 use App\Services\Finance\JournalPostingRequest;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use LogicException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3iizvClubExpenseRecordingTest extends TestCase
+class Milestone3iizvClubExpenseRecordingTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
 
     public function test_expense_posts_once_and_flows_into_the_canonical_statement(): void
     {
@@ -129,6 +127,7 @@ class Milestone3iizvClubExpenseRecordingTest extends TestCase
     private function fixture(string $suffix): array
     {
         $club = Club::create(['name' => "Expense Club {$suffix}", 'code' => "EXP{$suffix}", 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]);
         $officer = User::factory()->create();
         $permissions = collect(['finance.club.expenses.create', 'finance.club.statement.view'])->map(fn ($slug) => Permission::firstOrCreate(['slug' => $slug], ['name' => $slug, 'group' => 'finance', 'description' => $slug]));
         $role = Role::create(['name' => "Treasurer {$suffix}", 'slug' => 'treasurer-'.strtolower($suffix), 'description' => 'Treasurer']); $role->permissions()->attach($permissions->pluck('id'));
