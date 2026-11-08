@@ -90,5 +90,15 @@ Initial corrected evidence:
 - `%TEMP%/lc-p02b2f1-security.xml`: 87 passed /1,491 assertions, failures/errors/skips 0,
   in-memory SQLite only.
 
+The first committed-tree Integration attempt executed only the D/E focused group:
+48 executed, 47 passed, 0 failures, 1 error, 0 skips, 666 assertions. Evidence:
+`%TEMP%/lc-p02b2-integration-911751c6d8ac43c2a3641c3fd0eab675/`, shutdown 0.
+The new connection fixture detached PDO but did not restore audit availability;
+the unchanged recorder correctly surfaced an indeterminate terminal-audit failure.
+The fixture now explicitly reconnects before throwing, testing the intended case:
+an available replacement PDO cannot establish the original root's rollback. No
+application change or historical assertion was made to resolve this fixture error.
+This is manager-connection replacement fault injection, not a wire-level partition.
+
 Final integration, B1, canonical finance, CI, source comparisons and recommendations
 will be recorded after completion. No merge or Ready-for-Review action is authorised.

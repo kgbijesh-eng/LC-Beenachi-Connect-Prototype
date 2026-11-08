@@ -189,6 +189,9 @@ class CutoverOpeningEnforcementTest extends CutoverPostgresTestCase
             if (! $fired && Success::count() === 1) {
                 $fired = true;
                 DB::disconnect();
+                // Explicitly restore audit availability on a different PDO. A null
+                // connection instead correctly surfaces an audit-writer failure.
+                DB::reconnect();
                 throw new \RuntimeException('Connection lost after commit');
             }
         });
