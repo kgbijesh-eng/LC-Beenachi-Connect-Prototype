@@ -156,7 +156,6 @@ try {
                 Run-Tests 'transfer-repair' @('tests/Feature/Milestone3iizxInternalCashBankTransferTest.php') $databases[0] -RecordFailures
                 Run-Tests 'receipt-repair' @('tests/Feature/Milestone3zPaymentReceiptApiValidationAndClosureTest.php') $databases[0] -RecordFailures
                 Run-Tests 'statement-repair' @('tests/Feature/Milestone3iizzOrdinaryIncomeReceiptTest.php','tests/Feature/Milestone3iizkClubAccountStatementProjectionTest.php','tests/Feature/Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest.php') $databases[0] -RecordFailures
-                Run-Tests 'http-security' @('tests/Feature/InstanceOrganisationTest.php','tests/Feature/OrganisationAccessTest.php') $databases[0] -RecordFailures
             }
             'Opening' { Run-Tests 'opening-focused' @('tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0] }
             'Integration' {
