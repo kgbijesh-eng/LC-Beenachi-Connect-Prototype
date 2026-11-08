@@ -185,11 +185,11 @@ try {
             }
             'Guard' { Run-Tests 'guard' @('tests/Feature/OrganisationTransactionGuardTest.php') $databases[0] }
             'Finance' {
-                Run-Tests 'acceptance' @('tests/Feature/Milestone3ijaeOrdinaryIncomeReceiptCorrectionTest.php') $databases[0]
-                Run-Tests 'finance-concurrency' @('tests/Feature/Milestone3ijaePostgresOrdinaryIncomeReceiptCorrectionConcurrencyTest.php') $databases[0]
-                Run-Tests 'transactional' @('tests/Feature/DefaultRolesAndPermissionsSeederTest.php','tests/Feature/ClubPermissionServiceTest.php','tests/Feature/ClubPermissionMiddlewareTest.php','tests/Feature/Milestone3iicCoreJournalPostingServiceTest.php','tests/Feature/Milestone3iieInternalJournalReversalServiceTest.php','tests/Feature/Milestone3iizkACanonicalAccountingMetadataFundAttributionTest.php') $databases[0]
-                Run-Tests 'receipts-statements' @('tests/Feature/Milestone3iizzOrdinaryIncomeReceiptTest.php','tests/Feature/Milestone3iizkClubAccountStatementProjectionTest.php','tests/Feature/Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest.php') $databases[0]
-                Run-Tests 'snapshot-concurrency' @('tests/Feature/Milestone3iiztPostgresStatementSnapshotConcurrencyTest.php') $databases[1]
+                Run-Tests 'acceptance' @('tests/Feature/Milestone3ijaeOrdinaryIncomeReceiptCorrectionTest.php') $databases[0] -RecordFailures
+                Run-Tests 'finance-concurrency' @('tests/Feature/Milestone3ijaePostgresOrdinaryIncomeReceiptCorrectionConcurrencyTest.php') $databases[0] -RecordFailures
+                Run-Tests 'transactional' @('tests/Feature/DefaultRolesAndPermissionsSeederTest.php','tests/Feature/ClubPermissionServiceTest.php','tests/Feature/ClubPermissionMiddlewareTest.php','tests/Feature/Milestone3iicCoreJournalPostingServiceTest.php','tests/Feature/Milestone3iieInternalJournalReversalServiceTest.php','tests/Feature/Milestone3iizkACanonicalAccountingMetadataFundAttributionTest.php') $databases[0] -RecordFailures
+                Run-Tests 'receipts-statements' @('tests/Feature/Milestone3iizzOrdinaryIncomeReceiptTest.php','tests/Feature/Milestone3iizkClubAccountStatementProjectionTest.php','tests/Feature/Milestone3iizlClubAccountStatementProjectionValidationAndClosureTest.php') $databases[0] -RecordFailures
+                Run-Tests 'snapshot-concurrency' @('tests/Feature/Milestone3iiztPostgresStatementSnapshotConcurrencyTest.php') $databases[1] -RecordFailures
             }
         }
     } finally { Pop-Location }
@@ -197,7 +197,7 @@ try {
     foreach ($file in $sourcePaths) { if ((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -cne $before[$file.FullName]) { throw 'Source changed during validation.' } }
     $evidence.source_hashes_unchanged=$true
     $evidence.status='PASS'
-    if ($evidence.recorded_test_failure) { $evidence.status='FAILED_OR_BLOCKED'; $evidence.reason='Mixed-order concurrency assertions did not fully pass. Merge NO-GO.' }
+    if ($evidence.recorded_test_failure) { $evidence.status='FAILED_OR_BLOCKED'; $evidence.reason='Recorded test failures, errors or skips prevent acceptance. Merge NO-GO.' }
     if ($Suite -in @('C','Integration') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
         $evidence.mixed_order_deadlock_observed=$true
         $evidence.status='FAILED_OR_BLOCKED';$evidence.reason='PostgreSQL observed a mixed-order deadlock. Merge NO-GO regardless of victim outcomes.'
