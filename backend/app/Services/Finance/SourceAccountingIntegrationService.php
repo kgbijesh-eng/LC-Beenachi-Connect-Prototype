@@ -235,8 +235,9 @@ final class SourceAccountingIntegrationService
         if ($existing) {
             return $this->validateCommittedReplay($existing, ['club_id' => $clubId, 'source_type' => $sourceType, 'source_id' => $sourceId, 'source_version' => $sourceVersion, 'date' => $date, 'source_key' => $sourceKey, 'amount' => $amount, 'request_key' => $sourceRequestKey, 'binding' => $binding, 'terminal' => false]);
         }
-        $activation = $this->activation($clubId, $sourceType, true);
-        if (! $activation || $date < $activation->coverage_start_date->format('Y-m-d')) {
+        $selection = $this->newSourceActivation($context, $clubId, $sourceType);
+        $activation = $selection['activation'];
+        if (! $selection['current'] || ! $activation || $date < $activation->coverage_start_date->format('Y-m-d')) {
             throw new AccountingIntegrationException('Accounting integration is not enabled for the source date.');
         }
         $coverage = DB::table('club_accounting_source_coverage_decisions')->where('club_id', $clubId)->where('source_type', $sourceType)->where('source_identifier', $sourceId)->lockForUpdate()->first();
@@ -376,6 +377,43 @@ final class SourceAccountingIntegrationService
         return $rows->first();
     }
 
+    /**
+     * Resolve configuration only for a new financial decision/posting. Historical
+     * replay deliberately continues to use its immutable persisted references.
+     *
+     * @return array{activation: ?ClubAccountingIntegrationActivation, current: bool}
+     */
+    private function newSourceActivation(OrganisationTransactionContext $context, int $clubId, string $sourceType): array
+    {
+        $context->assertUsable($clubId);
+        $history = ClubAccountingIntegrationActivation::query()->with('events')
+            ->where('club_id', $clubId)->where('source_type', $sourceType)
+            ->orderBy('id')->lockForUpdate()->get();
+        $slot = DB::table('club_accounting_integration_current_activations')
+            ->where('club_id', $clubId)->where('source_type', $sourceType)
+            ->lockForUpdate()->first();
+        $live = $history->reject(fn ($row) => $row->events->whereIn('event_type', ['revoked', 'invalidated'])->isNotEmpty());
+
+        if ($slot) {
+            $activation = $history->firstWhere('id', $slot->integration_activation_id);
+            if (! $activation || $slot->club_id !== $clubId || $slot->source_type !== $sourceType
+                || $activation->club_id !== $clubId || $activation->source_type !== $sourceType
+                || $live->count() !== 1 || $live->first()->id !== $activation->id) {
+                throw new AccountingIntegrationException('The current accounting activation is inconsistent or ambiguous.');
+            }
+
+            return ['activation' => $activation, 'current' => true];
+        }
+
+        // No arbitrary historical fallback: only no history or one terminal
+        // generation has an established uncovered-decision interpretation.
+        if ($live->isNotEmpty() || $history->count() > 1) {
+            throw new AccountingIntegrationException('Accounting coverage without a current activation is ambiguous.');
+        }
+
+        return ['activation' => $history->first(), 'current' => false];
+    }
+
     private function mapping(ClubAccountingIntegrationActivation $activation, string $key, string $date, string $type): ClubAccountingSourceMapping
     {
         $rows = ClubAccountingSourceMapping::query()->with('events')->where('club_id', $activation->club_id)->where('source_type', $activation->source_type)->where('canonical_source_key', $key)->where('mapping_version', $activation->mapping_version)->where('effective_date', '<=', $date)->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>=', $date))->lockForUpdate()->get()->reject(fn ($row) => $row->events->whereIn('event_type', ['revoked', 'invalidated'])->isNotEmpty());
@@ -423,7 +461,7 @@ final class SourceAccountingIntegrationService
         if ($existing) {
             return (bool) $existing->integration_required;
         }
-        $activation = ClubAccountingIntegrationActivation::query()->with('events')->where('club_id', $clubId)->where('source_type', $sourceType)->lockForUpdate()->first();
+        $activation = $this->newSourceActivation($context, $clubId, $sourceType)['activation'];
         $terminal = $activation?->events->whereIn('event_type', ['revoked', 'invalidated'])->sortBy('id')->first();
         if (! $activation) {
             [$required, $reason, $terminalId] = [false, 'not_activated', null];

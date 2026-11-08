@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Finance;
 
 use App\Models\AuditLog;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Models\Club;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingIntegrationActivation;
@@ -75,8 +77,7 @@ final class AccountingIntegrationProposalService
 
     public function propose(Club $club, User $actor, array $data): ClubAccountingIntegrationProposal
     {
-        return DB::transaction(function () use ($club, $actor, $data): ClubAccountingIntegrationProposal {
-            $this->configuration->configurationLock($club->id);
+        return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $actor, $data): ClubAccountingIntegrationProposal {
             $role = $this->authority($club, $actor);
             $material = $this->normalizedMaterial($club, $data);
             $checksum = $this->checksum(array_merge($material, ['club_id'=>$club->id,'proposer_user_id'=>$actor->id,'proposer_role_slug'=>$role]));
@@ -95,7 +96,7 @@ final class AccountingIntegrationProposalService
             ]));
             $this->audit($proposal, $actor, 'proposed', null, [], $this->proposalState($proposal));
             return $proposal;
-        });
+        }, 1);
     }
 
     public function approve(Club $club, User $actor, ClubAccountingIntegrationProposal $proposal, int $lockVersion, ?string $reason): ClubAccountingIntegrationProposal
@@ -116,8 +117,7 @@ final class AccountingIntegrationProposalService
 
     private function terminal(Club $club, User $actor, ClubAccountingIntegrationProposal $proposal, int $lockVersion, string $decision, ?string $reason): ClubAccountingIntegrationProposal
     {
-        return DB::transaction(function () use ($club, $actor, $proposal, $lockVersion, $decision, $reason): ClubAccountingIntegrationProposal {
-            $this->configuration->configurationLock($club->id);
+        return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $actor, $proposal, $lockVersion, $decision, $reason): ClubAccountingIntegrationProposal {
             $locked = ClubAccountingIntegrationProposal::query()->whereKey($proposal->id)->where('club_id', $club->id)->lockForUpdate()->firstOrFail();
             $role = $this->authority($club, $actor);
             if ($locked->status !== 'pending' || $locked->lock_version !== $lockVersion || $locked->decision()->exists()) throw new AccountingIntegrationConflictException('The proposal is terminal or its lock version is stale.');
@@ -126,7 +126,7 @@ final class AccountingIntegrationProposalService
             $this->assertIntegrity($locked);
             if ($decision === 'approved') $this->assertApprovalFresh($locked);
             $before = ['proposal'=>$this->proposalState($locked),'configuration'=>$this->configurationSnapshot($locked->club_id)];
-            try { $result = $decision === 'approved' ? $this->apply($locked, $actor) : null; }
+            try { $result = $decision === 'approved' ? $this->apply($context, $locked, $actor) : null; }
             catch (AccountingIntegrationConflictException $exception) { throw $exception; }
             catch (AccountingIntegrationException $exception) { throw new AccountingIntegrationConflictException($exception->getMessage(), previous: $exception); }
             $locked->status = $decision; $locked->lock_version++; $locked->decided_at = now(); $locked->save();
@@ -138,34 +138,34 @@ final class AccountingIntegrationProposalService
             ]);
             $this->audit($locked, $actor, $decision, $reason, $before, $after, $result);
             return $locked->fresh(['decision']);
-        });
+        }, 1);
     }
 
-    private function apply(ClubAccountingIntegrationProposal $proposal, User $actor): Model
+    private function apply(OrganisationTransactionContext $context, ClubAccountingIntegrationProposal $proposal, User $actor): Model
     {
         if (in_array($proposal->proposal_type, ['mapping_create', 'mapping_replace'], true)) {
             $account = LedgerAccount::query()->whereKey($proposal->ledger_account_id)->where('club_id', $proposal->club_id)->lockForUpdate()->firstOrFail();
             if ($proposal->proposal_type === 'mapping_replace' && $proposal->mapping_id) {
                 $old = ClubAccountingSourceMapping::query()->whereKey($proposal->mapping_id)->where('club_id', $proposal->club_id)->lockForUpdate()->firstOrFail();
-                if (! $old->events()->exists()) $this->configuration->revokeMapping($old, $actor, $proposal->reference.'-replace', 'Approved mapping replacement.');
+                if (! $old->events()->exists()) $this->configuration->revokeMappingWithin($context, $old, $actor, $proposal->reference.'-replace', 'Approved mapping replacement.');
             }
-            return $this->configuration->map($proposal->club_id, $proposal->source_type, $proposal->source_key, $account, $proposal->mapping_version, $proposal->effective_date->format('Y-m-d'), $proposal->reference, $actor, $proposal->expires_at?->format('Y-m-d'));
+            return $this->configuration->mapWithin($context, $proposal->club_id, $proposal->source_type, $proposal->source_key, $account, $proposal->mapping_version, $proposal->effective_date->format('Y-m-d'), $proposal->reference, $actor, $proposal->expires_at?->format('Y-m-d'));
         }
         if ($proposal->proposal_type === 'mapping_revocation') {
             $mapping = ClubAccountingSourceMapping::query()->whereKey($proposal->mapping_id)->where('club_id', $proposal->club_id)->lockForUpdate()->firstOrFail();
-            return $this->configuration->revokeMapping($mapping, $actor, $proposal->reference, (string) $proposal->reason);
+            return $this->configuration->revokeMappingWithin($context, $mapping, $actor, $proposal->reference, (string) $proposal->reason);
         }
         if ($proposal->proposal_type === 'activation_revocation') {
             $activation = ClubAccountingIntegrationActivation::query()->whereKey($proposal->activation_id)->where('club_id', $proposal->club_id)->lockForUpdate()->firstOrFail();
-            return $this->configuration->revokeActivation($activation, $actor, $proposal->reference, (string) $proposal->reason);
+            return $this->configuration->revokeActivationWithin($context, $activation, $actor, $proposal->reference, (string) $proposal->reason);
         }
 
         if ($proposal->activation_id) {
             $old = ClubAccountingIntegrationActivation::query()->whereKey($proposal->activation_id)->where('club_id', $proposal->club_id)->lockForUpdate()->firstOrFail();
-            if (! $old->events()->exists()) $this->configuration->revokeActivation($old, $actor, $proposal->reference.'-supersede', 'Approved activation replacement.');
+            if (! $old->events()->exists()) $this->configuration->revokeActivationWithin($context, $old, $actor, $proposal->reference.'-supersede', 'Approved activation replacement.');
         }
         $this->assertActivationReady($proposal);
-        return $this->configuration->activate($proposal->club_id, $proposal->source_type, $proposal->coverage_start_date->format('Y-m-d'), $proposal->mapping_version, $proposal->reference, $actor);
+        return $this->configuration->activateWithin($context, $proposal->club_id, $proposal->source_type, $proposal->coverage_start_date->format('Y-m-d'), $proposal->mapping_version, $proposal->reference, $actor);
     }
 
     private function authority(Club $club, User $user): string
