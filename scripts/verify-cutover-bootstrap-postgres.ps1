@@ -121,7 +121,10 @@ try {
     Push-Location "$repository/backend"
     try {
         switch ($Suite) {
-            'F1' { Run-Tests 'f1-real-outcomes' @('tests/Feature/CutoverOpeningTransactionOutcomeTest.php') $databases[0] }
+            'F1' {
+                Run-Tests 'f1-real-outcomes' @('tests/Feature/CutoverOpeningTransactionOutcomeTest.php') $databases[0]
+                Run-Tests 'f1-real-outcomes-stability' @('tests/Feature/CutoverOpeningTransactionOutcomeTest.php') $databases[0]
+            }
             'Opening' { Run-Tests 'opening-focused' @('tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0] }
             'Integration' {
                 Run-Tests 'de-focused' @('tests/Feature/CutoverLifecycleEligibilityTest.php','tests/Feature/CutoverExecutionAuditRecorderTest.php','tests/Feature/CutoverOpeningEnforcementTest.php') $databases[0]

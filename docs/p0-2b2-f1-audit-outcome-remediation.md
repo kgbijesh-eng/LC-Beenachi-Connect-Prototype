@@ -64,12 +64,13 @@ All existing lost-ack, initial/terminal/indeterminate audit failures, suspension
 replay and rollback assertions remain intact.
 
 `backend/tests/Feature/CutoverOpeningTransactionOutcomeTest.php` and
-`backend/tests/Support/OpeningOutcomeConcurrencyWorker.php` add genuine two-session
+`backend/tests/Support/OpeningOutcomeConcurrencyWorker.php` add genuine multi-session
 tests. Serialization tests set SERIALIZABLE on test-owned roots, commit a second
 session's update after the financial snapshot, then perform the conflicting update.
-Deadlock tests create opposite lock acquisition on two unrelated synthetic user
-rows; the worker waits until PostgreSQL reports the financial root actually blocked
-before closing the cycle. No application wrapper, retry expansion or assertion
+Deadlock tests stage a three-session cycle on three unrelated synthetic user
+rows: financial A->worker B, B->worker C, C->financial A. Workers verify the exact
+blocking PID edges before closing the cycle; small offsets separate detector
+deadlines without changing privileges, settings or financial retries. No application wrapper, retry expansion or assertion
 weakening is used. Both modes test recovery after one abort and exhaustion after
 three aborts, with distinct root XIDs and PostgreSQL committed/aborted evidence.
 
@@ -99,6 +100,17 @@ The fixture now explicitly reconnects before throwing, testing the intended case
 an available replacement PDO cannot establish the original root's rollback. No
 application change or historical assertion was made to resolve this fixture error.
 This is manager-connection replacement fault injection, not a wire-level partition.
+
+A second run of the initial two-session deadlock fixture exposed victim-selection
+instability: four executed, two passed, two failures, zero errors/skips, 71 assertions;
+shutdown 0. Evidence: `%TEMP%/lc-p02b2-f1-763a75af38fd4389995d376b61e3cc77/`.
+PostgreSQL selected the auxiliary worker, so the unchanged financial-root-victim
+assertions correctly failed. That run is not accepted as financial rollback proof.
+The fixture now uses a staged three-session cycle while retaining the requirement
+that the financial root receive real 40P01 and the original three-attempt budget.
+No role privileges, B1 behavior or historical race assertions change. The final
+F1 suite requires two complete consecutive passes; any failed pass fails the runner.
+It does not retry until green. Logs retain each root XID/outcome and real SQLSTATE.
 
 Final integration, B1, canonical finance, CI, source comparisons and recommendations
 will be recorded after completion. No merge or Ready-for-Review action is authorised.

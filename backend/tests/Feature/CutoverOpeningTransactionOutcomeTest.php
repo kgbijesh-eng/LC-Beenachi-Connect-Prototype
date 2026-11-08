@@ -38,7 +38,7 @@ class CutoverOpeningTransactionOutcomeTest extends CutoverPostgresTestCase
     {
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
         $f = $this->authorizedFixture('outcome', 1);
-        $a = User::factory()->create(); $b = User::factory()->create();
+        $a = User::factory()->create(); $b = User::factory()->create(); $c = User::factory()->create();
         $request = new CutoverExecutionRequest($f['club']->id, $f['package']->id, $f['package']->lock_version, $f['package']->canonical_checksum, 'F1-REAL-ABORT', (string) Str::uuid(), $f['operator']->id);
         if ($mode === 'serialization') {
             Event::listen(TransactionBeginning::class, function (): void {
@@ -46,23 +46,30 @@ class CutoverOpeningTransactionOutcomeTest extends CutoverPostgresTestCase
             });
         }
         $attempts = []; $codes = []; $workers = [];
-        Success::creating(function () use ($a, $b, $f, $mode, $exhaust, &$attempts, &$codes, &$workers): void {
+        Success::creating(function () use ($a, $b, $c, $f, $mode, $exhaust, &$attempts, &$codes, &$workers): void {
             $attempts[] = DB::selectOne('SELECT pg_current_xact_id()::text AS xid')->xid;
             if (! $exhaust && count($attempts) > 1) { return; }
             $dir = sys_get_temp_dir().'/f1-outcome-'.Str::uuid(); mkdir($dir, 0700, true);
-            $payload = ['mode' => $mode, 'a' => $a->id, 'b' => $b->id, 'pid' => DB::selectOne('SELECT pg_backend_pid() AS pid')->pid];
-            file_put_contents($dir.'/payload.json', json_encode($payload, JSON_THROW_ON_ERROR));
+            $payload = ['a' => $a->id, 'b' => $b->id, 'c' => $c->id, 'pid' => DB::selectOne('SELECT pg_backend_pid() AS pid')->pid, 'peer_pid_path' => $dir.'/deadlock-b/pid'];
             if ($mode === 'deadlock') { DB::select('SELECT id FROM users WHERE id=? FOR UPDATE', [$a->id]); }
-            $worker = new Process([PHP_BINARY, base_path('tests/Support/OpeningOutcomeConcurrencyWorker.php'), $dir.'/payload.json', $dir], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $f['club']->code], timeout: 35);
-            $workers[] = [$worker, $dir]; $worker->start();
+            $started = [];
+            foreach ($mode === 'serialization' ? ['serialization'] : ['deadlock-b', 'deadlock-c'] as $part) {
+                $workerDir = $dir.'/'.$part; mkdir($workerDir, 0700, true);
+                file_put_contents($workerDir.'/payload.json', json_encode([...$payload, 'mode' => $part], JSON_THROW_ON_ERROR));
+                $worker = new Process([PHP_BINARY, base_path('tests/Support/OpeningOutcomeConcurrencyWorker.php'), $workerDir.'/payload.json', $workerDir], base_path(), env: ['INSTANCE_ORGANISATION_CODE' => $f['club']->code], timeout: 35);
+                $workers[] = [$worker, $workerDir]; $started[] = [$worker, $workerDir]; $worker->start();
+            }
             if ($mode === 'serialization') {
+                [$worker, $workerDir] = $started[0];
                 $worker->wait();
                 $this->assertTrue($worker->isSuccessful(), $worker->getErrorOutput());
-                $this->assertSame('committed', json_decode(file_get_contents($dir.'/result.json'), true)['outcome']);
+                $this->assertSame('committed', json_decode(file_get_contents($workerDir.'/result.json'), true)['outcome']);
             } else {
-                $deadline = microtime(true) + 20;
-                while (! is_file($dir.'/ready') && microtime(true) < $deadline) { usleep(5_000); }
-                $this->assertFileExists($dir.'/ready');
+                foreach ($started as [$worker, $workerDir]) {
+                    $deadline = microtime(true) + 20;
+                    while (! is_file($workerDir.'/ready') && microtime(true) < $deadline) { usleep(5_000); }
+                    $this->assertFileExists($workerDir.'/ready');
+                }
             }
             try {
                 if ($mode === 'serialization') {
@@ -81,8 +88,10 @@ class CutoverOpeningTransactionOutcomeTest extends CutoverPostgresTestCase
             catch (CutoverExecutionConflictException) { $this->assertTrue($exhaust); }
             $this->assertCount($exhaust ? 3 : 2, array_unique($attempts));
             $this->assertSame(array_fill(0, $exhaust ? 3 : 1, $mode === 'serialization' ? '40001' : '40P01'), $codes);
+            $states = [];
             foreach ($attempts as $i => $xid) {
                 $state = DB::selectOne('SELECT pg_xact_status(CAST(? AS xid8)) AS state', [$xid])->state;
+                $states[$xid] = $state;
                 $this->assertSame(! $exhaust && $i === count($attempts) - 1 ? 'committed' : 'aborted', $state);
             }
             $this->assertSame(1, Audit::where('event_type', 'execution_attempt')->count());
@@ -92,6 +101,7 @@ class CutoverOpeningTransactionOutcomeTest extends CutoverPostgresTestCase
             $this->assertSame($exhaust ? 0 : 1, Success::count());
             $this->assertSame($exhaust ? 0 : 1, Consumption::count());
             $this->assertSame($exhaust ? 0 : 1, ClubJournalEntry::count());
+            fwrite(STDOUT, "\nF1_OUTCOME_EVIDENCE ".json_encode(['mode' => $mode, 'exhaust' => $exhaust, 'transaction_states' => $states, 'sqlstates' => $codes, 'successes' => Success::count(), 'consumptions' => Consumption::count(), 'journals' => ClubJournalEntry::count()], JSON_THROW_ON_ERROR)."\n");
         } finally {
             foreach ($workers as [$worker, $dir]) {
                 $worker->wait();
