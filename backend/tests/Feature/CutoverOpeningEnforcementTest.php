@@ -146,6 +146,62 @@ class CutoverOpeningEnforcementTest extends CutoverPostgresTestCase
         $this->assertSame(1, ClubJournalEntry::count()); $this->assertSame(Success::first()->id, $success->id);
     }
 
+    public static function postCommitStates(): array
+    {
+        return [['40001', false], ['40P01', false], ['40001', true], ['40P01', true]];
+    }
+
+    #[DataProvider('postCommitStates')]
+    public function test_post_commit_sqlstate_never_claims_not_posted(string $state, bool $wrapped): void
+    {
+        $f = $this->fixture(); $request = $this->request($f); $fired = false;
+        Event::listen(TransactionCommitted::class, function () use (&$fired, $state, $wrapped): void {
+            if (! $fired && Success::count() === 1) {
+                $fired = true;
+                $cause = new class($state) extends \PDOException {
+                    public function __construct(string $state) { parent::__construct('Post-commit observer failure'); $this->code = $state; }
+                };
+                throw $wrapped ? new \RuntimeException('Wrapped observer failure', previous: $cause) : $cause;
+            }
+        });
+        $failure = null;
+        try { $this->execute($request); } catch (\Throwable $e) { $failure = $e; }
+        $this->assertSame(1, Success::count());
+        $this->assertSame(1, ClubJournalEntry::count());
+        $this->assertSame(1, Consumption::count());
+        $this->assertSame(1, Audit::where('event_type', 'execution_attempt')->count());
+        $this->assertSame(1, Audit::where('event_type', 'execution_success')->count());
+        $this->assertSame(0, Audit::where('result', 'not_posted')->count());
+        $this->assertInstanceOf(CutoverExecutionOutcomeUnknownException::class, $failure);
+        $this->assertSame(1, Audit::where('result', 'outcome_unknown')->count());
+        $this->assertSame(Success::first()->id, $this->execute($request)->id);
+        $this->assertSame(1, ClubJournalEntry::count());
+        $this->assertSame(1, Consumption::count());
+        $this->assertSame(1, Success::count());
+        $this->assertSame(2, Audit::where('event_type', 'execution_attempt')->count());
+        $this->assertSame(1, Audit::where('event_type', 'execution_replay')->count());
+    }
+
+    public function test_changed_connection_after_commit_cannot_prove_rollback(): void
+    {
+        $f = $this->fixture(); $request = $this->request($f); $fired = false;
+        Event::listen(TransactionCommitted::class, function () use (&$fired): void {
+            if (! $fired && Success::count() === 1) {
+                $fired = true;
+                DB::disconnect();
+                throw new \RuntimeException('Connection lost after commit');
+            }
+        });
+        try { $this->execute($request); $this->fail('Disconnected outcome must require reconciliation.'); }
+        catch (CutoverExecutionOutcomeUnknownException) {}
+        $this->assertSame(0, Audit::where('result', 'not_posted')->count());
+        $this->assertSame(1, Audit::where('result', 'outcome_unknown')->count());
+        $this->assertSame(1, ClubJournalEntry::count());
+        $this->assertSame(1, Consumption::count());
+        $this->assertSame(Success::first()->id, $this->execute($request)->id);
+        $this->assertSame(1, Success::count());
+    }
+
     public function test_suspension_denies_exact_replay_without_altering_committed_provenance(): void
     {
         $f = $this->fixture(); $request = $this->request($f); $first = $this->execute($request);
