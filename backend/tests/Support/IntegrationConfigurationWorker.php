@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\FinancialOperationFixture;
 use Tests\Support\FinancialWorkerSafety;
 use Tests\Support\IntegrationConfigurationFixture;
+use Tests\Support\SourceCoverageFixture;
 
 require dirname(__DIR__, 2).'/vendor/autoload.php';
 if (is_file(dirname(__DIR__, 2).'/bootstrap/cache/config.php')) {
@@ -55,6 +56,8 @@ try {
             }
         }, 1);
         $result = null;
+    } elseif ($p['mode'] === 'coverage-source') {
+        $result = SourceCoverageFixture::perform($p);
     } elseif ($p['mode'] === 'source') {
         $result = FinancialOperationFixture::perform($p);
     } else {

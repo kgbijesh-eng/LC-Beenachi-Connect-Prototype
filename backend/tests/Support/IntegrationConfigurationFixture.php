@@ -16,6 +16,8 @@ use App\Models\User;
 use App\Services\Access\OrganisationTransactionContext;
 use App\Services\Finance\AccountingIntegrationConfigurationService as Configuration;
 use App\Services\Finance\AccountingIntegrationProposalService as Proposals;
+use Carbon\Carbon;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -55,13 +57,14 @@ final class IntegrationConfigurationFixture
 
     public static function perform(array $p, ?OrganisationTransactionContext $context = null): mixed
     {
-        \Carbon\CarbonImmutable::setTestNow('2027-08-12 10:00:00');
-        \Carbon\Carbon::setTestNow('2027-08-12 10:00:00');
+        CarbonImmutable::setTestNow('2027-08-12 10:00:00');
+        Carbon::setTestNow('2027-08-12 10:00:00');
         $config = app(Configuration::class);
         $actor = User::findOrFail($p['actor']);
+        $type = $p['source_type'] ?? 'member_charge';
         $args = match ($p['action']) {
             'map' => [$p['club'], 'member_charge', 'membership_dues', LedgerAccount::findOrFail($p['income']), 'B4-V1', '2027-07-01', $p['reference'], $actor],
-            'activate' => [$p['club'], 'member_charge', '2027-07-01', $p['mapping_version'] ?? 'B4-V1', $p['reference'], $actor],
+            'activate' => [$p['club'], $type, $p['coverage_date'] ?? '2027-07-01', $p['mapping_version'] ?? 'B4-V1', $p['reference'], $actor],
             'revokeMapping' => [ClubAccountingSourceMapping::findOrFail($p['mapping']), $actor, $p['reference'], 'B4 synthetic revocation'],
             'revokeActivation' => [ClubAccountingIntegrationActivation::findOrFail($p['activation']), $actor, $p['reference'], 'B4 synthetic revocation'],
             default => null,
