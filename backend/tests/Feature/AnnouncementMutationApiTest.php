@@ -12,14 +12,11 @@ use App\Models\ClubMembership;
 use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class AnnouncementMutationApiTest extends TestCase
+class AnnouncementMutationApiTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

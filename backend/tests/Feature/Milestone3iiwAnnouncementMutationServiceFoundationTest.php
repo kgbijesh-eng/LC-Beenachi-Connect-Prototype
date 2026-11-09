@@ -14,7 +14,6 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\Announcements\ClubAnnouncementWriteService;
 use Database\Seeders\DatabaseSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
@@ -23,12 +22,10 @@ use ReflectionClass;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3iiwAnnouncementMutationServiceFoundationTest extends TestCase
+class Milestone3iiwAnnouncementMutationServiceFoundationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
     private ClubAnnouncementWriteService $service;
 
     protected function setUp(): void
@@ -105,6 +102,7 @@ class Milestone3iiwAnnouncementMutationServiceFoundationTest extends TestCase
     {
         $club = $this->club('UPDATE');
         $other = $this->club('OTHER');
+        config(['instance.organisation_code' => $club->code]);
         $secretary = $this->actor($club, 'secretary');
         $draft = $this->service->createDraft($club, $secretary, $this->draftInput());
 
@@ -116,6 +114,7 @@ class Milestone3iiwAnnouncementMutationServiceFoundationTest extends TestCase
         $this->expectConflict(fn () => $this->service->updateDraft($club, $updated, $secretary, 1, ['title' => 'Stale']));
 
         try {
+            config(['instance.organisation_code' => $other->code]);
             $this->service->updateDraft($other, $updated, $secretary, 2, ['title' => 'Cross club']);
             $this->fail('Expected concealed identity failure.');
         } catch (HttpException $exception) {
@@ -261,7 +260,10 @@ class Milestone3iiwAnnouncementMutationServiceFoundationTest extends TestCase
 
     private function club(string $code): Club
     {
-        return Club::query()->create(['name' => 'Synthetic '.$code, 'code' => $code.'-'.uniqid(), 'timezone' => 'UTC', 'is_active' => true]);
+        $club = Club::query()->create(['name' => 'Synthetic '.$code, 'code' => $code.'-'.uniqid(), 'timezone' => 'UTC', 'is_active' => true]);
+        config(['instance.organisation_code' => $club->code]);
+
+        return $club;
     }
 
     private function actor(Club $club, string $roleSlug, string $status = 'active'): User
