@@ -11,6 +11,7 @@ use App\Models\ClubJournalEntry;
 use App\Models\ClubJournalLine;
 use App\Models\LedgerAccount;
 use App\Models\User;
+use App\Services\Access\OrganisationAccessRejected;
 use App\Services\Finance\ClubAccountingPeriodProvisioningRequest;
 use App\Services\Finance\ClubAccountingPeriodProvisioningService;
 use App\Services\Finance\Exceptions\AccountingPeriodProvisioningConflictException;
@@ -19,21 +20,17 @@ use App\Services\Finance\Exceptions\InvalidLedgerAccountNormalBalanceException;
 use App\Services\Finance\Exceptions\InvalidLedgerAccountTypeException;
 use App\Services\Finance\Exceptions\InvalidLionsYearException;
 use App\Services\Finance\Exceptions\InvalidProvisioningActorException;
-use App\Services\Finance\Exceptions\InvalidProvisioningClubException;
 use App\Services\Finance\Exceptions\InvalidProvisioningCurrencyException;
 use App\Services\Finance\Exceptions\InvalidProvisioningRequestException;
 use App\Services\Finance\Exceptions\LedgerAccountProvisioningConflictException;
 use App\Services\Finance\LedgerAccountProvisioningRequest;
 use App\Services\Finance\LedgerAccountProvisioningService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use LogicException;
 use RuntimeException;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
+class Milestone3iidLedgerAccountPeriodProvisioningTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
     public function test_account_provisioning_normalizes_code_and_returns_the_canonical_active_account(): void
     {
         $fixture = $this->fixture('A');
@@ -104,7 +101,9 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
         $fixtureA = $this->fixture('D');
         $fixtureB = $this->fixture('E');
 
+        config(['instance.organisation_code' => $fixtureA['club']->code]);
         $accountA = $this->accounts()->provision($this->accountRequest($fixtureA));
+        config(['instance.organisation_code' => $fixtureB['club']->code]);
         $accountB = $this->accounts()->provision($this->accountRequest($fixtureB));
 
         $this->assertSame('CASH-ON-HAND', $accountA->code);
@@ -120,8 +119,8 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
         try {
             $this->accounts()->provision($this->accountRequest($fixture, ['clubId' => PHP_INT_MAX]));
             $this->fail('Unknown club should fail.');
-        } catch (InvalidProvisioningClubException) {
-            $this->addToAssertionCount(1);
+        } catch (OrganisationAccessRejected $e) {
+            $this->assertSame('ORGANISATION_FOREIGN', $e->reason);
         }
 
         $this->expectException(InvalidProvisioningActorException::class);
@@ -131,7 +130,7 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
     public function test_account_code_name_type_normal_balance_and_currency_validation_fail_closed(): void
     {
         $fixture = $this->fixture('G');
-        $invalidCodes = ['', 'A', str_repeat('A', 41), '  CASH ON HAND  ', 'CASH__ON_HAND', 'CASH.ON-HAND', 'CASH/ON-HAND', 'CASH--ON-HAND', '-CASH', 'CASH-', 'CÄSH'];
+        $invalidCodes = ['', 'A', str_repeat('A', 41), '  CASH ON HAND  ', 'CASH__ON_HAND', 'CASH.ON-HAND', 'CASH/ON-HAND', 'CASH--ON-HAND', '-CASH', 'CASH-', 'CÃ„SH'];
 
         foreach ($invalidCodes as $code) {
             try {
@@ -187,6 +186,9 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
                 $this->fail('Invalid account field should fail.');
             } catch (\Throwable $caught) {
                 $this->assertInstanceOf($exception, $caught);
+                if ($caught instanceof OrganisationAccessRejected) {
+                    $this->assertSame('ORGANISATION_FOREIGN', $caught->reason);
+                }
             }
         }
 
@@ -272,7 +274,9 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
         $fixtureA = $this->fixture('N');
         $fixtureB = $this->fixture('O');
 
+        config(['instance.organisation_code' => $fixtureA['club']->code]);
         $periodA = $this->periods()->provision($this->periodRequest($fixtureA));
+        config(['instance.organisation_code' => $fixtureB['club']->code]);
         $periodB = $this->periods()->provision($this->periodRequest($fixtureB));
 
         $this->assertSame('2026-27', $periodA->lions_year);
@@ -285,7 +289,7 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
         $fixture = $this->fixture('P');
 
         foreach ([
-            [['clubId' => PHP_INT_MAX], InvalidProvisioningClubException::class],
+            [['clubId' => PHP_INT_MAX], OrganisationAccessRejected::class],
             [['createdByUserId' => PHP_INT_MAX], InvalidProvisioningActorException::class],
             [['lionsYear' => '2026-28'], InvalidLionsYearException::class],
             [['lionsYear' => '2026'], InvalidLionsYearException::class],
@@ -296,6 +300,9 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
                 $this->fail('Invalid period request should fail.');
             } catch (\Throwable $caught) {
                 $this->assertInstanceOf($exception, $caught);
+                if ($caught instanceof OrganisationAccessRejected) {
+                    $this->assertSame('ORGANISATION_FOREIGN', $caught->reason);
+                }
             }
         }
 
@@ -343,6 +350,8 @@ class Milestone3iidLedgerAccountPeriodProvisioningTest extends TestCase
     {
         $club = Club::create(['name' => "Provisioning {$suffix}", 'code' => "P{$suffix}"]);
         $actor = User::factory()->create();
+
+        config(['instance.organisation_code' => $club->code]);
 
         return compact('club', 'actor');
     }

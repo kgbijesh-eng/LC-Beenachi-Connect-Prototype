@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair', 'B3Fixtures', 'B3Poison', 'B3PoisonCommit', 'B3Active', 'B3Direct', 'B3Contexts', 'B3Races', 'B3Workers', 'B3Retries', 'B3Resources', 'B3Cross', 'B3OpeningPeer', 'B4', 'B4Races', 'B4Resources', 'B4Reactivation', 'Coverage', 'CoverageRaces')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair', 'B3Fixtures', 'B3Poison', 'B3PoisonCommit', 'B3Active', 'B3Direct', 'B3Contexts', 'B3Races', 'B3Workers', 'B3Retries', 'B3Resources', 'B3Cross', 'B3OpeningPeer', 'B4', 'B4Races', 'B4Resources', 'B4Reactivation', 'Coverage', 'CoverageRaces', 'B5', 'B5Outcomes', 'B5Races', 'B5Retries', 'B5Opening')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
     [switch]$COnly,
     [switch]$CRegressionOnly,
@@ -27,6 +27,11 @@ $databases = @(switch ($Suite) {
     'Integration' { @('lcb_p02b2_cutover_test') }
     'Opening' { @('lcb_p02b2_cutover_test') }
     'F1' { @('lcb_p02b2_cutover_test') }
+    'B5Opening' { @('lcb_p02b2_cutover_test') }
+    'B5' { @('lcb_p02b3_finance_test') }
+    'B5Outcomes' { @('lcb_p02b3_finance_test') }
+    'B5Races' { @('lcb_p02b3_finance_test') }
+    'B5Retries' { @('lcb_p02b3_finance_test') }
     'Coverage' { @('lcb_p02b3_finance_test') }
     'CoverageRaces' { @('lcb_p02b3_finance_test') }
     'B4' { @('lcb_p02b3_finance_test') }
@@ -166,6 +171,11 @@ try {
                 Run-Tests 'f1-real-outcomes' @('tests/Feature/CutoverOpeningTransactionOutcomeTest.php') $databases[0]
                 Run-Tests 'f1-real-outcomes-stability' @('tests/Feature/CutoverOpeningTransactionOutcomeTest.php') $databases[0]
             }
+            'B5Opening' { Run-Tests 'b5-opening-close' @('tests/Feature/AccountingAdministrationOpeningConcurrencyTest.php') $databases[0] -RecordFailures }
+            'B5' { Run-Tests 'b5-historical-provisioning' @('tests/Feature/Milestone3iidLedgerAccountPeriodProvisioningTest.php') $databases[0] -RecordFailures; Run-Tests 'b5-enforcement' @('tests/Feature/AccountingAdministrationEnforcementTest.php') $databases[0] -RecordFailures }
+            'B5Outcomes' { Run-Tests 'b5-outcomes' @('tests/Feature/AccountingAdministrationOutcomeTest.php') $databases[0] -RecordFailures }
+            'B5Races' { Run-Tests 'b5-races' @('tests/Feature/AccountingAdministrationConcurrencyTest.php') $databases[0] -RecordFailures }
+            'B5Retries' { Run-Tests 'b5-retries' @('tests/Feature/AccountingAdministrationRetryTest.php') $databases[0] -RecordFailures }
             'Coverage' { Run-Tests 'coverage-selection' @('tests/Feature/SourceCoverageActivationSelectionTest.php') $databases[0] -RecordFailures }
             'CoverageRaces' { Run-Tests 'coverage-races' @('tests/Feature/SourceCoverageActivationConcurrencyTest.php') $databases[0] -RecordFailures }
             'B4' { Run-Tests 'b4-enforcement' @('tests/Feature/IntegrationConfigurationEnforcementTest.php') $databases[0] -RecordFailures }
@@ -272,7 +282,7 @@ try {
     $evidence.source_hashes_unchanged=$true
     if (-not $evidence.fixture_discard_requested) { $evidence.status='PASS' }
     if ($evidence.recorded_test_failure) { $evidence.status='FAILED_OR_BLOCKED'; $evidence.reason='Recorded test failures, errors or skips prevent acceptance. Merge NO-GO.' }
-    if ($Suite -in @('C','Integration','B3Races','B3Workers','B3Cross','B3OpeningPeer','B4Races','B4Resources','B4Reactivation','Coverage','CoverageRaces') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
+    if ($Suite -in @('C','Integration','B3Races','B3Workers','B3Cross','B3OpeningPeer','B4Races','B4Resources','B4Reactivation','Coverage','CoverageRaces','B5','B5Outcomes','B5Races','B5Opening') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
         $evidence.mixed_order_deadlock_observed=$true
         $evidence.status='FAILED_OR_BLOCKED';$evidence.reason='PostgreSQL observed a mixed-order deadlock. Merge NO-GO regardless of victim outcomes.'
     }

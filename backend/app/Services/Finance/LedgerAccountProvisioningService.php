@@ -4,18 +4,18 @@ declare(strict_types=1);
 
 namespace App\Services\Finance;
 
-use App\Models\Club;
 use App\Models\LedgerAccount;
 use App\Models\User;
+use App\Services\Access\OrganisationTransactionContext;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Services\Finance\Exceptions\InvalidLedgerAccountCodeException;
 use App\Services\Finance\Exceptions\InvalidLedgerAccountNormalBalanceException;
 use App\Services\Finance\Exceptions\InvalidLedgerAccountTypeException;
 use App\Services\Finance\Exceptions\InvalidProvisioningActorException;
-use App\Services\Finance\Exceptions\InvalidProvisioningClubException;
 use App\Services\Finance\Exceptions\InvalidProvisioningCurrencyException;
 use App\Services\Finance\Exceptions\InvalidProvisioningRequestException;
 use App\Services\Finance\Exceptions\LedgerAccountProvisioningConflictException;
-use App\Services\Finance\Exceptions\ProvisioningPersistenceConflictException;
+use Illuminate\Database\ConcurrencyErrorDetector;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
@@ -32,29 +32,42 @@ final class LedgerAccountProvisioningService
 
     public function provision(LedgerAccountProvisioningRequest $request): LedgerAccount
     {
+        $this->validateAndNormalize($request);
+
+        return app(OrganisationTransactionGuard::class)->run($request->clubId,
+            fn (OrganisationTransactionContext $context): LedgerAccount => $this->provisionWithin($context, $request), 3);
+    }
+
+    public function provisionWithin(OrganisationTransactionContext $context, LedgerAccountProvisioningRequest $request): LedgerAccount
+    {
         $normalized = $this->validateAndNormalize($request);
 
+        return app(OrganisationTransactionGuard::class)->within($context, $request->clubId,
+            fn (): LedgerAccount => DB::transaction(fn (): LedgerAccount => $this->provisionBody($context, $request, $normalized), 3));
+    }
+
+    private function provisionBody(OrganisationTransactionContext $context, LedgerAccountProvisioningRequest $request, array $normalized): LedgerAccount
+    {
+        $context->assertUsable($request->clubId);
+        // This private SQL savepoint proves rollback independently of Laravel depth
+        // or exception SQLSTATE. The B1 club lock predates it and remains held.
+        $savepoint = 'b5_provision_'.bin2hex(random_bytes(12));
+        DB::statement('SAVEPOINT '.$savepoint);
         try {
-            return DB::transaction(function () use ($request, $normalized): LedgerAccount {
-                $club = Club::query()->whereKey($request->clubId)->lockForUpdate()->first();
-                if (! $club) {
-                    throw new InvalidProvisioningClubException('The provisioning club is invalid.');
-                }
-                if (! User::query()->whereKey($request->createdByUserId)->exists()) {
-                    throw new InvalidProvisioningActorException('The provisioning actor is invalid.');
-                }
+            if (! User::query()->whereKey($request->createdByUserId)->exists()) {
+                throw new InvalidProvisioningActorException('The provisioning actor is invalid.');
+            }
 
-                $existing = LedgerAccount::query()
-                    ->where('club_id', $club->id)
-                    ->where('code', $normalized['code'])
-                    ->lockForUpdate()
-                    ->first();
-                if ($existing) {
-                    return $this->resolveExisting($existing, $normalized);
-                }
-
-                return LedgerAccount::create([
-                    'club_id' => $club->id,
+            $existing = LedgerAccount::query()
+                ->where('club_id', $context->organisationId)
+                ->where('code', $normalized['code'])
+                ->lockForUpdate()
+                ->first();
+            if ($existing) {
+                $result = $this->resolveExisting($existing, $normalized);
+            } else {
+                $result = LedgerAccount::create([
+                    'club_id' => $context->organisationId,
                     'code' => $normalized['code'],
                     'name' => $normalized['name'],
                     'account_type' => $normalized['account_type'],
@@ -66,18 +79,36 @@ final class LedgerAccountProvisioningService
                     'origin_template_code' => $normalized['origin_template_code'],
                     'statement_classification' => $normalized['statement_classification'],
                 ])->fresh();
-            }, 3);
+            }
         } catch (QueryException $exception) {
-            $existing = LedgerAccount::query()
-                ->where('club_id', $request->clubId)
-                ->where('code', $normalized['code'])
-                ->first();
-            if ($existing) {
-                return $this->resolveExisting($existing, $normalized);
+            // Preserve the framework's genuine concurrency retry path; never replay
+            // instead of allowing the outer owner to retry or exhaust its budget.
+            if (app(ConcurrencyErrorDetector::class)->causedByConcurrencyError($exception)) {
+                throw $exception;
+            }
+            try {
+                DB::statement('ROLLBACK TO SAVEPOINT '.$savepoint);
+                DB::statement('RELEASE SAVEPOINT '.$savepoint);
+            } catch (\Throwable) {
+                // Unknown rollback/completion outcome must preserve the original failure.
+                throw $exception;
+            }
+            $context->assertUsable($request->clubId);
+            if (! User::query()->whereKey($request->createdByUserId)->exists()) {
+                throw new InvalidProvisioningActorException('The provisioning actor is invalid.');
+            }
+            $existing = LedgerAccount::query()->where('club_id', $context->organisationId)
+                ->where('code', $normalized['code'])->lockForUpdate()->first();
+            if (! $existing) {
+                throw $exception;
             }
 
-            throw new ProvisioningPersistenceConflictException('The ledger account could not be provisioned.', 0, $exception);
+            return $this->resolveExisting($existing, $normalized);
         }
+        // Release/completion errors are deliberately outside the recovery catch.
+        DB::statement('RELEASE SAVEPOINT '.$savepoint);
+
+        return $result;
     }
 
     private function validateAndNormalize(LedgerAccountProvisioningRequest $request): array
