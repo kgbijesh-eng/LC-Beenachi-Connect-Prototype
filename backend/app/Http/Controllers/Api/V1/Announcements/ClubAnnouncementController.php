@@ -27,8 +27,6 @@ use Illuminate\Support\Carbon;
 
 class ClubAnnouncementController extends Controller
 {
-    private const READ_ONLY_OFFICER_AUDIENCE_ROLES = ['treasurer'];
-
     public function index(
         ListClubAnnouncementsRequest $request,
         Club $club,
@@ -37,7 +35,7 @@ class ClubAnnouncementController extends Controller
         ClubAnnouncementReadStateService $readState,
     ): JsonResponse {
         $management = $permissions->userHasPermission($request->user(), ClubAnnouncement::PERMISSION_MANAGEMENT_VIEW, (int) $club->id);
-        $readablePublishedAudiences = $this->readablePublishedAudiences($request, $club, $management);
+        $readablePublishedAudiences = $readState->readablePublishedAudiences($request->user(), $club, $management);
         $now = Carbon::now('UTC');
         $filters = $request->normalizedFilters();
         try {
@@ -71,7 +69,7 @@ class ClubAnnouncementController extends Controller
         ClubAnnouncementReadStateService $readState,
     ): JsonResponse {
         $management = $permissions->userHasPermission($request->user(), ClubAnnouncement::PERMISSION_MANAGEMENT_VIEW, (int) $club->id);
-        $readablePublishedAudiences = $this->readablePublishedAudiences($request, $club, $management);
+        $readablePublishedAudiences = $readState->readablePublishedAudiences($request->user(), $club, $management);
         $now = Carbon::now('UTC');
         try {
             if (! $announcements->canReadDetail($club, $announcement, $management, $readablePublishedAudiences, $now)) {
@@ -92,20 +90,10 @@ class ClubAnnouncementController extends Controller
         Request $request,
         Club $club,
         ClubAnnouncement $announcement,
-        ClubPermissionService $permissions,
         ClubAnnouncementReadStateService $readState,
     ): JsonResponse {
-        $management = $permissions->userHasPermission($request->user(), ClubAnnouncement::PERMISSION_MANAGEMENT_VIEW, (int) $club->id);
-        $readablePublishedAudiences = $this->readablePublishedAudiences($request, $club, $management);
-
         try {
-            $read = $readState->markRead(
-                $club,
-                $announcement,
-                $request->user(),
-                $readablePublishedAudiences,
-                Carbon::now('UTC'),
-            );
+            $read = $readState->markRead($club, $announcement, $request->user());
         } catch (InvalidClubAnnouncementReadStateException) {
             return $this->notFound();
         }
@@ -231,28 +219,6 @@ class ClubAnnouncementController extends Controller
     private function decisionResource(Request $request, ClubAnnouncementPublicationDecision $decision, int $status): JsonResponse
     {
         return response()->json(['data' => (new ClubAnnouncementPublicationDecisionResource($decision))->resolve($request)], $status);
-    }
-
-    private function readablePublishedAudiences(Request $request, Club $club, bool $management): array
-    {
-        if ($management) {
-            return ClubAnnouncement::audiences();
-        }
-
-        $membership = $request->user()->clubMemberships()
-            ->with('role')
-            ->where('club_id', $club->id)
-            ->where('status', 'active')
-            ->first();
-
-        if ($membership !== null && in_array($membership->role?->slug, self::READ_ONLY_OFFICER_AUDIENCE_ROLES, true)) {
-            return [
-                ClubAnnouncement::AUDIENCE_CLUB_MEMBERS,
-                ClubAnnouncement::AUDIENCE_OFFICERS,
-            ];
-        }
-
-        return [ClubAnnouncement::AUDIENCE_CLUB_MEMBERS];
     }
 
     private function notFound(): JsonResponse

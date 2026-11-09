@@ -10,11 +10,11 @@ use App\Models\ClubAnnouncement;
 use App\Models\ClubAnnouncementPublicationDecision;
 use App\Models\ClubMembership;
 use App\Models\User;
+use App\Services\Access\OrganisationTransactionGuard;
 use App\Support\Announcements\ClubAnnouncementFingerprint;
 use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -34,11 +34,14 @@ final class ClubAnnouncementWriteService
         'archived' => 'announcements.archived',
     ];
 
-    public function __construct(private readonly ClubAnnouncementFingerprint $fingerprints) {}
+    public function __construct(
+        private readonly ClubAnnouncementFingerprint $fingerprints,
+        private readonly OrganisationTransactionGuard $transactions,
+    ) {}
 
     public function createDraft(Club $club, User $actor, array $attributes): ClubAnnouncement
     {
-        return DB::transaction(function () use ($club, $actor, $attributes): ClubAnnouncement {
+        return $this->transactions->run($club, function () use ($club, $actor, $attributes): ClubAnnouncement {
             [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.drafts.manage');
             $state = $this->canonicalAttributes($attributes, true);
             $announcement = ClubAnnouncement::query()->create($state + [
@@ -59,7 +62,7 @@ final class ClubAnnouncementWriteService
 
     public function updateDraft(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion, array $attributes): ClubAnnouncement
     {
-        return DB::transaction(function () use ($club, $announcement, $actor, $lockVersion, $attributes): ClubAnnouncement {
+        return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion, $attributes): ClubAnnouncement {
             $locked = $this->lockOne($club, (int) $announcement->getKey());
             [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.drafts.manage');
             $this->assertVersion($locked, $lockVersion);
@@ -89,7 +92,7 @@ final class ClubAnnouncementWriteService
 
     public function createReplacementDraft(Club $club, ClubAnnouncement $source, User $actor, array $attributes): ClubAnnouncement
     {
-        return DB::transaction(function () use ($club, $source, $actor, $attributes): ClubAnnouncement {
+        return $this->transactions->run($club, function () use ($club, $source, $actor, $attributes): ClubAnnouncement {
             $rows = $this->lockClubGraph($club, (int) $source->getKey());
             $locked = $rows->firstWhere('id', (int) $source->getKey());
             [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.replace');
@@ -136,7 +139,7 @@ final class ClubAnnouncementWriteService
 
     public function revokeApproval(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion, ClubAnnouncementPublicationDecision $approval, string $reason): ClubAnnouncementPublicationDecision
     {
-        return DB::transaction(function () use ($club, $announcement, $actor, $lockVersion, $approval, $reason): ClubAnnouncementPublicationDecision {
+        return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion, $approval, $reason): ClubAnnouncementPublicationDecision {
             $locked = $this->lockOne($club, (int) $announcement->getKey());
             $this->assertVersion($locked, $lockVersion);
             $this->requireStatus($locked, [ClubAnnouncement::STATUS_DRAFT], 'Only an unchanged Draft approval can be revoked.');
@@ -163,7 +166,10 @@ final class ClubAnnouncementWriteService
                 throw new ConflictHttpException('The approval is not revocable for the current Draft.');
             }
             $this->lockDecisions($locked);
-            if ($lockedApproval->revocation()->exists()) {
+            if ($lockedApproval->revocation()
+                ->where('club_id', $club->id)
+                ->where('club_announcement_id', $locked->id)
+                ->exists()) {
                 throw new ConflictHttpException('The approval has already been revoked.');
             }
             $decision = ClubAnnouncementPublicationDecision::query()->create([
@@ -188,7 +194,7 @@ final class ClubAnnouncementWriteService
 
     public function publish(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion): ClubAnnouncement
     {
-        return DB::transaction(function () use ($club, $announcement, $actor, $lockVersion): ClubAnnouncement {
+        return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion): ClubAnnouncement {
             $projection = ClubAnnouncement::query()->where('club_id', $club->id)->whereKey($announcement->getKey())->value('replaces_announcement_id');
             if (! ClubAnnouncement::query()->where('club_id', $club->id)->whereKey($announcement->getKey())->exists()) {
                 abort(404, 'Announcement not found for this club.');
@@ -227,7 +233,7 @@ final class ClubAnnouncementWriteService
 
     public function withdraw(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion, string $reason): ClubAnnouncement
     {
-        return DB::transaction(function () use ($club, $announcement, $actor, $lockVersion, $reason): ClubAnnouncement {
+        return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion, $reason): ClubAnnouncement {
             $locked = $this->lockOne($club, (int) $announcement->getKey());
             [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.withdraw');
             $this->assertVersion($locked, $lockVersion);
@@ -253,7 +259,7 @@ final class ClubAnnouncementWriteService
 
     public function archive(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion): ClubAnnouncement
     {
-        return DB::transaction(function () use ($club, $announcement, $actor, $lockVersion): ClubAnnouncement {
+        return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion): ClubAnnouncement {
             $locked = $this->lockOne($club, (int) $announcement->getKey());
             [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.archive');
             $this->assertVersion($locked, $lockVersion);
@@ -279,7 +285,7 @@ final class ClubAnnouncementWriteService
 
     private function decide(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion, string $decisionValue, ?string $reason): ClubAnnouncementPublicationDecision
     {
-        return DB::transaction(function () use ($club, $announcement, $actor, $lockVersion, $decisionValue, $reason): ClubAnnouncementPublicationDecision {
+        return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion, $decisionValue, $reason): ClubAnnouncementPublicationDecision {
             $locked = $this->lockOne($club, (int) $announcement->getKey());
             $this->assertVersion($locked, $lockVersion);
             $this->requireStatus($locked, [ClubAnnouncement::STATUS_DRAFT], 'Only Draft announcements can be adjudicated.');
@@ -338,7 +344,12 @@ final class ClubAnnouncementWriteService
 
     private function lockClubGraph(Club $club, int $targetId): Collection
     {
-        $rows = ClubAnnouncement::query()->where('club_id', $club->id)->orderBy('id')->lockForUpdate()->get();
+        $query = ClubAnnouncement::query()->where('club_id', $club->id);
+        if (! (clone $query)->whereKey($targetId)->exists()) {
+            abort(404, 'Announcement not found for this club.');
+        }
+
+        $rows = $query->orderBy('id')->lockForUpdate()->get();
         if (! $rows->contains('id', $targetId)) {
             abort(404, 'Announcement not found for this club.');
         }
@@ -502,7 +513,8 @@ final class ClubAnnouncementWriteService
 
     private function lockDecisions(ClubAnnouncement $announcement): Collection
     {
-        return ClubAnnouncementPublicationDecision::query()->where('club_announcement_id', $announcement->id)
+        return ClubAnnouncementPublicationDecision::query()->where('club_id', $announcement->club_id)
+            ->where('club_announcement_id', $announcement->id)
             ->where('announcement_lock_version', $announcement->lock_version)->orderBy('id')->lockForUpdate()->get();
     }
 
