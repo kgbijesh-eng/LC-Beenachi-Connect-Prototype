@@ -69,6 +69,40 @@ try {
         FinancialOperationFixture::perform($p);
     } elseif ($p['mode'] === 'close') {
         app(ClubAccountingPeriodCloseService::class)->close(new AccountingPeriodCloseRequest($p['club'], $p['period'], $p['actor'], '2027-28', 'B3 period-close compatibility'));
+    } elseif (in_array($p['mode'], ['historical-profile', 'historical-member'], true)) {
+        DB::transaction(function () use ($p, $dir, $name, $await): void {
+            if ($p['mode'] === 'historical-profile') {
+                App\Models\ProfileUpdateRequest::whereKey($p['profile_request'])->lockForUpdate()->firstOrFail();
+                App\Models\Member::whereKey($p['member'])->lockForUpdate()->firstOrFail();
+                file_put_contents($dir.'/'.$name.'.locked', '1');
+                $await($dir.'/'.$name.'.finish');
+                App\Models\AuditLog::create([
+                    'club_id' => $p['club'],
+                    'user_id' => $p['actor'],
+                    'action' => 'diagnostic.legacy_profile_lock_order',
+                    'auditable_type' => App\Models\ProfileUpdateRequest::class,
+                    'auditable_id' => $p['profile_request'],
+                ]);
+            } else {
+                Club::whereKey($p['club'])->lockForUpdate()->firstOrFail();
+                App\Models\Member::whereKey($p['member'])->lockForUpdate()->firstOrFail();
+            }
+        }, 1);
+    } elseif (str_starts_with($p['mode'], 'profile-')) {
+        $service = app(App\Services\ProfileUpdates\ProfileUpdateWriteService::class);
+        $club = Club::findOrFail($p['club']);
+        $user = App\Models\User::findOrFail($p['profile_user']);
+        $operation = substr($p['mode'], strlen('profile-'));
+        if ($operation === 'submit') {
+            $service->submit($club, $user, ['changes' => ['occupation' => 'Proposed']]);
+        } else {
+            $profile = App\Models\ProfileUpdateRequest::findOrFail($p['profile_request']);
+            if ($operation === 'reject') {
+                $service->reject($club, $user, $profile, 1, 'Synthetic review');
+            } else {
+                $service->$operation($club, $user, $profile, 1);
+            }
+        }
     } elseif (in_array($p['mode'], ['member-update', 'member-link', 'member-import'], true)) {
         $base = '/api/v1/clubs/'.$p['club'].'/members/';
         $import = $p['mode'] === 'member-import';
@@ -94,6 +128,14 @@ try {
     $result = ['status' => 'rejected', 'reason' => $e->reason, 'depth' => DB::transactionLevel()];
 } catch (JournalPostingException|App\Services\Finance\Exceptions\JournalReversalException|App\Services\Finance\Exceptions\ClubExpenseException|App\Services\Finance\Exceptions\ClubOrdinaryIncomeReceiptCorrectionException|Illuminate\Validation\ValidationException|AuthorizationException $e) {
     $result = ['status' => 'domain_rejected', 'class' => $e::class, 'message' => $e->getMessage(), 'depth' => DB::transactionLevel()];
+} catch (Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+    $result = str_starts_with($p['mode'], 'profile-')
+        ? ['status' => 'http_'.$e->getStatusCode(), 'message' => $e->getMessage(), 'depth' => DB::transactionLevel()]
+        : ['status' => 'error', 'class' => $e::class, 'message' => $e->getMessage(), 'depth' => DB::transactionLevel()];
+} catch (Illuminate\Database\QueryException $e) {
+    $result = str_starts_with($p['mode'], 'historical-') && $e->getCode() === '40P01'
+        ? ['status' => '40P01', 'depth' => DB::transactionLevel()]
+        : ['status' => 'error', 'class' => $e::class, 'message' => $e->getMessage(), 'depth' => DB::transactionLevel()];
 } catch (Throwable $e) {
     $result = ['status' => 'error', 'class' => $e::class, 'message' => $e->getMessage(), 'depth' => DB::transactionLevel()];
 }
