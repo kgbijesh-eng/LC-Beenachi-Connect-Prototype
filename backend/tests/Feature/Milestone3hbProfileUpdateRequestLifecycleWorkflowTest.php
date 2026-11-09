@@ -99,6 +99,11 @@ class Milestone3hbProfileUpdateRequestLifecycleWorkflowTest extends FinancialPos
      config(['instance.organisation_code' => $foreign->code]);
      $request = $service->submit($foreign, $user, ['changes' => ['occupation' => 'Proposed']]);
      config(['instance.organisation_code' => $club->code]);
+     // Separate foreign keys can admit historical rows with a mismatched member.
+     $mismatched = $request->replicate();
+     $mismatched->club_id = $club->id;
+     $mismatched->pending_guard = null;
+     $mismatched->save();
 
      $db = \Illuminate\Support\Facades\DB::connection();
      $holder = \Illuminate\Support\Facades\DB::build([...$db->getConfig(), 'name' => 'profile_foreign_lock_holder']);
@@ -106,12 +111,15 @@ class Milestone3hbProfileUpdateRequestLifecycleWorkflowTest extends FinancialPos
      try {
          $holder->table('clubs')->where('id', $foreign->id)->lockForUpdate()->first();
          $holder->table('members')->where('id', $member->id)->lockForUpdate()->first();
-         $holder->table('profile_update_requests')->where('id', $request->id)->lockForUpdate()->first();
+         $holder->table('profile_update_requests')->whereIn('id', [$request->id, $mismatched->id])->lockForUpdate()->get();
          $db->statement("SET lock_timeout = '1s'");
          foreach ([
              fn () => $service->approve($club, $user, $request, 1),
              fn () => $service->reject($club, $user, $request, 1, 'Synthetic'),
              fn () => $service->withdraw($club, $user, $request, 1),
+             fn () => $service->approve($club, $user, $mismatched, 1),
+             fn () => $service->reject($club, $user, $mismatched, 1, 'Synthetic'),
+             fn () => $service->withdraw($club, $user, $mismatched, 1),
          ] as $write) {
              try {
                  $write();

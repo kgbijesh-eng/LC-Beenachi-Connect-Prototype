@@ -126,7 +126,11 @@ class ProfileUpdateWriteService
 
     private function locked(Club $club, ProfileUpdateRequest $request, int $version): ProfileUpdateRequest
     {
-        $r = ProfileUpdateRequest::whereKey($request->id)->where('club_id', $club->id)->lockForUpdate()->firstOrFail();
+        $r = ProfileUpdateRequest::whereKey($request->id)
+            ->where('club_id', $club->id)
+            ->whereHas('member', fn ($member) => $member->where('club_id', $club->id))
+            ->lockForUpdate()
+            ->firstOrFail();
         if ($r->status !== 'pending') {
             throw new ConflictHttpException('Profile update request is no longer pending.');
         }
