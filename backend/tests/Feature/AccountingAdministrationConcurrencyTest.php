@@ -110,6 +110,9 @@ return $out;
         $r = $this->race($first ? $close : $finance, $first ? $finance : $close);
         $this->assertSame('success', $r[0]['status']);
         $this->assertSame($first ? 'domain_rejected' : 'success', $r[1]['status']);
+        if ($first) {
+            $this->assertMatchesRegularExpression('/closed|open.*period|open.*Lions/i', $r[1]['message']);
+        }
         $this->assertSame($before + ($first ? 0 : FinancialOperationFixture::journalDelta($api)), ClubJournalEntry::where('club_id', $p['club'])->count());
         $this->assertSame('closed', ClubAccountingPeriod::findOrFail($p['period'])->status);
         $this->assertSame(1, AuditLog::where('club_id', $p['club'])->where('action', 'finance.accounting_period.closed')->count());

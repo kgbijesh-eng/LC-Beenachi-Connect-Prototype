@@ -98,7 +98,7 @@ try {
     $result = ['status' => 'success', 'depth' => DB::transactionLevel()];
 } catch (OrganisationAccessRejected $e) {
     $result = ['status' => 'rejected', 'reason' => $e->reason, 'depth' => DB::transactionLevel()];
-} catch (ProvisioningException|\App\Services\Finance\Exceptions\AccountingPeriodCloseException|JournalPostingException|App\Services\Finance\Exceptions\JournalReversalException|App\Services\Finance\Exceptions\ClubExpenseException|App\Services\Finance\Exceptions\ClubOrdinaryIncomeReceiptCorrectionException|Illuminate\Validation\ValidationException|AuthorizationException $e) {
+} catch (\App\Services\Finance\Exceptions\AccountingIntegrationException|\App\Services\Finance\Exceptions\ClubOrdinaryIncomeReceiptException|ProvisioningException|\App\Services\Finance\Exceptions\AccountingPeriodCloseException|JournalPostingException|App\Services\Finance\Exceptions\JournalReversalException|App\Services\Finance\Exceptions\ClubExpenseException|App\Services\Finance\Exceptions\ClubOrdinaryIncomeReceiptCorrectionException|Illuminate\Validation\ValidationException|AuthorizationException $e) {
     $result = ['status' => 'domain_rejected', 'class' => $e::class, 'message' => $e->getMessage(), 'depth' => DB::transactionLevel()];
 } catch (Throwable $e) {
     $result = ['status' => 'error', 'class' => $e::class, 'message' => $e->getMessage(), 'depth' => DB::transactionLevel()];
