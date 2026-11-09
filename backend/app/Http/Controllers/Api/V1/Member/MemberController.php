@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1\Member;
 use App\Http\Controllers\Controller;
 use App\Models\Club;
 use App\Models\Member;
+use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Access\TransactionActorAuthorisation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -131,7 +133,11 @@ class MemberController extends Controller
         $validated['status'] = $validated['status'] ?? 'active';
         $validated['blood_donor_consent'] = $validated['blood_donor_consent'] ?? false;
 
-        $member = Member::create($validated);
+        $member = app(OrganisationTransactionGuard::class)->run($club, function ($context) use ($request, $club, $validated) {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $request->user(), 'members.manage');
+
+            return Member::create($validated);
+        });
 
         return response()->json([
             'member' => $this->memberPayload($member, true),
@@ -171,7 +177,17 @@ class MemberController extends Controller
             'blood_donor_consent' => ['sometimes', 'boolean'],
         ]);
 
-        $member->update($validated);
+        if (array_key_exists('status', $validated) || array_key_exists('user_id', $validated)) {
+            $member = app(OrganisationTransactionGuard::class)->run($club, function ($context) use ($request, $club, $member, $validated) {
+                app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $request->user(), 'members.manage');
+                $current = Member::query()->where('club_id', $club->id)->whereKey($member->id)->lockForUpdate()->firstOrFail();
+                $current->update($validated);
+
+                return $current;
+            });
+        } else {
+            $member->update($validated);
+        }
 
         return response()->json([
             'member' => $this->memberPayload($member->refresh(), true),

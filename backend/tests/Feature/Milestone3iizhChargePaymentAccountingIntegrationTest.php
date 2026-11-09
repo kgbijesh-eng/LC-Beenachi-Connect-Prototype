@@ -816,6 +816,11 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPost
         $sequence = Club::count() + 1;
         $club = Club::create(['name' => 'Beenachi '.$sequence, 'code' => 'LCB'.$sequence, 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
         config(['instance.organisation_code' => $club->code]);
+        $role = \App\Models\Role::firstOrCreate(['slug' => 'b6-collection-fixture'], ['name' => 'Collection fixture']);
+        foreach (['finance.manage', 'finance.void'] as $slug) {
+            $role->permissions()->syncWithoutDetaching([\App\Models\Permission::firstOrCreate(['slug' => $slug], ['name' => $slug, 'group' => 'finance'])->id]);
+        }
+        \App\Models\ClubMembership::create(['club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => $role->id, 'status' => 'active']);
         $member = Member::create(['club_id' => $club->id, 'member_code' => 'M001', 'full_name' => 'Member One', 'status' => 'active']);
         $accounts = [];
         foreach ([['receivable', 'MEMBER-RECEIVABLES', 'asset', 'debit'], ['bank', 'BANK-OPERATING', 'asset', 'debit'], ['income', 'INCOME-MEMBERSHIP-DUES', 'income', 'credit'], ['equity', 'OPENING-BALANCE-EQUITY', 'equity', 'credit']] as [$key, $code, $type, $normal]) {

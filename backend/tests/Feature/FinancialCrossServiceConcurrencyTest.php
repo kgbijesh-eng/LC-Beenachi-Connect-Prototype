@@ -79,7 +79,7 @@ class FinancialCrossServiceConcurrencyTest extends FinancialPostgresTestCase
 
     public static function unsynchronisedWriters(): array
     {
-        return [['member-update', false], ['member-update', true], ['membership-update', false], ['membership-update', true]];
+        return [['member-update', false], ['member-update', true], ['membership-update', false], ['membership-update', true], ['member-import', false], ['member-import', true], ['member-link', false], ['member-link', true]];
     }
 
     #[DataProvider('unsynchronisedWriters')]
@@ -87,36 +87,52 @@ class FinancialCrossServiceConcurrencyTest extends FinancialPostgresTestCase
     {
         $p = (new Fixture)->prepare('legacy-payment');
         $before = Fixture::snapshot($p['club']);
-        if ($writer === 'member-update') {
+        if ($writer !== 'membership-update') {
             $perm = Permission::firstOrCreate(['slug' => 'members.manage'], ['name' => 'Manage members', 'group' => 'members']);
             $role = Role::findOrFail(ClubMembership::where('club_id', $p['club'])->where('user_id', $p['actor'])->value('role_id'));
             $role->permissions()->syncWithoutDetaching([$perm->id]);
+            if ($writer === 'member-import') {
+                $role->update(['slug' => 'treasurer']);
+                $view = Permission::firstOrCreate(['slug' => 'club.view'], ['name' => 'View club', 'group' => 'club']);
+                $role->permissions()->syncWithoutDetaching([$view->id]);
+            }
             $p['writer_token'] = User::findOrFail($p['actor'])->createToken('b3-synthetic-member-writer')->plainTextToken;
         }
-        [$dir,$one,$two] = $this->workers($p, 'operation', $writer, $afterAdmission ? 'before-insert' : 'club');
+        $synchronised = $writer !== 'membership-update';
+        $financeSucceeds = $afterAdmission || $writer === 'member-link';
+        $writerFirst = $synchronised && ! $afterAdmission;
+        [$dir,$one,$two] = $this->workers($p, $writerFirst ? $writer : 'operation', $writerFirst ? 'operation' : $writer, ! $synchronised && $afterAdmission ? 'before-insert' : 'club');
         try {
             $this->startHolder($dir, $one);
             $two->start();
             $this->await(fn () => is_file($dir.'/two.ready'));
             file_put_contents($dir.'/two.start', '1');
-            // The real member controller/model writer completes while the finance club lock is held.
-            $this->await(fn () => is_file($dir.'/two.result.json'));
+            if ($synchronised) {
+                $holder = json_decode(file_get_contents($dir.'/one.ready'), true)['pid'];
+                $waiter = json_decode(file_get_contents($dir.'/two.ready'), true)['pid'];
+                $this->await(fn () => (int) DB::selectOne('SELECT count(*) AS n FROM pg_stat_activity WHERE pid=? AND ?=ANY(pg_blocking_pids(pid))', [$waiter, $holder])->n === 1);
+            } else {
+                $this->await(fn () => is_file($dir.'/two.result.json'));
+            }
             $this->assertTrue($one->isRunning());
             file_put_contents($dir.'/one.finish', '1');
             $results = $this->finish($dir, $one, $two);
-            $this->assertSame('success', $results[1]['status']);
-            $this->assertSame($afterAdmission ? 'success' : 'domain_rejected', $results[0]['status']);
-            if (! $afterAdmission) {
+            $this->assertSame('success', $results[$writerFirst ? 0 : 1]['status']);
+            $this->assertSame($financeSucceeds ? 'success' : 'domain_rejected', $results[$writerFirst ? 1 : 0]['status']);
+            if (! $financeSucceeds) {
                 $this->assertSame($before, Fixture::snapshot($p['club']));
             }
-            $this->assertSame($afterAdmission ? 1 : 0, DB::table('payments')->where('club_id', $p['club'])->count());
-            $this->assertSame($afterAdmission ? 1 : 0, DB::table('member_ledger_entries')->where('club_id', $p['club'])->count());
-            if ($writer === 'member-update') {
+            $this->assertSame($financeSucceeds ? 1 : 0, DB::table('payments')->where('club_id', $p['club'])->count());
+            $this->assertSame($financeSucceeds ? 1 : 0, DB::table('member_ledger_entries')->where('club_id', $p['club'])->count());
+            if ($writer === 'member-link') {
+                $this->assertSame($p['actor'], Member::findOrFail($p['member'])->user_id);
+                $this->assertSame('active', Member::findOrFail($p['member'])->status);
+            } elseif ($synchronised) {
                 $this->assertSame('inactive', Member::findOrFail($p['member'])->status);
             } else {
                 $this->assertSame('inactive', ClubMembership::where('club_id', $p['club'])->where('user_id', $p['actor'])->value('status'));
             }
-            fwrite(STDOUT, "\nB3_UNSYNCHRONISED_WRITER ".json_encode(['writer' => $writer, 'after_admission' => $afterAdmission, 'synchronised' => false, 'outcome' => $results[0]['status'], 'scope' => 'B6 deferred; existing admission semantics retained'], JSON_THROW_ON_ERROR)."\n");
+            fwrite(STDOUT, "\nB3_UNSYNCHRONISED_WRITER ".json_encode(['writer' => $writer, 'after_admission' => $afterAdmission, 'synchronised' => $synchronised, 'outcome' => $results[$writerFirst ? 1 : 0]['status'], 'scope' => $synchronised ? 'B6-A member writer' : 'Membership administration deferred'], JSON_THROW_ON_ERROR)."\n");
         } finally {
             file_put_contents($dir.'/one.finish', '1');
             file_put_contents($dir.'/two.finish', '1');

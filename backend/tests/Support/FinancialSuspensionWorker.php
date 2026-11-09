@@ -69,8 +69,15 @@ try {
         FinancialOperationFixture::perform($p);
     } elseif ($p['mode'] === 'close') {
         app(ClubAccountingPeriodCloseService::class)->close(new AccountingPeriodCloseRequest($p['club'], $p['period'], $p['actor'], '2027-28', 'B3 period-close compatibility'));
-    } elseif ($p['mode'] === 'member-update') {
-        $request = Request::create('/api/v1/clubs/'.$p['club'].'/members/'.$p['member'], 'PATCH', ['status' => 'inactive'], [], [], ['HTTP_AUTHORIZATION' => 'Bearer '.$p['writer_token'], 'HTTP_ACCEPT' => 'application/json']);
+    } elseif (in_array($p['mode'], ['member-update', 'member-link', 'member-import'], true)) {
+        $base = '/api/v1/clubs/'.$p['club'].'/members/';
+        $import = $p['mode'] === 'member-import';
+        $data = match ($p['mode']) {
+            'member-import' => ['rows' => [['member_code' => 'PROBE', 'full_name' => 'Synthetic financial member', 'status' => 'inactive']]],
+            'member-link' => ['user_id' => $p['actor']],
+            default => ['status' => 'inactive'],
+        };
+        $request = Request::create($base.($import ? 'import-commit' : $p['member']), $import ? 'POST' : 'PATCH', $data, [], [], ['HTTP_AUTHORIZATION' => 'Bearer '.$p['writer_token'], 'HTTP_ACCEPT' => 'application/json']);
         $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
         $response = $kernel->handle($request);
         $kernel->terminate($request, $response);

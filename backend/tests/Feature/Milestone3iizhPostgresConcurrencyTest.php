@@ -208,6 +208,11 @@ class Milestone3iizhPostgresConcurrencyTest extends TestCase
         $actor = User::factory()->create();
         $club = Club::create(['name' => $key, 'code' => 'C'.substr(hash('sha256', $key), 0, 6), 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
         config(['instance.organisation_code' => $club->code]);
+        $role = \App\Models\Role::firstOrCreate(['slug' => 'b6-collection-fixture'], ['name' => 'Collection fixture']);
+        foreach (['finance.manage', 'finance.void'] as $slug) {
+            $role->permissions()->syncWithoutDetaching([\App\Models\Permission::firstOrCreate(['slug' => $slug], ['name' => $slug, 'group' => 'finance'])->id]);
+        }
+        \App\Models\ClubMembership::create(['club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => $role->id, 'status' => 'active']);
         $member = Member::create(['club_id' => $club->id, 'member_code' => 'M'.$club->id, 'full_name' => 'Member', 'status' => 'active']);
         foreach ([['receivable', 'MEMBER-RECEIVABLES', 'asset', 'debit'], ['bank', 'BANK-OPERATING', 'asset', 'debit'], ['income', 'INCOME-DUES', 'income', 'credit'], ['equity', 'OPENING-BALANCE-EQUITY', 'equity', 'credit']] as [$name, $code, $type, $normal]) {
             $$name = LedgerAccount::create(['club_id' => $club->id, 'code' => $code, 'name' => $code, 'account_type' => $type, 'normal_balance' => $normal, 'currency' => 'INR', 'is_active' => true, 'created_by_user_id' => $actor->id]);
