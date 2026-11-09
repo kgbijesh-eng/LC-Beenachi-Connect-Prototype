@@ -16,6 +16,7 @@ use App\Services\Finance\Exceptions\ClubExpenseReversalException;
 use Illuminate\Support\Facades\DB;
 use App\Services\Access\OrganisationTransactionContext;
 use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Access\TransactionActorAuthorisation;
 use Illuminate\Support\Str;
 
 final class ClubExpenseReversalService
@@ -28,6 +29,7 @@ final class ClubExpenseReversalService
     {
         $canonical = $this->canonical($input);
         return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $expensePublicId, $actor, $canonical): ClubExpense {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'finance.club.expenses.reverse');
             $lockedClub = Club::query()->whereKey($club->id)->lockForUpdate()->firstOrFail();
             $expense = ClubExpense::query()->where('club_id', $lockedClub->id)->where('public_id', strtolower(trim($expensePublicId)))->lockForUpdate()->firstOrFail();
             $existingByKey = ClubExpenseReversal::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();

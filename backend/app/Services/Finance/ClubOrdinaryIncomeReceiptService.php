@@ -9,6 +9,7 @@ use App\Services\Finance\Exceptions\{ClubOrdinaryIncomeReceiptConflictException,
 use Illuminate\Support\Facades\DB;
 use App\Services\Access\OrganisationTransactionContext;
 use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Access\TransactionActorAuthorisation;
 use Illuminate\Support\Str;
 
 final class ClubOrdinaryIncomeReceiptService
@@ -22,15 +23,26 @@ final class ClubOrdinaryIncomeReceiptService
     {
         $canonical = $this->canonical($input);
         return app(OrganisationTransactionGuard::class)->run($club,
-            fn (OrganisationTransactionContext $context): ClubOrdinaryIncomeReceipt => $this->recordBody($context, $club, $actor, $canonical), 3);
+            function (OrganisationTransactionContext $context) use ($club, $actor, $canonical): ClubOrdinaryIncomeReceipt {
+                app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'finance.club.ordinary_income_receipts.create');
+
+                return $this->recordBody($context, $club, $actor, $canonical);
+            }, 3);
     }
 
-    public function recordWithin(OrganisationTransactionContext $context, Club $club, User $actor, array $input): ClubOrdinaryIncomeReceipt
+    public function recordWithin(OrganisationTransactionContext $context, Club $club, User $actor, array $input, ?ClubOrdinaryIncomeReceiptCorrectionService $correction = null): ClubOrdinaryIncomeReceipt
     {
         $canonical = $this->canonical($input);
         return app(OrganisationTransactionGuard::class)->within($context, $club,
-            fn (): ClubOrdinaryIncomeReceipt => DB::transaction(
-                fn (): ClubOrdinaryIncomeReceipt => $this->recordBody($context, $club, $actor, $canonical), 3));
+            function () use ($context, $club, $actor, $input, $canonical, $correction): ClubOrdinaryIncomeReceipt {
+                if ($correction === null) {
+                    throw new \Illuminate\Auth\Access\AuthorizationException();
+                }
+                $correction->assertReplacementAdmission($context, $actor, $input);
+                app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'finance.club.ordinary_income_receipts.reverse');
+
+                return DB::transaction(fn (): ClubOrdinaryIncomeReceipt => $this->recordBody($context, $club, $actor, $canonical), 3);
+            });
     }
 
     private function recordBody(OrganisationTransactionContext $context, Club $club, User $actor, array $canonical): ClubOrdinaryIncomeReceipt

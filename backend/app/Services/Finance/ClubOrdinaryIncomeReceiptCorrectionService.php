@@ -9,11 +9,14 @@ use App\Services\Finance\Exceptions\{AlreadyReversedJournalException, ClubOrdina
 use Illuminate\Support\Facades\DB;
 use App\Services\Access\OrganisationTransactionContext;
 use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Access\TransactionActorAuthorisation;
 use Illuminate\Support\Str;
 use Throwable;
 
 final class ClubOrdinaryIncomeReceiptCorrectionService
 {
+    private ?array $replacementAdmission = null;
+
     public const SOURCE_TYPE = 'club_ordinary_income_receipt_correction';
 
     public function __construct(private readonly JournalReversalService $reversals, private readonly ClubOrdinaryIncomeReceiptService $receipts) {}
@@ -25,6 +28,7 @@ final class ClubOrdinaryIncomeReceiptCorrectionService
 
         try {
             return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $receiptPublicId, $actor, $canonical): ClubOrdinaryIncomeReceipt {
+                app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'finance.club.ordinary_income_receipts.reverse');
                 $lockedClub = Club::query()->whereKey($club->id)->lockForUpdate()->firstOrFail();
                 $receipt = ClubOrdinaryIncomeReceipt::query()->where('club_id', $lockedClub->id)->where('public_id', $receiptPublicId)->lockForUpdate()->firstOrFail();
                 $existing = ClubOrdinaryIncomeReceiptCorrection::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();
@@ -60,7 +64,12 @@ final class ClubOrdinaryIncomeReceiptCorrectionService
                     $replacement = $canonical['replacement'];
                     $replacement['idempotency_key'] = (string) Str::uuid();
                     $replacement['corrected_from_receipt'] = $receipt->public_id;
-                    $replacementReceipt = $this->receipts->recordWithin($context, $lockedClub, $actor, $replacement);
+                    $this->replacementAdmission = [$context, $actor->id, $replacement];
+                    try {
+                        $replacementReceipt = $this->receipts->recordWithin($context, $lockedClub, $actor, $replacement, $this);
+                    } finally {
+                        $this->replacementAdmission = null;
+                    }
                     $correction->bindReplacementDuringConstruction($replacementReceipt);
                 }
                 return $this->loaded($receipt);
@@ -70,6 +79,13 @@ final class ClubOrdinaryIncomeReceiptCorrectionService
         } catch (Throwable $exception) {
             if ($this->isConstraintConflict($exception)) throw new ClubOrdinaryIncomeReceiptCorrectionConflictException('The correction conflicts with another committed request.', 'ORDINARY_INCOME_RECEIPT_CORRECTION_CONCURRENCY_CONFLICT', $exception);
             throw $exception;
+        }
+    }
+
+    public function assertReplacementAdmission(OrganisationTransactionContext $context, User $actor, array $input): void
+    {
+        if ($this->replacementAdmission !== [$context, $actor->id, $input]) {
+            throw new \Illuminate\Auth\Access\AuthorizationException();
         }
     }
 

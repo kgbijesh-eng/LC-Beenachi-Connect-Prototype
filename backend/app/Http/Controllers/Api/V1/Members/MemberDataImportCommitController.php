@@ -20,7 +20,8 @@ class MemberDataImportCommitController extends Controller
     {
         $result = $this->commitService->commit(
             $club->id,
-            $request->validated('rows')
+            $request->validated('rows'),
+            $request->user()
         );
 
         return response()->json([

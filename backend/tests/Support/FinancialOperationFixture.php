@@ -57,6 +57,10 @@ final class FinancialOperationFixture
         $permission = Permission::firstOrCreate(['slug' => 'payments.record'], ['name' => 'Record payments', 'group' => 'finance']);
         $role = Role::findOrFail(ClubMembership::where('club_id', $f['club']->id)->where('user_id', $f['actor']->id)->value('role_id'));
         $role->permissions()->syncWithoutDetaching([$permission->id]);
+        // This shared fixture provisions a synthetic finance operator for all supported actions.
+        foreach (['finance.manage', 'finance.void', 'finance.club.expenses.create', 'finance.club.expenses.reverse', 'finance.club.transfers.create'] as $slug) {
+            $role->permissions()->syncWithoutDetaching([Permission::firstOrCreate(['slug' => $slug], ['name' => $slug, 'group' => 'finance'])->id]);
+        }
         $p = ['action' => $action, 'club' => $f['club']->id, 'code' => $f['club']->code, 'actor' => $f['actor']->id, 'member' => $member->id, 'period' => $f['period']->id, 'bank' => $f['bank']->id, 'income' => $f['income']->id, 'key' => (string) Str::uuid()];
         $p['expense_input'] = ['accounting_date' => '2027-08-12', 'expense_account' => $expense->public_id, 'payment_account' => $f['bank']->public_id, 'fund' => 'GENERAL_CLUB_FUND', 'amount_paise' => 100, 'description' => 'Synthetic expense', 'idempotency_key' => $p['key']];
         $p['transfer_input'] = ['accounting_date' => '2027-08-12', 'source_account' => $f['bank']->public_id, 'destination_account' => $cash->public_id, 'fund' => 'GENERAL_CLUB_FUND', 'amount_paise' => 100, 'description' => 'Synthetic transfer', 'idempotency_key' => $p['key']];

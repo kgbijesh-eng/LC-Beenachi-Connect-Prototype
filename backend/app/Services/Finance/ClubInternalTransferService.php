@@ -8,6 +8,7 @@ use App\Services\Finance\Exceptions\{ClubInternalTransferConflictException, Club
 use Illuminate\Support\Facades\DB;
 use App\Services\Access\OrganisationTransactionContext;
 use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Access\TransactionActorAuthorisation;
 use Illuminate\Support\Str;
 
 final class ClubInternalTransferService
@@ -19,6 +20,7 @@ final class ClubInternalTransferService
     {
         $canonical = $this->canonical($input);
         return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $actor, $canonical): ClubInternalTransfer {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'finance.club.transfers.create');
             $lockedClub = Club::query()->whereKey($club->id)->lockForUpdate()->firstOrFail();
             $existing = ClubInternalTransfer::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();
             if ($existing) {

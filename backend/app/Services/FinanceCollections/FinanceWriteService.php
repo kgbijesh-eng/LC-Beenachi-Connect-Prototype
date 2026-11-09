@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Club;
 use App\Services\Access\OrganisationTransactionContext;
 use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Access\TransactionActorAuthorisation;
 use App\Models\ClubCharge;
 use App\Models\Member;
 use App\Models\MemberCharge;
@@ -28,6 +29,7 @@ class FinanceWriteService
     public function createCharge(User $u, Club $c, array $v): ClubCharge
     {
         return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $v) {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $c->id, $u, 'finance.manage');
             $this->enabledCategory($v['category']);
             $ids = $this->members($c, $v);
             $r = ClubCharge::create(['club_id' => $c->id, 'title' => $v['title'], 'description' => $v['description'] ?? null, 'category' => $v['category'], 'amount_paise' => $v['amount_paise'], 'due_date' => $v['due_date'], 'financial_year' => $v['financial_year'], 'status' => 'draft', 'assignment_member_ids' => $ids, 'created_by_user_id' => $u->id]);
@@ -40,6 +42,7 @@ class FinanceWriteService
     public function updateCharge(User $u, Club $c, ClubCharge $r, array $v): ClubCharge
     {
         return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $r, $v) {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $c->id, $u, 'finance.manage');
             $this->enabledCategory($v['category']);
             $r = $this->lockCharge($c, $r, $v['lock_version']);
             if ($r->status !== 'draft') {
@@ -56,6 +59,7 @@ class FinanceWriteService
     public function issue(User $u, Club $c, ClubCharge $r, int $version): ClubCharge
     {
         return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $r, $version) {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $c->id, $u, 'finance.manage');
             Club::query()->whereKey($c->id)->lockForUpdate()->firstOrFail();
             $r = ClubCharge::where('club_id', $c->id)->whereKey($r->id)->lockForUpdate()->firstOrFail();
             if ($r->club_id !== $c->id) {
@@ -93,6 +97,7 @@ class FinanceWriteService
     public function close(User $u, Club $c, ClubCharge $r, int $version): ClubCharge
     {
         return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $r, $version) {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $c->id, $u, 'finance.manage');
             $r = $this->lockCharge($c, $r, $version);
             if ($r->status !== 'issued') {
                 throw new ConflictHttpException('Only Issued charges may close.');
@@ -108,6 +113,7 @@ class FinanceWriteService
     public function cancel(User $u, Club $c, ClubCharge $r, int $version, string $reason): ClubCharge
     {
         return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $r, $version, $reason) {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $c->id, $u, 'finance.manage');
             Club::query()->whereKey($c->id)->lockForUpdate()->firstOrFail();
             $r = $this->lockCharge($c, $r, $version);
             if (! in_array($r->status, ['draft', 'issued'], true)) {
@@ -134,6 +140,7 @@ class FinanceWriteService
         $hash = hash('sha256', json_encode($this->canonical($v), JSON_UNESCAPED_SLASHES));
 
         return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $m, $v, $hash) {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $c->id, $u, 'finance.manage');
             $m = Member::query()->where('club_id', $context->organisationId)->whereKey($m->id)->where('status', 'active')->firstOrFail();
             Club::query()->whereKey($c->id)->lockForUpdate()->firstOrFail();
             $existing = MemberPayment::where('club_id', $c->id)->where('idempotency_key', $v['idempotency_key'])->lockForUpdate()->first();
@@ -197,6 +204,7 @@ class FinanceWriteService
     public function void(User $u, Club $c, MemberPayment $p, int $version, string $reason, ?int $replacement = null): MemberPayment
     {
         return app(OrganisationTransactionGuard::class)->run($c, function (OrganisationTransactionContext $context) use ($u, $c, $p, $version, $reason, $replacement) {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $c->id, $u, 'finance.void');
             Club::query()->whereKey($c->id)->lockForUpdate()->firstOrFail();
             $p = MemberPayment::where('club_id', $c->id)->whereKey($p->id)->lockForUpdate()->firstOrFail();
             if ($p->club_id !== $c->id) {
