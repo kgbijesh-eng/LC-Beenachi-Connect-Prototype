@@ -114,7 +114,19 @@ final class Milestone3iizvPostgresExpenseConcurrencyTest extends TestCase
     private function fixture(string $suffix, bool $catalogueExpense = false): array
     {
         $club = Club::create(['name' => "3IIZV {$suffix}", 'code' => "3IIZV{$suffix}", 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
-        config(['instance.organisation_code' => $club->code]); $actor = User::factory()->create();
+        config(['instance.organisation_code' => $club->code]);
+        $actor = User::factory()->create();
+        $role = \App\Models\Role::firstOrCreate(['slug' => 'b6-expense-fixture'], ['name' => 'Expense fixture']);
+        foreach (['finance.club.expenses.create', 'finance.club.expenses.reverse'] as $slug) {
+            $permission = \App\Models\Permission::firstOrCreate(['slug' => $slug], ['name' => $slug, 'group' => 'finance']);
+            $role->permissions()->syncWithoutDetaching([$permission->id]);
+        }
+        \App\Models\ClubMembership::create([
+            'club_id' => $club->id,
+            'user_id' => $actor->id,
+            'role_id' => $role->id,
+            'status' => 'active',
+        ]);
         $period = ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $actor->id]);
         $bank = $this->account($club, $actor, "BANK-{$suffix}", 'asset', 'debit', 'CASH_AND_BANK'); $equity = $this->account($club, $actor, "EQUITY-{$suffix}", 'equity', 'credit', 'FUND_BALANCE_EQUITY');
         $expense = $this->account($club, $actor, $catalogueExpense ? 'EXPENSE-SERVICE-ACTIVITY' : "EXPENSE-{$suffix}", 'expense', 'debit', 'EXPENSES', $catalogueExpense ? 'catalogue' : 'custom', $catalogueExpense ? 'EXPENSE-SERVICE-ACTIVITY' : null);

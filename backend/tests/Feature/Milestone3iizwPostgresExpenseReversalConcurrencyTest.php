@@ -54,7 +54,20 @@ final class Milestone3iizwPostgresExpenseReversalConcurrencyTest extends TestCas
     private function fixture(string $suffix): array
     {
         $club = Club::create(['name' => "3IIZW {$suffix}", 'code' => "3IIZW{$suffix}", 'timezone' => 'Asia/Kolkata', 'is_active' => true]);
-        config(['instance.organisation_code' => $club->code]); $actor = User::factory()->create(); $period = ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $actor->id]);
+        config(['instance.organisation_code' => $club->code]);
+        $actor = User::factory()->create();
+        $role = \App\Models\Role::firstOrCreate(['slug' => 'b6-expense-fixture'], ['name' => 'Expense fixture']);
+        foreach (['finance.club.expenses.create', 'finance.club.expenses.reverse'] as $slug) {
+            $permission = \App\Models\Permission::firstOrCreate(['slug' => $slug], ['name' => $slug, 'group' => 'finance']);
+            $role->permissions()->syncWithoutDetaching([$permission->id]);
+        }
+        \App\Models\ClubMembership::create([
+            'club_id' => $club->id,
+            'user_id' => $actor->id,
+            'role_id' => $role->id,
+            'status' => 'active',
+        ]);
+        $period = ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $actor->id]);
         $bank = $this->account($club, $actor, "BANK-{$suffix}", 'asset', 'debit', 'CASH_AND_BANK'); $equity = $this->account($club, $actor, "EQUITY-{$suffix}", 'equity', 'credit', 'FUND_BALANCE_EQUITY'); $expenseAccount = $this->account($club, $actor, "EXPENSE-{$suffix}", 'expense', 'debit', 'EXPENSES');
         $package = ClubAccountingCutoverPackage::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'cutover_date' => '2027-07-01', 'chart_version' => 'CLUB-COA-2026-01', 'package_version' => 1, 'status' => 'draft', 'currency' => 'INR', 'canonical_checksum' => str_repeat('e', 64), 'reconciliation_difference_paise' => 0, 'dr033_classification' => 'OPENING-BALANCE-EQUITY', 'activation_ready' => false, 'created_by_user_id' => $actor->id, 'updated_by_user_id' => $actor->id]);
         $rows = collect([[$bank, 'debit'], [$equity, 'credit']])->map(fn ($row) => ClubAccountingCutoverScheduleRow::create(['club_id' => $club->id, 'cutover_package_id' => $package->id, 'schedule_type' => $row[0]->account_type === 'equity' ? 'equity_preview' : 'cash_on_hand', 'row_key' => 'OPENING-'.$row[0]->id, 'non_sensitive_label' => $row[0]->name, 'ledger_account_id' => $row[0]->id, 'direction' => $row[1], 'amount_paise' => 1000, 'currency' => 'INR', 'fund_code' => 'GENERAL_CLUB_FUND']));
