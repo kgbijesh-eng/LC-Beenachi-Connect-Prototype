@@ -10,7 +10,9 @@ use App\Models\ClubAccountingCutoverExecutionEvent;
 use App\Models\ClubAccountingCutoverExecutionSuccess;
 use App\Models\ClubAccountingPeriod;
 use App\Models\ClubJournalEntry;
-use App\Models\LedgerAccount;
+use App\Services\Finance\ClubOpeningJournalActivationService;
+use App\Services\Finance\CutoverExecutionRequest;
+use App\Services\Finance\Exceptions\CutoverExecutionException;
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -34,7 +36,7 @@ class AccountingAdministrationOpeningConcurrencyTest extends CutoverPostgresTest
     {
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
         $f = $this->authorizedFixture('b3-peer', 1);
-        $p = ['club' => $f['club']->id, 'actor' => $f['operator']->id, 'package' => $f['package']->id, 'version' => $f['package']->lock_version, 'checksum' => $f['package']->canonical_checksum, 'period' => ClubAccountingPeriod::where('club_id', $f['club']->id)->value('id'), 'bank' => LedgerAccount::where('club_id', $f['club']->id)->where('code', 'BANK-OPERATING')->value('id'), 'cash' => LedgerAccount::where('club_id', $f['club']->id)->where('code', 'CASH-ON-HAND')->value('id'), 'opening_key' => (string) Str::uuid(), 'journal_key' => (string) Str::uuid(), 'close_actor' => $f['president']->id];
+        $p = ['club' => $f['club']->id, 'actor' => $f['operator']->id, 'package' => $f['package']->id, 'version' => $f['package']->lock_version, 'checksum' => $f['package']->canonical_checksum, 'period' => ClubAccountingPeriod::where('club_id', $f['club']->id)->value('id'), 'opening_key' => (string) Str::uuid(), 'close_actor' => $f['president']->id];
         $dir = sys_get_temp_dir().'/b3-opening-peer-'.Str::uuid();
         mkdir($dir, 0700, true);
         $workers = [];
@@ -66,7 +68,8 @@ class AccountingAdministrationOpeningConcurrencyTest extends CutoverPostgresTest
                 $r = json_decode(file_get_contents($dir.'/'.$name.'.result.json'), true);
                 $this->assertSame(! $openingFirst && $name === 'two' ? 'domain_rejected' : 'success', $r['status']);
                 if ($r['status'] === 'domain_rejected') {
-                    $this->assertStringContainsString('open', strtolower($r['message']));
+                    $this->assertSame(CutoverExecutionException::class, $r['class']);
+                    $this->assertSame('The cutover accounting period is unavailable.', $r['message']);
                 }
                 $this->assertSame(0, $r['depth']);
             }
@@ -80,6 +83,13 @@ class AccountingAdministrationOpeningConcurrencyTest extends CutoverPostgresTest
             $this->assertSame($openingFirst ? 1 : 0, ClubAccountingCutoverExecutionEvent::where('event_type', 'execution_success')->count());
             $this->assertSame($openingFirst ? 0 : 1, ClubAccountingCutoverExecutionEvent::where('event_type', 'execution_failure')->where('result', 'not_posted')->count());
             $this->assertSame([], DB::select("SELECT journal_entry_id FROM club_journal_lines GROUP BY journal_entry_id,fund_code HAVING sum(CASE WHEN direction='debit' THEN amount_paise ELSE -amount_paise END)<>0"));
+            if ($openingFirst) {
+                $success = app(ClubOpeningJournalActivationService::class)->execute(new CutoverExecutionRequest($p['club'], $p['package'], $p['version'], $p['checksum'], 'B5-OPENING-CLOSE', $p['opening_key'], $p['actor']));
+                $this->assertSame(ClubAccountingCutoverExecutionSuccess::sole()->id, $success->id);
+                $this->assertSame(1, ClubJournalEntry::count());
+                $this->assertSame(1, ClubAccountingCutoverAuthorityConsumption::count());
+                $this->assertSame(1, ClubAccountingCutoverExecutionEvent::where('event_type', 'execution_replay')->count());
+            }
             fwrite(STDOUT, "\nB5_OPENING_CLOSE_LOCK_EDGE ".json_encode(['opening_first' => $openingFirst, 'holder' => $holder, 'waiter' => $waiter, 'edge_observed' => true, 'journals' => ClubJournalEntry::count(), 'successes' => ClubAccountingCutoverExecutionSuccess::count(), 'consumptions' => ClubAccountingCutoverAuthorityConsumption::count()], JSON_THROW_ON_ERROR)."\n");
         } finally {
             foreach (['one', 'two'] as $n) {

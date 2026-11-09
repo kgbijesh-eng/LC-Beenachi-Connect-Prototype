@@ -48,7 +48,7 @@ class AccountingAdministrationEnforcementTest extends FinancialPostgresTestCase
         }
         if ($state === 'active') {
             $this->assertNotNull(Fixture::perform($p));
-            if ($action === 'propose-replay') {
+            if (str_ends_with($action, '-replay')) {
                 $this->assertSame($before, Fixture::snapshot($p['club']));
             }
         } else {
@@ -118,11 +118,6 @@ class AccountingAdministrationEnforcementTest extends FinancialPostgresTestCase
             $this->assertSame($before, Fixture::snapshot($p['club']));
         }
         $this->assertSame(0, DB::transactionLevel());
-    }
-
-    public static function failurePoints(): array
-    {
-        return [['configuration'], ['decision'], ['audit']];
     }
 
     private function rejected(callable $operation, string $reason): void

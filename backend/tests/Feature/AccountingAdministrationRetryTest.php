@@ -141,8 +141,22 @@ class AccountingAdministrationRetryTest extends FinancialPostgresTestCase
                 $this->assertSame(! $exhaust && $i === count($attempts) - 1 ? 'committed' : 'aborted', DB::selectOne('SELECT pg_xact_status(CAST(? AS xid8)) AS state', [$xid])->state);
             }
             $this->assertSame($journals, ClubJournalEntry::where('club_id', $p['club'])->count());
+            $after = Fixture::snapshot($p['club']);
             if ($exhaust) {
-                $this->assertSame($before, Fixture::snapshot($p['club']));
+                $this->assertSame($before, $after);
+            } else {
+                switch (str_replace('-nested', '', $api)) {
+                    case 'account':
+                        $this->assertCount(count($before['ledger_accounts']) + 1, $after['ledger_accounts']);
+                        break;
+                    case 'period':
+                        $this->assertCount(count($before['club_accounting_periods']) + 1, $after['club_accounting_periods']);
+                        break;
+                    case 'close':
+                        $this->assertSame('closed', DB::table('club_accounting_periods')->where('id', $p['period'])->value('status'));
+                        $this->assertSame(1, DB::table('audit_logs')->where('club_id', $p['club'])->where('action', 'finance.accounting_period.closed')->count());
+                        break;
+                }
             }
             foreach ($contexts as $context) {
                 try {

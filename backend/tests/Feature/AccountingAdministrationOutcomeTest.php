@@ -35,7 +35,7 @@ class AccountingAdministrationOutcomeTest extends FinancialPostgresTestCase
             }
         }
 
-return $out;
+        return $out;
     }
 
     #[DataProvider('recoveries')]
@@ -96,6 +96,10 @@ return $out;
         } catch (\Throwable $e) {
             $failure = $e;
         }
+        $this->assertInstanceOf(QueryException::class, $original);
+        if ($mode !== 'exact') {
+            $this->assertNull($result);
+        }
         if ($mode === 'exact') {
             $this->assertNull($failure);
             $this->assertNotNull($result);
@@ -131,7 +135,7 @@ return $out;
             }
         }
 
-return $out;
+        return $out;
     }
 
     #[DataProvider('completions')]
@@ -224,8 +228,8 @@ return $out;
             Fixture::perform($p);
             $this->fail('Failure must escape');
         } catch (RuntimeException $e) {
-            $this->assertSame('controlled close failure',$e->getMessage());
+            $this->assertSame('controlled close failure', $e->getMessage());
         }
-        $this->assertSame($before,Fixture::snapshot($p['club']));
+        $this->assertSame($before, Fixture::snapshot($p['club']));
     }
 }

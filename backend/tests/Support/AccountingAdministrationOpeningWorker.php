@@ -12,6 +12,9 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\FinancialWorkerSafety;
 
 require dirname(__DIR__, 2).'/vendor/autoload.php';
+if (is_file(dirname(__DIR__, 2).'/bootstrap/cache/config.php')) {
+    throw new RuntimeException('Cached config rejected.');
+}
 $app = require dirname(__DIR__, 2).'/bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
 [$file,$dir,$name] = array_slice($argv, 1);

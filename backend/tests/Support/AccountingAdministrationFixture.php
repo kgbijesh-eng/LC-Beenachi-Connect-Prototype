@@ -11,6 +11,7 @@ use App\Services\Finance\ClubAccountingPeriodProvisioningRequest;
 use App\Services\Finance\ClubAccountingPeriodProvisioningService;
 use App\Services\Finance\LedgerAccountProvisioningRequest;
 use App\Services\Finance\LedgerAccountProvisioningService;
+use Illuminate\Support\Facades\DB;
 
 final class AccountingAdministrationFixture
 {
@@ -59,6 +60,11 @@ final class AccountingAdministrationFixture
 
     public static function snapshot(int $club): array
     {
-        return FinancialOperationFixture::snapshot($club);
+        $snapshot = FinancialOperationFixture::snapshot($club);
+        foreach (['ledger_accounts', 'club_accounting_periods'] as $table) {
+            $snapshot[$table] = json_decode(json_encode(DB::table($table)->where('club_id', $club)->orderBy('id')->get(), JSON_THROW_ON_ERROR), true);
+        }
+
+        return $snapshot;
     }
 }
