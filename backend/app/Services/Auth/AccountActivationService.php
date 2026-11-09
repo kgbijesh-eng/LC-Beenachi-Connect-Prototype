@@ -8,7 +8,8 @@ use App\Models\Club;
 use App\Models\ClubMembership;
 use App\Models\Member;
 use App\Models\User;
-use App\Services\Access\InstanceOrganisation;
+use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Access\TransactionActorAuthorisation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -16,6 +17,12 @@ use Illuminate\Support\Str;
 class AccountActivationService
 {
     public const PERMISSION_ISSUE = 'members.account_activation.issue';
+
+    public function __construct(
+        private readonly OrganisationTransactionGuard $transactions,
+        private readonly UserCredentialLock $credentials,
+        private readonly TransactionActorAuthorisation $actorAuthorisation,
+    ) {}
 
     public function issue(
         Club $club,
@@ -25,17 +32,31 @@ class AccountActivationService
         ?User $actor
     ): array {
         $email = $this->normalizeEmail($intendedEmail);
-        $target = $this->resolveEligibleTarget($club, $memberCode, $email);
         $plainToken = Str::random(64);
         $tokenHash = self::tokenHash($plainToken);
 
-        $activation = DB::transaction(function () use ($club, $target, $email, $method, $actor, $tokenHash): AccountActivation {
+        $activation = $this->transactions->run($club, function ($context) use ($club, $memberCode, $email, $method, $actor, $tokenHash): AccountActivation {
+            if ($method === 'authenticated' && $actor !== null) {
+                $this->actorAuthorisation->requirePermission($context, $club->id, $actor, self::PERMISSION_ISSUE);
+            } elseif ($method !== 'bootstrap' || $actor !== null || ! config('account_activation.bootstrap_enabled')) {
+                throw new AccountActivationException('Activation issuance is not authorized.');
+            }
+
+            $member = Member::query()->where('club_id', $club->id)
+                ->where('member_code', $memberCode)->lockForUpdate()->first();
+            if (! $member || ! $member->user_id) {
+                throw new AccountActivationException('The target linkage is missing or ambiguous.');
+            }
+            $this->credentials->acquire(DB::connection(), $member->user_id);
+            $target = $this->resolveEligibleTargetByUser($club, $member->user_id, $email, $member);
+
             $now = now();
             $superseded = AccountActivation::query()
                 ->where('user_id', $target['user']->id)
                 ->where('club_id', $club->id)
                 ->whereNull('consumed_at')
                 ->whereNull('revoked_at')
+                ->orderBy('id')
                 ->lockForUpdate()
                 ->get();
             foreach ($superseded as $previous) {
@@ -76,29 +97,30 @@ class AccountActivationService
     {
         $normalizedEmail = $this->normalizeEmail($email);
 
-        DB::transaction(function () use ($plainToken, $normalizedEmail, $password): void {
-            $activation = AccountActivation::query()
-                ->where('token_hash', self::tokenHash($plainToken))
-                ->lockForUpdate()
-                ->first();
+        $hash = self::tokenHash($plainToken);
+        $candidate = AccountActivation::query()->useWritePdo()->where('token_hash', $hash)->first();
+        if (! $candidate) {
+            throw new AccountActivationException('Activation could not be completed.');
+        }
 
-            if (! $activation
-                || $activation->consumed_at
-                || $activation->revoked_at
+        $this->transactions->run($candidate->club_id, function () use ($candidate, $hash, $normalizedEmail, $password): void {
+            $this->credentials->acquire(DB::connection(), $candidate->user_id);
+            $grants = AccountActivation::query()
+                ->where('club_id', $candidate->club_id)
+                ->where('user_id', $candidate->user_id)
+                ->whereNull('consumed_at')
+                ->whereNull('revoked_at')
+                ->orderBy('id')->lockForUpdate()->get();
+            $activation = $grants->firstWhere('id', $candidate->id);
+
+            if (! $activation || ! hash_equals($activation->token_hash, $hash)
                 || $activation->expires_at->isPast()
                 || ! hash_equals($activation->intended_email, $normalizedEmail)) {
                 throw new AccountActivationException('Activation could not be completed.');
             }
 
-            $club = Club::query()->find($activation->club_id);
-            if (! $club) {
-                throw new AccountActivationException('Activation could not be completed.');
-            }
-            $target = $this->resolveEligibleTargetByUser($club, $activation->user_id, $normalizedEmail);
-            $user = User::query()->lockForUpdate()->find($target['user']->id);
-            if (! $user) {
-                throw new AccountActivationException('Activation could not be completed.');
-            }
+            $club = Club::query()->findOrFail($candidate->club_id);
+            $user = $this->resolveEligibleTargetByUser($club, $activation->user_id, $normalizedEmail)['user'];
 
             $user->forceFill([
                 'email' => $normalizedEmail,
@@ -108,15 +130,7 @@ class AccountActivationService
 
             $now = now();
             $activation->forceFill(['consumed_at' => $now])->save();
-            $remaining = AccountActivation::query()
-                ->where('user_id', $user->id)
-                ->where('club_id', $club->id)
-                ->whereKeyNot($activation->id)
-                ->whereNull('consumed_at')
-                ->whereNull('revoked_at')
-                ->lockForUpdate()
-                ->get();
-            foreach ($remaining as $other) {
+            foreach ($grants->where('id', '!=', $activation->id) as $other) {
                 $other->forceFill(['revoked_at' => $now])->save();
                 $this->audit($other, 'account_activation.revoked', $user->id, [
                     'target_user_id' => $user->id,
@@ -135,25 +149,8 @@ class AccountActivationService
         return hash('sha256', $token);
     }
 
-    private function resolveEligibleTarget(Club $club, string $memberCode, string $email): array
-    {
-        $members = Member::query()
-            ->where('club_id', $club->id)
-            ->where('member_code', $memberCode)
-            ->get();
-        if ($members->count() !== 1 || ! $members->first()->user_id) {
-            throw new AccountActivationException('The target linkage is missing or ambiguous.');
-        }
-
-        return $this->resolveEligibleTargetByUser($club, (int) $members->first()->user_id, $email, $members->first());
-    }
-
     private function resolveEligibleTargetByUser(Club $club, int $userId, string $email, ?Member $expectedMember = null): array
     {
-        app(InstanceOrganisation::class)->assertClub($club);
-        if (! $club->is_active) {
-            throw new AccountActivationException('The target is not eligible.');
-        }
         $user = User::query()->find($userId);
         $members = Member::query()->where('club_id', $club->id)->where('user_id', $userId)->get();
         $memberships = ClubMembership::query()->with('role')->where('club_id', $club->id)->where('user_id', $userId)->get();

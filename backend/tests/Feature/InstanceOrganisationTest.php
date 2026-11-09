@@ -11,16 +11,13 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\Auth\AccountActivationService;
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Sanctum;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class InstanceOrganisationTest extends TestCase
+class InstanceOrganisationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
     private Club $club;
     private Club $foreign;
     private User $user;
@@ -28,8 +25,6 @@ class InstanceOrganisationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->assertSame('sqlite', config('database.default'));
-        $this->assertSame(':memory:', config('database.connections.sqlite.database'));
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
         // LCB deliberately comes first; it must never be selected by preference or order.
         $this->foreign = Club::create(['name' => 'Foreign', 'code' => 'LCB', 'is_active' => true]);
@@ -158,12 +153,14 @@ class InstanceOrganisationTest extends TestCase
             'member_code' => 'FOREIGN', 'full_name' => 'Foreign', 'status' => 'active']);
         // Simulate an activation issued by the foreign deployment, then return to this deployment.
         config(['instance.organisation_code' => 'LCB']);
+        config(['account_activation.bootstrap_enabled' => true]);
         $issued = app(AccountActivationService::class)->issue($this->foreign, $member->member_code, $this->user->email, 'bootstrap', null);
         parse_str(parse_url($issued['link'], PHP_URL_FRAGMENT), $fragment);
         config(['instance.organisation_code' => 'PILOT-B']);
         $password = $this->user->password;
         $this->postJson('/api/v1/auth/activate', ['token' => $fragment['token'], 'email' => $this->user->email,
-            'password' => 'Synthetic!Changed123', 'password_confirmation' => 'Synthetic!Changed123'])->assertNotFound();
+            'password' => 'Synthetic!Changed123', 'password_confirmation' => 'Synthetic!Changed123'])->assertUnprocessable()
+            ->assertExactJson(['message' => 'Account activation could not be completed.']);
         $this->assertSame($password, $this->user->fresh()->password);
         $this->assertNull($issued['activation']->fresh()->consumed_at);
         $this->assertDatabaseCount('account_activations', 1);

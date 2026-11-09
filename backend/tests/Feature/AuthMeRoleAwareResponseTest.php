@@ -3,13 +3,10 @@
 namespace Tests\Feature;
 
 use Database\Seeders\DatabaseSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class AuthMeRoleAwareResponseTest extends TestCase
+class AuthMeRoleAwareResponseTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
     public function test_me_endpoint_returns_user_club_role_and_permissions(): void
     {
         config(['instance.organisation_code' => 'LCB']);

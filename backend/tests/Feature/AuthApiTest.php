@@ -4,13 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\{User, Club, Role, ClubMembership};
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class AuthApiTest extends TestCase
+class AuthApiTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

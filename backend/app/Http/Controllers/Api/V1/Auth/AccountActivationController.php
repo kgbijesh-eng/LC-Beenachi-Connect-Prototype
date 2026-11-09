@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\CompleteAccountActivationRequest;
 use App\Http\Requests\Auth\IssueAccountActivationRequest;
 use App\Models\Club;
+use App\Services\Access\OrganisationAccessRejected;
 use App\Services\Auth\AccountActivationException;
 use App\Services\Auth\AccountActivationService;
 use Illuminate\Database\QueryException;
@@ -49,6 +50,12 @@ class AccountActivationController extends Controller
             );
         } catch (AccountActivationException|QueryException) {
             return $this->genericFailure();
+        } catch (OrganisationAccessRejected $exception) {
+            if (in_array($exception->reason, ['ORGANISATION_FOREIGN', 'ORGANISATION_SUSPENDED'], true)) {
+                return $this->genericFailure();
+            }
+
+            throw $exception;
         }
 
         return response()->json([

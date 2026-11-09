@@ -6,13 +6,10 @@ use App\Models\User;
 use App\Models\Club;
 use App\Models\ClubMembership;
 use App\Models\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3dqLogout500DefectFixImplementationTest extends TestCase
+class Milestone3dqLogout500DefectFixImplementationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
     private string $docPath = __DIR__ . '/../../docs/milestone_3dq_logout_500_defect_fix_implementation.md';
 
     public function test_logged_out_token_follow_up_auth_me_returns_401_not_500(): void

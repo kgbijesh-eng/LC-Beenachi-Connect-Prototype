@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Club;
+use App\Services\Access\OrganisationAccessRejected;
 use App\Services\Auth\AccountActivationException;
 use App\Services\Auth\AccountActivationService;
 use Illuminate\Console\Command;
@@ -51,7 +52,7 @@ class IssueAccountActivation extends Command
 
         try {
             $issued = $service->issue($clubs->first(), $memberCode, $email, 'bootstrap', null);
-        } catch (AccountActivationException $exception) {
+        } catch (AccountActivationException|OrganisationAccessRejected $exception) {
             $this->error($exception->getMessage());
 
             return self::FAILURE;

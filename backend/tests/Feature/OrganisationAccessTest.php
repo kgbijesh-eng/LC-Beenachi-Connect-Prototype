@@ -11,16 +11,13 @@ use App\Models\User;
 use App\Services\Access\OrganisationAccess;
 use App\Services\Auth\AccountActivationService;
 use Database\Seeders\DefaultRolesAndPermissionsSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class OrganisationAccessTest extends TestCase
+class OrganisationAccessTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
     private Club $club;
     private Club $foreign;
     private User $user;
@@ -28,8 +25,6 @@ class OrganisationAccessTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->assertSame('sqlite', config('database.default'));
-        $this->assertSame(':memory:', config('database.connections.sqlite.database'));
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
         $this->foreign = Club::create(['name' => 'Foreign secret', 'code' => 'FOREIGN', 'is_active' => true]);
         $this->club = Club::create(['name' => 'Assigned secret', 'code' => 'ASSIGNED', 'is_active' => true]);
@@ -92,6 +87,7 @@ class OrganisationAccessTest extends TestCase
     {
         $member = Member::create(['club_id' => $this->club->id, 'user_id' => $this->user->id,
             'member_code' => 'SYN-1', 'full_name' => 'Synthetic member', 'status' => 'active']);
+        config(['account_activation.bootstrap_enabled' => true]);
         $issued = app(AccountActivationService::class)->issue($this->club, $member->member_code,
             $this->user->email, 'bootstrap', null);
         parse_str(parse_url($issued['link'], PHP_URL_FRAGMENT), $fragment);
