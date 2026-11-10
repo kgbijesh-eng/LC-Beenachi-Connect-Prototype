@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair', 'B3Fixtures', 'B3Poison', 'B3PoisonCommit', 'B3Active', 'B3Direct', 'B3Contexts', 'B3Races', 'B3Workers', 'B3Retries', 'B3Resources', 'B3Cross', 'B3OpeningPeer', 'B4', 'B4Races', 'B4Resources', 'B4Reactivation', 'Coverage', 'CoverageRaces', 'B5', 'B5Outcomes', 'B5Races', 'B5Retries', 'B5Opening', 'B6A', 'B6ADiagnostic', 'B6C1', 'B6C1Races')][string]$Suite = 'Cutover',
+    [ValidateSet('Cutover', 'Guard', 'Finance', 'C', 'D', 'Audit', 'Integration', 'Opening', 'F1', 'B3Foundation', 'B3', 'B3Historical', 'B3Repair', 'B3Fixtures', 'B3Poison', 'B3PoisonCommit', 'B3Active', 'B3Direct', 'B3Contexts', 'B3Races', 'B3Workers', 'B3Retries', 'B3Resources', 'B3Cross', 'B3OpeningPeer', 'B4', 'B4Races', 'B4Resources', 'B4Reactivation', 'Coverage', 'CoverageRaces', 'B5', 'B5Outcomes', 'B5Races', 'B5Retries', 'B5Opening', 'B6A', 'B6ADiagnostic', 'B6C1', 'B6C1Races', 'B6BCredentials', 'B6BCredentialRaces')][string]$Suite = 'Cutover',
     [switch]$BootstrapOnly,
     [switch]$COnly,
     [switch]$CRegressionOnly,
@@ -29,6 +29,8 @@ $databases = @(switch ($Suite) {
     'F1' { @('lcb_p02b2_cutover_test') }
     'B6A' { @('lcb_p02b3_finance_test') }
     'B6C1' { @('lcb_p02b3_finance_test') }
+    'B6BCredentials' { @('lcb_p02b3_finance_test') }
+    'B6BCredentialRaces' { @('lcb_p02b3_finance_test') }
     'B6C1Races' { @('lcb_p02b3_finance_test') }
     'B6ADiagnostic' { @('lcb_p02b3_finance_test') }
     'B5Opening' { @('lcb_p02b2_cutover_test') }
@@ -175,6 +177,14 @@ try {
                 Run-Tests 'f1-real-outcomes' @('tests/Feature/CutoverOpeningTransactionOutcomeTest.php') $databases[0]
                 Run-Tests 'f1-real-outcomes-stability' @('tests/Feature/CutoverOpeningTransactionOutcomeTest.php') $databases[0]
             }
+            'B6BCredentials' {
+                foreach ($file in @('tests/Feature/AccountActivationTest.php','tests/Feature/AuthApiTest.php','tests/Feature/OrganisationAccessTest.php','tests/Feature/InstanceOrganisationTest.php','tests/Feature/LocalRoleApiPermissionSmokeTest.php','tests/Feature/AuthMeRoleAwareResponseTest.php','tests/Feature/Milestone3hfNormalMemberIdentityTest.php','tests/Feature/Milestone3dqLogout500DefectFixImplementationTest.php','tests/Feature/Milestone3dsSeededPaymentPermissionDefectImplementationTest.php','tests/Feature/Milestone3duPaymentRefreshRetestExecutionTest.php')) {
+                    Run-Tests ('b6b-' + [IO.Path]::GetFileNameWithoutExtension($file)) @($file) $databases[0] -RecordFailures
+                }
+            }
+            'B6BCredentialRaces' {
+                Run-Tests 'b6b-credential-races' @('tests/Feature/CredentialTransactionConcurrencyTest.php') $databases[0]
+            }
             'B6C1' {
                 Run-Tests 'b6c1-api' @('tests/Feature/AnnouncementMutationApiTest.php') $databases[0] -RecordFailures
                 Run-Tests 'b6c1-management' @('tests/Feature/Milestone3iiwAnnouncementMutationServiceFoundationTest.php') $databases[0] -RecordFailures
@@ -304,7 +314,7 @@ try {
     $evidence.source_hashes_unchanged=$true
     if (-not $evidence.fixture_discard_requested) { $evidence.status='PASS' }
     if ($evidence.recorded_test_failure) { $evidence.status='FAILED_OR_BLOCKED'; $evidence.reason='Recorded test failures, errors or skips prevent acceptance. Merge NO-GO.' }
-    if ($Suite -in @('C','Integration','B3Races','B3Workers','B3Cross','B3OpeningPeer','B4Races','B4Resources','B4Reactivation','Coverage','CoverageRaces','B5','B5Outcomes','B5Races','B5Opening','B6A','B6C1','B6C1Races') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
+    if ($Suite -in @('C','Integration','B3Races','B3Workers','B3Cross','B3OpeningPeer','B4Races','B4Resources','B4Reactivation','Coverage','CoverageRaces','B5','B5Outcomes','B5Races','B5Opening','B6A','B6C1','B6C1Races', 'B6BCredentials', 'B6BCredentialRaces') -and (Select-String -LiteralPath "$output/server.log" -Pattern 'deadlock detected' -Quiet)) {
         $evidence.mixed_order_deadlock_observed=$true
         $evidence.status='FAILED_OR_BLOCKED';$evidence.reason='PostgreSQL observed a mixed-order deadlock. Merge NO-GO regardless of victim outcomes.'
     }

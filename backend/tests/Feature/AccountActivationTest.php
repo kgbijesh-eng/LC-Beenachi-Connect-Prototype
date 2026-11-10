@@ -11,22 +11,13 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Auth\AccountActivationService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\Sanctum;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class AccountActivationTest extends TestCase
+class AccountActivationTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
-    public function test_backend_tests_are_forced_to_isolated_in_memory_sqlite(): void
-    {
-        $this->assertSame('sqlite', config('database.default'));
-        $this->assertSame(':memory:', config('database.connections.sqlite.database'));
-    }
-
     public function test_authenticated_authorized_issuance_stores_only_hash_and_revokes_replacement(): void
     {
         [$club, $target, $member] = $this->linkedTarget();
@@ -87,6 +78,7 @@ class AccountActivationTest extends TestCase
     {
         [$club, $target, $member] = $this->linkedTarget();
         $target->createToken('synthetic-existing-session');
+        config(['account_activation.bootstrap_enabled' => true]);
         $issued = app(AccountActivationService::class)->issue(
             $club, $member->member_code, 'NEW.LOGIN@EXAMPLE.TEST', 'bootstrap', null
         );
@@ -111,6 +103,7 @@ class AccountActivationTest extends TestCase
     public function test_completion_rejects_replay_expiry_mismatch_and_unknown_tokens_generically(): void
     {
         [$club, , $member] = $this->linkedTarget();
+        config(['account_activation.bootstrap_enabled' => true]);
         $issued = app(AccountActivationService::class)->issue($club, $member->member_code, 'new@example.test', 'bootstrap', null);
         $token = $this->fragmentToken($issued['link']);
         $payload = [
@@ -128,6 +121,7 @@ class AccountActivationTest extends TestCase
     public function test_weak_password_and_missing_confirmation_are_rejected_without_consumption(): void
     {
         [$club, , $member] = $this->linkedTarget();
+        config(['account_activation.bootstrap_enabled' => true]);
         $issued = app(AccountActivationService::class)->issue($club, $member->member_code, 'new@example.test', 'bootstrap', null);
 
         $this->postJson('/api/v1/auth/activate', [

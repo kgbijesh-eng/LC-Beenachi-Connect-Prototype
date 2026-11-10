@@ -5,13 +5,10 @@ namespace Tests\Feature;
 use App\Models\Club;
 use App\Models\Member;
 use Database\Seeders\DatabaseSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class LocalRoleApiPermissionSmokeTest extends TestCase
+class LocalRoleApiPermissionSmokeTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
     public function test_seeded_president_admin_can_login_read_create_and_update_members(): void
     {
         $this->assertRoleCanManageMembers(

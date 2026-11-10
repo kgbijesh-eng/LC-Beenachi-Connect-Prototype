@@ -6,41 +6,49 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
 use App\Services\Access\InstanceOrganisation;
+use App\Services\Access\OrganisationAccessRejected;
+use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Auth\UserCredentialLock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    public function login(LoginRequest $request): JsonResponse
+    public function login(LoginRequest $request, OrganisationTransactionGuard $transactions, UserCredentialLock $credentialsLock): JsonResponse
     {
         $credentials = $request->validated();
 
-        $user = User::where('email', $credentials['email'])->first();
-
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            return response()->json([
-                'message' => 'Invalid login credentials.',
-            ], 422);
+        $candidate = User::query()->useWritePdo()->where('email', $credentials['email'])->first(['id']);
+        if (! $candidate) {
+            return response()->json(['message' => 'Invalid login credentials.'], 422);
         }
 
         $organisation = app(InstanceOrganisation::class)->resolve();
-        if (! $user->clubMemberships()->where('club_id', $organisation->id)->where('status', 'active')->whereHas('role')->exists()) {
-            return response()->json(['message' => 'This action is unauthorized.'], 403);
-        }
 
-        $token = $user->createToken('lc-beenachi-api-token')->plainTextToken;
+        return $transactions->run($organisation, function () use ($candidate, $credentials, $credentialsLock, $organisation): JsonResponse {
+            $credentialsLock->acquire(DB::connection(), $candidate->id);
+            $user = User::query()->whereKey($candidate->id)->where('email', $credentials['email'])->first();
+            if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+                return response()->json(['message' => 'Invalid login credentials.'], 422);
+            }
 
-        return response()->json([
-            'message' => 'Login successful.',
-            'token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-            ],
-        ]);
+            if (! $user->clubMemberships()->where('club_id', $organisation->id)->where('status', 'active')->whereHas('role')->exists()) {
+                return response()->json(['message' => 'This action is unauthorized.'], 403);
+            }
+
+            return response()->json([
+                'message' => 'Login successful.',
+                'token' => $user->createToken('lc-beenachi-api-token')->plainTextToken,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                ],
+            ]);
+        });
     }
 
     public function me(Request $request): JsonResponse
@@ -127,9 +135,22 @@ class AuthController extends Controller
         ]);
     }
 
-    public function logout(Request $request): JsonResponse
+    public function logout(Request $request, UserCredentialLock $credentialsLock): JsonResponse
     {
-        $request->user()->currentAccessToken()?->delete();
+        $user = $request->user();
+        $token = $user->currentAccessToken();
+        if ($token instanceof \Laravel\Sanctum\PersonalAccessToken) {
+            $connection = DB::connection();
+            if ($connection->getDriverName() !== 'pgsql' || $connection->transactionLevel() !== 0
+                || $connection->getPdo()->inTransaction()) {
+                throw OrganisationAccessRejected::unsupported();
+            }
+
+            $connection->transaction(function () use ($connection, $credentialsLock, $user, $token): void {
+                $credentialsLock->acquire($connection, $user->id);
+                $user->tokens()->whereKey($token->getKey())->delete();
+            });
+        }
         Auth::guard('sanctum')->forgetUser();
 
         return response()->json([

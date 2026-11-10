@@ -9,14 +9,11 @@ use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\LocalLinkedMemberIdentitiesSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
-use Tests\TestCase;
+use Tests\Support\FinancialPostgresTestCase;
 
-class Milestone3hfNormalMemberIdentityTest extends TestCase
+class Milestone3hfNormalMemberIdentityTest extends FinancialPostgresTestCase
 {
-    use RefreshDatabase;
-
     private Club $club;
 
     protected function setUp(): void
