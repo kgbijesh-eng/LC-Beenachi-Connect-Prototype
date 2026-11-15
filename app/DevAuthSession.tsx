@@ -68,6 +68,19 @@ export function hasEffectivePermission(session: VerifiedDevSession | null, slug:
     && session.membership.permissions.some(permission => permission?.slug === slug);
 }
 
+function hasSameEffectiveAuthority(active: VerifiedDevSession, refreshed: VerifiedDevSession): boolean {
+  if (active.role !== refreshed.role
+    || active.membership.id !== refreshed.membership.id
+    || active.membership.effective_office?.effective_until !== refreshed.membership.effective_office?.effective_until) {
+    return false;
+  }
+
+  const activePermissions = new Set(active.membership.permissions?.map(permission => permission.slug));
+  const refreshedPermissions = new Set(refreshed.membership.permissions?.map(permission => permission.slug));
+  return activePermissions.size === refreshedPermissions.size
+    && [...activePermissions].every(slug => refreshedPermissions.has(slug));
+}
+
 const ordinaryPermissions = new Set([
   "club.view", "members.view", "events.view", "projects.view", "reminders.view",
   "announcements.view", "finance.self.view", "profile_updates.self.submit", "profile_updates.self.view"
@@ -205,6 +218,7 @@ export function DevAuthProvider({ children }: { children: ReactNode }) {
         setStatus("unauthenticated");
         return;
       }
+      if (hasSameEffectiveAuthority(active, refreshed)) return;
       liveSession.current = refreshed;
       setSession(refreshed);
     } catch {

@@ -1,3 +1,4 @@
+import ClubAccountStatementBackend from "../ClubAccountStatementBackend";
 import AnnouncementsBackend, { AnnouncementDashboardStatus } from "../AnnouncementsBackend";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -128,4 +129,41 @@ it("removes draft creation and management queries from mounted announcement scre
   await act(async () => vi.advanceTimersByTimeAsync(5_000));
   expect(screen.queryByRole("button", { name: "Create draft" })).toBeNull();
   expect(dashboardQueries().at(-1)?.searchParams.has("effective_state")).toBe(false);
+});
+
+function StatementScreen() {
+  const { session } = useDevAuth();
+  return session ? <ClubAccountStatementBackend role={session.role} /> : null;
+}
+
+it("keeps a persistent statement denial visible when refreshed authority is unchanged", async () => {
+  vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8017");
+  let authorityReads = 0;
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async input => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith("/auth/login")) return Response.json({ token: "synthetic" });
+    if (path.endsWith("/account-statement")) return Response.json({}, { status: 403 });
+    if (!path.endsWith("/auth/me")) throw new Error("Unexpected request: " + path);
+    authorityReads += 1;
+    // A third authority read would mean the denied statement was fetched again.
+    if (authorityReads > 2) return new Promise<Response>(() => {});
+    return Response.json({
+      user: { id: 1, name: "Officer", email: "member@example.test" },
+      instance_organisation: { id: 1, code: "LCB", name: "Club" },
+      club_memberships: [{
+        id: 1, status: "active", club: { id: 1, code: "LCB" },
+        role: { slug: "treasurer" }, member: null,
+        authority_as_of: new Date(start + authorityReads * 1000).toISOString(),
+        effective_office: { office: "treasurer", effective_until: "2099-01-01T00:00:00Z" },
+        permissions: [{ slug: "finance.club.statement.view" }]
+      }]
+    });
+  });
+  render(<DevAuthProvider><Controls /><StatementScreen /></DevAuthProvider>);
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Sign in" })));
+
+  expect(screen.getByText("You are not authorized to view the Club Account Statement.")).toBeVisible();
+  expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
+    "/api/v1/auth/login", "/api/v1/auth/me", "/api/v1/clubs/1/finance/account-statement", "/api/v1/auth/me"
+  ]);
 });
