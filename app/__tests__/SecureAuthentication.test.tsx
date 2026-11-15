@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DevAuthProvider, useDevAuth } from "../DevAuthSession";
 import AnnouncementsBackend from "../AnnouncementsBackend";
 import LoginScreen from "../LoginScreen";
-import Prototype from "../page";
+import Prototype from "../portal/page";
 
 const verifiedIdentity = {
   instance_organisation: { id: 1, code: "LCB", name: "LC Beenachi" },

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import Prototype from "../page";
+import Prototype from "../portal/page";
 
 type SyntheticRole = "president-admin" | "secretary" | "treasurer" | "member";
 

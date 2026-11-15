@@ -66,7 +66,7 @@ vi.mock("../ProfileUpdatesBackend", () => ({
   default: () => <section data-testid="profile-updates-backend" />
 }));
 
-import Prototype from "../page";
+import Prototype from "../portal/page";
 
 type Scenario = {
   documentStatus: number;
