@@ -98,9 +98,10 @@ try {
         } else {
             $profile = App\Models\ProfileUpdateRequest::findOrFail($p['profile_request']);
             if ($operation === 'reject') {
-                $service->reject($club, $user, $profile, 1, 'Synthetic review');
+                $service->reject($club, App\Models\User::findOrFail($p['actor']), $profile, 1, 'Synthetic review');
             } else {
-                $service->$operation($club, $user, $profile, 1);
+                $reviewer = $operation === 'approve' ? App\Models\User::findOrFail($p['actor']) : $user;
+                $service->$operation($club, $reviewer, $profile, 1);
             }
         }
     } elseif (in_array($p['mode'], ['member-update', 'member-link', 'member-import'], true)) {

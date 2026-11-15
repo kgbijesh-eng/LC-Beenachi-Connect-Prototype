@@ -17,6 +17,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3rPaymentRecordingApiValidationAndClosureTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
 
     public function test_3r_validation_document_exists_and_records_closure_boundary(): void
     {
@@ -179,6 +181,7 @@ class Milestone3rPaymentRecordingApiValidationAndClosureTest extends FinancialPo
         $user = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
 
         $this->grantPaymentRecordPermissionToRole('president-admin');
+        self::seedAnnouncementOfficerTerm($user->clubMemberships()->where('club_id', $club->id)->sole(), 'president-admin');
 
         $member = Member::query()->create([
             'club_id' => $club->id,
@@ -275,6 +278,7 @@ class Milestone3rPaymentRecordingApiValidationAndClosureTest extends FinancialPo
 
         $president = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
         $this->grantPaymentRecordPermissionToRole('president-admin');
+        self::seedAnnouncementOfficerTerm($president->clubMemberships()->where('club_id', $club->id)->sole(), 'president-admin');
         $presidentToken = $president->createToken('test-token')->plainTextToken;
 
         $otherClub = Club::query()->create([
@@ -310,6 +314,7 @@ class Milestone3rPaymentRecordingApiValidationAndClosureTest extends FinancialPo
         $user = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
 
         $this->grantPaymentRecordPermissionToRole('president-admin');
+        self::seedAnnouncementOfficerTerm($user->clubMemberships()->where('club_id', $club->id)->sole(), 'president-admin');
 
         $member = Member::query()->create([
             'club_id' => $club->id,

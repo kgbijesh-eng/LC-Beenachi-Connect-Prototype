@@ -9,7 +9,8 @@ const auth = vi.hoisted(() => ({
   }
 }));
 
-vi.mock("../DevAuthSession", () => ({ useDevAuth: () => auth }));
+vi.mock("../DevAuthSession", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../DevAuthSession")>(), useDevAuth: () => auth }));
 
 import ReportsBackend from "../ReportsBackend";
 

@@ -10,7 +10,8 @@ const auth = vi.hoisted(() => ({
   authenticatedFetch: vi.fn()
 }));
 
-vi.mock("../DevAuthSession", () => ({ useDevAuth: () => auth }));
+vi.mock("../DevAuthSession", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../DevAuthSession")>(), useDevAuth: () => auth }));
 
 import ClubAccountStatementBackend, { formatInrPaise } from "../ClubAccountStatementBackend";
 
@@ -52,7 +53,7 @@ describe("Club Account Statement frontend integration", () => {
 
   it("renders canonical fund balances, classifications, reconciliation, and public traceability", async () => {
     auth.authenticatedFetch.mockImplementation(() => response({ data: statement() }));
-    render(<ClubAccountStatementBackend role="treasurer" />);
+    renderWithAuthority(<ClubAccountStatementBackend role="treasurer" />);
 
     expect(await screen.findByText("Canonical statement loaded from the accounting ledger.")).toBeInTheDocument();
     expect(screen.getByText("LC Beenachi")).toBeInTheDocument();
@@ -78,7 +79,7 @@ describe("Club Account Statement frontend integration", () => {
 
   it("sends canonical Lions Year, period, and custom date query parameters", async () => {
     auth.authenticatedFetch.mockImplementation(() => response({ data: statement() }));
-    render(<ClubAccountStatementBackend role="president" />);
+    renderWithAuthority(<ClubAccountStatementBackend role="president" />);
     await screen.findByText("Canonical statement loaded from the accounting ledger.");
 
     fireEvent.change(screen.getByLabelText("Lions Year"), { target: { value: "2027-28" } });
@@ -97,7 +98,7 @@ describe("Club Account Statement frontend integration", () => {
   it("shows loading, valid empty, and backend validation states without stale figures", async () => {
     let resolveRequest: ((value: Response) => void) | undefined;
     auth.authenticatedFetch.mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveRequest = resolve; }));
-    const { unmount } = render(<ClubAccountStatementBackend role="secretary" />);
+    const { unmount } = renderWithAuthority(<ClubAccountStatementBackend role="secretary" />);
     expect(screen.getByRole("status")).toHaveTextContent("Loading canonical Club Account Statement");
     await waitFor(() => expect(resolveRequest).toBeTypeOf("function"));
     resolveRequest?.(new Response(JSON.stringify({ data: { ...statement(), source: { cutover_date: "2027-07-01", journal_count: 0, journal_line_count: 0 }, funds: statement().funds.map((fund) => ({ ...fund, classifications: fund.classifications.map((classification) => ({ ...classification, accounts: [] })) })), traceability: { journals: [] } } }), { status: 200, headers: { "Content-Type": "application/json" } }));
@@ -105,7 +106,7 @@ describe("Club Account Statement frontend integration", () => {
     unmount();
 
     auth.authenticatedFetch.mockImplementation(() => response({ message: "The selected dates are invalid." }, 422));
-    render(<ClubAccountStatementBackend role="secretary" />);
+    renderWithAuthority(<ClubAccountStatementBackend role="secretary" />);
     expect(await screen.findByText("The selected dates are invalid.")).toBeInTheDocument();
     expect(screen.queryByText("Cash on hand")).not.toBeInTheDocument();
   });
@@ -118,20 +119,20 @@ describe("Club Account Statement frontend integration", () => {
     [500, { message: "Statement service unavailable." }, "Statement service unavailable."]
   ])("fails closed for backend state %s", async (status, body, expected) => {
     auth.authenticatedFetch.mockImplementation(() => response(body, status));
-    render(<ClubAccountStatementBackend role="treasurer" />);
+    renderWithAuthority(<ClubAccountStatementBackend role="treasurer" />);
     expect(await screen.findByText(new RegExp(expected, "i"))).toBeInTheDocument();
     expect(screen.queryByText("Cash on hand")).not.toBeInTheDocument();
   });
 
   it("fails closed when the statement request cannot reach the backend", async () => {
     auth.authenticatedFetch.mockRejectedValue(new TypeError("Network unavailable"));
-    render(<ClubAccountStatementBackend role="treasurer" />);
+    renderWithAuthority(<ClubAccountStatementBackend role="treasurer" />);
     expect(await screen.findByText("Network unavailable")).toBeInTheDocument();
     expect(screen.queryByText("Cash on hand")).not.toBeInTheDocument();
   });
 
   it("blocks a normal member before making a statement request", async () => {
-    render(<ClubAccountStatementBackend role="member" />);
+    renderWithAuthority(<ClubAccountStatementBackend role="member" />);
     expect(await screen.findByText("You are not authorized to view the Club Account Statement.")).toBeInTheDocument();
     expect(auth.authenticatedFetch).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Statement filters")).not.toBeInTheDocument();
@@ -143,3 +144,14 @@ describe("Club Account Statement frontend integration", () => {
     expect(formatInrPaise(0)).toBe("₹0.00");
   });
 });
+
+function renderWithAuthority(element: React.ReactElement<{ role: string }>) {
+  const { role } = element.props;
+  const permissions = role === "member" ? [] : ["finance.club.statement.view"];
+  Object.assign(auth.session!.membership, {
+    authority_as_of: "2020-01-01T00:00:00Z",
+    effective_office: role === "member" ? null : { office: role, effective_until: "2099-01-01T00:00:00Z" },
+    permissions: permissions.map(slug => ({ slug }))
+  });
+  return render(element);
+}

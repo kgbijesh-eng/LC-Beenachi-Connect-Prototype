@@ -11,7 +11,8 @@ const auth = vi.hoisted(() => ({
   }
 }));
 
-vi.mock("../DevAuthSession", () => ({ useDevAuth: () => auth }));
+vi.mock("../DevAuthSession", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../DevAuthSession")>(), useDevAuth: () => auth }));
 
 const members = [
   { id: 102, full_name: "First Listed Member", member_code: "M102", status: "active" },

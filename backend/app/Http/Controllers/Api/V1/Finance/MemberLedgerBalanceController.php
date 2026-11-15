@@ -12,12 +12,6 @@ use Illuminate\Http\Request;
 
 class MemberLedgerBalanceController extends Controller
 {
-    private const BALANCE_LOOKUP_ROLE_SLUGS = [
-        'president-admin',
-        'secretary',
-        'treasurer',
-    ];
-
     public function own(Request $request, Club $club, MemberLedgerBalanceService $balances): JsonResponse
     {
         $member = Member::query()
@@ -57,25 +51,15 @@ class MemberLedgerBalanceController extends Controller
 
     private function userCanReadMemberBalance(User $user, Club $club, Member $member): bool
     {
-        $roleSlug = $this->activeRoleSlug($user, $club);
+        $permissions = app(\App\Services\Access\ClubPermissionService::class);
 
-        if (in_array($roleSlug, self::BALANCE_LOOKUP_ROLE_SLUGS, true)) {
+        if ($permissions->userHasPermission($user, 'finance.club.view', (int) $club->id)) {
             return true;
         }
 
-        return $roleSlug === 'member'
+        return $permissions->userHasPermission($user, 'finance.self.view', (int) $club->id)
             && $member->user_id !== null
             && $member->user_id === $user->id;
     }
 
-    private function activeRoleSlug(User $user, Club $club): ?string
-    {
-        $membership = $user->clubMemberships()
-            ->with('role')
-            ->where('club_id', $club->id)
-            ->where('status', 'active')
-            ->first();
-
-        return $membership?->role?->slug;
-    }
 }

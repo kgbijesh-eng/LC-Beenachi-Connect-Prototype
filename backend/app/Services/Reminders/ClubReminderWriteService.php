@@ -8,7 +8,8 @@ use App\Models\ClubReminder;
 use App\Models\User;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
+use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Access\TransactionActorAuthorisation;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -19,7 +20,8 @@ class ClubReminderWriteService
     public function create(Club $club, User $actor, array $data): ClubReminder
     {
         $this->validateSchedule($data);
-        return DB::transaction(function () use ($club,$actor,$data): ClubReminder {
+        return app(OrganisationTransactionGuard::class)->run($club, function ($context) use ($club,$actor,$data): ClubReminder {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'reminders.manage');
             $reminder=ClubReminder::create(array_merge(Arr::only($data,self::FIELDS),[
                 'club_id'=>$club->id,'status'=>ClubReminder::STATUS_DRAFT,
                 'created_by_user_id'=>$actor->id,'updated_by_user_id'=>$actor->id,'lock_version'=>1,
@@ -31,7 +33,8 @@ class ClubReminderWriteService
 
     public function update(Club $club, ClubReminder $reminder, User $actor, array $data): ClubReminder
     {
-        return DB::transaction(function () use ($club,$reminder,$actor,$data): ClubReminder {
+        return app(OrganisationTransactionGuard::class)->run($club, function ($context) use ($club,$reminder,$actor,$data): ClubReminder {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'reminders.manage');
             $locked=$this->locked($club,$reminder);
             $this->version($locked,(int)$data['lock_version']);
             if (in_array($locked->status,[ClubReminder::STATUS_COMPLETED,ClubReminder::STATUS_CANCELLED],true)) {
@@ -77,7 +80,8 @@ class ClubReminderWriteService
 
     private function transition(Club $club,ClubReminder $reminder,User $actor,int $version,string $action,callable $changes): ClubReminder
     {
-        return DB::transaction(function() use($club,$reminder,$actor,$version,$action,$changes): ClubReminder {
+        return app(OrganisationTransactionGuard::class)->run($club, function ($context) use($club,$reminder,$actor,$version,$action,$changes): ClubReminder {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'reminders.manage');
             $locked=$this->locked($club,$reminder); $this->version($locked,$version); $before=$locked->toArray();
             $locked->fill(array_merge($changes($locked),['updated_by_user_id'=>$actor->id,'lock_version'=>$locked->lock_version+1]))->save();
             $this->audit($locked,$actor,$action,$before,$locked->fresh()->toArray());

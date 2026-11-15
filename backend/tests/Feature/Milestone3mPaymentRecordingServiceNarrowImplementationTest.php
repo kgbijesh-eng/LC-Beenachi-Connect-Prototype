@@ -17,6 +17,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3mPaymentRecordingServiceNarrowImplementationTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
 
     public function test_milestone_3m_document_records_narrow_implementation_boundary(): void
     {
@@ -215,13 +217,15 @@ class Milestone3mPaymentRecordingServiceNarrowImplementationTest extends Financi
             'password' => 'password',
         ]);
 
-        ClubMembership::query()->create([
+        $membership = ClubMembership::query()->create([
             'club_id' => $club->id,
             'user_id' => $user->id,
             'role_id' => $role->id,
             'status' => 'active',
             'joined_at' => now(),
         ]);
+
+        self::seedAnnouncementOfficerTerm($membership, 'treasurer');
 
         return $user;
     }

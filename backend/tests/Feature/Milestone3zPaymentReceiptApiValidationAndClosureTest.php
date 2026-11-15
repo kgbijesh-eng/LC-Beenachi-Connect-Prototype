@@ -18,6 +18,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3zPaymentReceiptApiValidationAndClosureTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
 
     public function test_3z_validation_document_exists_and_records_closure_boundary(): void
     {
@@ -378,7 +380,7 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends FinancialPost
             'password' => 'password',
         ]);
 
-        ClubMembership::query()->create([
+        $membership = ClubMembership::query()->create([
             'club_id' => $club->id,
             'user_id' => $user->id,
             'role_id' => $role->id,
@@ -386,6 +388,9 @@ class Milestone3zPaymentReceiptApiValidationAndClosureTest extends FinancialPost
             'joined_at' => now(),
         ]);
 
+        if (in_array(PaymentRecordingService::PERMISSION_RECORD_PAYMENT, $permissionSlugs, true)) {
+            self::seedAnnouncementOfficerTerm($membership, 'treasurer');
+        }
         return $user;
     }
 }

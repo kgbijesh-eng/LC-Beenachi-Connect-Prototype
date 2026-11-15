@@ -11,7 +11,8 @@ const auth = vi.hoisted(() => ({
   }
 }));
 
-vi.mock("../DevAuthSession", () => ({ useDevAuth: () => auth }));
+vi.mock("../DevAuthSession", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../DevAuthSession")>(), useDevAuth: () => auth }));
 
 const members = [
   { id: 102, full_name: "First Listed Member", member_code: "M102", status: "active" },
@@ -139,6 +140,11 @@ describe("Member payment history and receipt traceability", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "View Payment Details" }));
     expect(await screen.findByRole("heading", { name: "Payment Details" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View Receipt Trace" }));
+    expect(await screen.findByRole("heading", { name: "Receipt Trace" })).toBeInTheDocument();
+    expect(screen.getByText("LCB/2026-27/RCP/0008")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Review Payment" })).toBeNull();
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(true);
     expect(screen.queryByRole("combobox", { name: "Member" })).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/clubs/7/finance/me/payments"))).toBe(true);
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/clubs/7/members?"))).toBe(false);

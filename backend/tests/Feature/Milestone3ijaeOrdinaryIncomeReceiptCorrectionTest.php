@@ -4,17 +4,18 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\{AuditLog, ClubAccountingPeriod, ClubJournalEntry, ClubOrdinaryIncomeReceipt, ClubOrdinaryIncomeReceiptCorrection, Permission, Role, User, ClubMembership};
-use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use LogicException;
 use Tests\Support\BuildsMilestone3ijaeFixture;
+use Tests\Support\RefreshesDatabaseWithoutTransactions;
 use Tests\TestCase;
 
 final class Milestone3ijaeOrdinaryIncomeReceiptCorrectionTest extends TestCase
 {
-    use DatabaseTruncation, BuildsMilestone3ijaeFixture;
+    use BuildsMilestone3ijaeFixture;
+    use RefreshesDatabaseWithoutTransactions;
 
     public function test_authority_isolation_and_view_only_matrix(): void
     {
@@ -24,7 +25,7 @@ final class Milestone3ijaeOrdinaryIncomeReceiptCorrectionTest extends TestCase
         $inactive = $this->fixture3ijae('INACTIVE'); DB::table('club_memberships')->where('club_id', $inactive['club']->id)->update(['status' => 'inactive']); config(['instance.organisation_code' => $inactive['club']->code]); Sanctum::actingAs($inactive['actor']); $this->postJson($this->receiptEndpoint3ijae($inactive).'/'.Str::uuid().'/correction', $this->correctionPayload3ijae())->assertForbidden();
         $foreign = $this->fixture3ijae('FOREIGN'); $owner = $this->fixture3ijae('OWNER'); config(['instance.organisation_code' => $owner['club']->code]); Sanctum::actingAs($owner['actor']); $id = $this->postJson($this->receiptEndpoint3ijae($owner), $this->receiptPayload3ijae($owner))->assertCreated()->json('data.id'); $journalCount = ClubJournalEntry::count(); $receiptCount = ClubOrdinaryIncomeReceipt::count(); $correctionCount = ClubOrdinaryIncomeReceiptCorrection::count(); config(['instance.organisation_code' => $foreign['club']->code]); Sanctum::actingAs($foreign['actor']); $this->postJson($this->receiptEndpoint3ijae($foreign)."/{$id}/correction", $this->correctionPayload3ijae())->assertNotFound()->assertJsonPath('message', 'Resource not found.'); $this->postJson($this->receiptEndpoint3ijae($foreign).'/'.Str::uuid().'/correction', $this->correctionPayload3ijae())->assertNotFound()->assertJsonPath('message', 'Resource not found.'); $this->assertSame($correctionCount, ClubOrdinaryIncomeReceiptCorrection::count()); $this->assertSame($journalCount, ClubJournalEntry::count()); $this->assertSame($receiptCount, ClubOrdinaryIncomeReceipt::count());
         config(['instance.organisation_code' => $owner['club']->code]); Sanctum::actingAs($owner['actor']); $this->postJson($this->receiptEndpoint3ijae($owner)."/{$id}/correction", $this->correctionPayload3ijae())->assertOk();
-        $viewer = $this->fixture3ijae('VIEW', 'secretary', ['finance.club.ordinary_income_receipts.view']); DB::table('club_memberships')->where('user_id', $viewer['actor']->id)->update(['club_id' => $owner['club']->id]); config(['instance.organisation_code' => $owner['club']->code]); Sanctum::actingAs($viewer['actor']); $this->getJson($this->receiptEndpoint3ijae($owner)."/{$id}")->assertOk()->assertJsonPath('data.correction.reason', 'Incorrect amount');
+        $viewer = $this->fixture3ijae('VIEW', 'secretary', ['finance.club.ordinary_income_receipts.view'], seedOfficer: false); DB::table('club_memberships')->where('user_id', $viewer['actor']->id)->update(['club_id' => $owner['club']->id]); self::seedAnnouncementOfficerTerm(ClubMembership::where('user_id', $viewer['actor']->id)->sole(), 'secretary'); config(['instance.organisation_code' => $owner['club']->code]); Sanctum::actingAs($viewer['actor']); $this->getJson($this->receiptEndpoint3ijae($owner)."/{$id}")->assertOk()->assertJsonPath('data.correction.reason', 'Incorrect amount');
     }
 
     public function test_reversal_is_exact_covered_immutable_and_idempotent(): void

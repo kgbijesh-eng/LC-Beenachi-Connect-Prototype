@@ -19,6 +19,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3iizbAnnouncementReadStateFoundationTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -254,13 +256,14 @@ class Milestone3iizbAnnouncementReadStateFoundationTest extends FinancialPostgre
 
     private function membership(User $user, Club $club, string $roleSlug, string $status = 'active'): void
     {
-        ClubMembership::query()->create([
+        $membership = ClubMembership::query()->create([
             'club_id' => $club->id,
             'user_id' => $user->id,
             'role_id' => Role::query()->where('slug', $roleSlug)->firstOrFail()->id,
             'status' => $status,
             'joined_at' => now(),
         ]);
+        $this->seedAnnouncementOfficerTerm($membership, $roleSlug);
     }
 
     private function announcement(Club $club, array $overrides = []): ClubAnnouncement

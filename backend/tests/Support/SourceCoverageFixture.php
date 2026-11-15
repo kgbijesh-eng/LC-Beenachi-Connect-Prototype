@@ -7,6 +7,7 @@ namespace Tests\Support;
 use App\Models\Club;
 use App\Models\ClubAccountingIntegrationActivation;
 use App\Models\ClubCharge;
+use App\Models\ClubMembership;
 use App\Models\LedgerAccount;
 use App\Models\Member;
 use App\Models\MemberCharge;
@@ -21,9 +22,13 @@ use Illuminate\Support\Str;
 /** Real committed prerequisites; all financial calls own their normal B1 roots. */
 final class SourceCoverageFixture
 {
+    use SeedsAnnouncementOfficerTerms;
+
     public static function prepare(string $type, string $state = 'active', string $coverage = '2027-07-01'): array
     {
         $p = (new FinancialOperationFixture)->prepare('post', 'SC');
+        $membership = ClubMembership::where('club_id', $p['club'])->where('user_id', $p['actor'])->sole();
+        self::seedAnnouncementOfficerTerm($membership, 'president-admin');
         $p['action'] = 'source-'.$type;
         $p['source_type'] = $type;
         $p['source_key'] = $type === 'member_charge' ? 'membership_dues' : 'bank_transfer';

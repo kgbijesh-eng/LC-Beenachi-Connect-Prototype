@@ -20,6 +20,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
 
     public function test_3u_document_records_narrow_backend_service_boundary(): void
     {
@@ -329,13 +331,15 @@ class Milestone3uPaymentReceiptGenerationNarrowImplementationTest extends Financ
             'password' => 'password',
         ]);
 
-        ClubMembership::query()->create([
+        $membership = ClubMembership::query()->create([
             'club_id' => $club->id,
             'user_id' => $user->id,
             'role_id' => $role->id,
             'status' => 'active',
             'joined_at' => now(),
         ]);
+
+        self::seedAnnouncementOfficerTerm($membership, 'treasurer');
 
         return $user;
     }

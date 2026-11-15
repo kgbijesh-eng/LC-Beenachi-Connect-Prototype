@@ -16,6 +16,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3dsSeededPaymentPermissionDefectImplementationTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
 
     private string $docPath = __DIR__.'/../../docs/milestone_3ds_seeded_payment_permission_defect_implementation.md';
 
@@ -77,6 +79,9 @@ class Milestone3dsSeededPaymentPermissionDefectImplementationTest extends Financ
     public function test_seeded_president_admin_can_record_synthetic_member_payment_and_normal_member_still_cannot(): void
     {
         $this->seed(DatabaseSeeder::class);
+        $membership = \App\Models\ClubMembership::whereHas('user', fn ($query) => $query->where('email', 'president@lcbeenachi.test'))
+            ->whereHas('club', fn ($query) => $query->where('code', 'LCB'))->sole();
+        self::seedAnnouncementOfficerTerm($membership, 'president-admin');
 
         $club = Club::where('code', 'LCB')->firstOrFail();
         $member = Member::query()->create([

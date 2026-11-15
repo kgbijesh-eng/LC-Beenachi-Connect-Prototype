@@ -9,11 +9,13 @@ use App\Models\User;
 use App\Services\Access\ClubPermissionService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\SeedsAnnouncementOfficerTerms;
 use Tests\TestCase;
 
 class ClubPermissionServiceTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAnnouncementOfficerTerms;
 
     public function test_president_admin_has_expected_foundation_permissions(): void
     {
@@ -22,7 +24,9 @@ class ClubPermissionServiceTest extends TestCase
         $user = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
         $club = Club::where('code', 'LCB')->firstOrFail();
 
-        $service = new ClubPermissionService;
+        self::seedAnnouncementOfficerTerm($user->clubMemberships()->where('club_id', $club->id)->sole(), 'president-admin');
+
+        $service = app(ClubPermissionService::class);
 
         $this->assertTrue($service->userCanAccessClub($user, $club->id));
         $this->assertTrue($service->userHasPermission($user, 'club.view', $club->id));
@@ -108,7 +112,7 @@ class ClubPermissionServiceTest extends TestCase
             'joined_at' => now(),
         ]);
 
-        $service = new ClubPermissionService;
+        $service = app(ClubPermissionService::class);
 
         $this->assertTrue($service->userCanAccessClub($user, $club->id));
         $this->assertTrue($service->userHasPermission($user, 'club.view', $club->id));
@@ -159,7 +163,7 @@ class ClubPermissionServiceTest extends TestCase
             'joined_at' => now(),
         ]);
 
-        $service = new ClubPermissionService;
+        $service = app(ClubPermissionService::class);
 
         $this->assertFalse($service->userCanAccessClub($user, $club->id));
         $this->assertFalse($service->userHasPermission($user, 'club.view', $club->id));
@@ -172,7 +176,10 @@ class ClubPermissionServiceTest extends TestCase
 
         $user = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
 
-        $service = new ClubPermissionService;
+        $club = Club::where('code', 'LCB')->firstOrFail();
+        self::seedAnnouncementOfficerTerm($user->clubMemberships()->where('club_id', $club->id)->sole(), 'president-admin');
+
+        $service = app(ClubPermissionService::class);
 
         $this->assertTrue($service->userHasPermission($user, 'club.manage'));
         $this->assertTrue($service->userHasPermission($user, 'events.manage'));

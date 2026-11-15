@@ -7,10 +7,15 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class AuthMeRoleAwareResponseTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
     public function test_me_endpoint_returns_user_club_role_and_permissions(): void
     {
         config(['instance.organisation_code' => 'LCB']);
         $this->seed(DatabaseSeeder::class);
+        $membership = \App\Models\ClubMembership::whereHas('user', fn ($query) => $query->where('email', 'president@lcbeenachi.test'))
+            ->whereHas('club', fn ($query) => $query->where('code', 'LCB'))->sole();
+        self::seedAnnouncementOfficerTerm($membership, 'president-admin');
 
         $loginResponse = $this->postJson('/api/v1/auth/login', [
             'email' => 'president@lcbeenachi.test',

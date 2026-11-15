@@ -76,8 +76,6 @@ class ClubReminderController extends Controller
 
     private function canManage(User $user,Club $club): bool
     {
-        $membership=$user->clubMemberships()->with('role.permissions')->where('club_id',$club->id)->where('status','active')->first();
-        return $membership?->role!==null&&in_array($membership->role->slug,ClubReminder::MANAGEMENT_ROLE_SLUGS,true)
-            &&$membership->role->permissions->contains('slug',ClubReminder::PERMISSION_MANAGE);
+        return app(\App\Services\Access\ClubPermissionService::class)->userHasPermission($user, 'reminders.manage', (int) $club->id);
     }
 }

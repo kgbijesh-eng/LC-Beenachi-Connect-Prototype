@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { useDevAuth, type DevRole } from "./DevAuthSession";
+import { hasEffectivePermission, useDevAuth, type DevRole } from "./DevAuthSession";
 import { formatInrPaise } from "./ClubAccountStatementBackend";
 
 type Account = { id: string; code: string; name: string };
@@ -18,7 +18,7 @@ export function rupeesToPaise(value: string): number | null {
 
 export default function ClubExpenseBackend({ role, correctedFrom, onRecorded }: { role: DevRole; correctedFrom?: CorrectedExpenseDraft | null; onRecorded?: () => void }) {
   const { session, authenticatedFetch } = useDevAuth();
-  const allowed = role === "president" || role === "secretary" || role === "treasurer";
+  const allowed = hasEffectivePermission(session, "finance.club.expenses.create");
   const [options, setOptions] = useState<Options | null>(null);
   const [message, setMessage] = useState(allowed ? "Loading expense accounts…" : "You are not authorized to record club expenses.");
   const [submitting, setSubmitting] = useState(false);

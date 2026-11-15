@@ -13,6 +13,8 @@ export type DevMembership = {
   club: { id: number; name?: string; code?: string };
   role: { slug: string; name?: string };
   permissions?: { id?: number; name?: string; slug: string; group?: string }[];
+  effective_office?: { office: string; effective_until: string } | null;
+  authority_as_of?: string;
   member: { id: number; member_code: string; full_name: string } | null;
 };
 
@@ -51,12 +53,47 @@ async function revokeToken(token: string) {
   }
 }
 
-function roleFromMembership(membership: DevMembership): DevRole {
-  const slug = membership.role?.slug;
-  if (slug === "president" || slug === "president-admin") return "president";
-  if (slug === "secretary") return "secretary";
-  if (slug === "treasurer") return "treasurer";
+export function roleFromMembership(membership: DevMembership): DevRole {
+  const office = membership.effective_office;
+  const asOf = Date.parse(membership.authority_as_of ?? "");
+  const end = Date.parse(office?.effective_until ?? "");
+  if (!Number.isFinite(asOf) || !Number.isFinite(end) || end <= Math.max(asOf, Date.now())) return "member";
+  if (office?.office === "president" || office?.office === "secretary" || office?.office === "treasurer") return office.office;
   return "member";
+}
+
+export function hasEffectivePermission(session: VerifiedDevSession | null, slug: string): boolean {
+  return session !== null && roleFromMembership(session.membership) !== "member"
+    && Array.isArray(session.membership.permissions)
+    && session.membership.permissions.some(permission => permission?.slug === slug);
+}
+
+function hasSameEffectiveAuthority(active: VerifiedDevSession, refreshed: VerifiedDevSession): boolean {
+  if (active.role !== refreshed.role
+    || active.membership.id !== refreshed.membership.id
+    || active.membership.effective_office?.effective_until !== refreshed.membership.effective_office?.effective_until) {
+    return false;
+  }
+
+  const activePermissions = new Set(active.membership.permissions?.map(permission => permission.slug));
+  const refreshedPermissions = new Set(refreshed.membership.permissions?.map(permission => permission.slug));
+  return activePermissions.size === refreshedPermissions.size
+    && [...activePermissions].every(slug => refreshedPermissions.has(slug));
+}
+
+const ordinaryPermissions = new Set([
+  "club.view", "members.view", "events.view", "projects.view", "reminders.view",
+  "announcements.view", "finance.self.view", "profile_updates.self.submit", "profile_updates.self.view"
+]);
+
+function withoutOfficerAuthority(membership: DevMembership): DevMembership {
+  return {
+    ...membership,
+    effective_office: null,
+    permissions: Array.isArray(membership.permissions)
+      ? membership.permissions.filter(permission => ordinaryPermissions.has(permission?.slug))
+      : []
+  };
 }
 
 async function verifySession(token: string, signal: AbortSignal, generation: number): Promise<VerifiedDevSession> {
@@ -85,7 +122,7 @@ async function verifySession(token: string, signal: AbortSignal, generation: num
     role: roleFromMembership(membership),
     token,
     user,
-    membership,
+    membership: roleFromMembership(membership) === "member" ? withoutOfficerAuthority(membership) : membership,
     organisation,
     generation
   };
@@ -172,6 +209,55 @@ export function DevAuthProvider({ children }: { children: ReactNode }) {
     await revokeToken(token);
   }, [invalidate]);
 
+  const refreshCapabilities = useCallback(async (active: VerifiedDevSession, signal?: AbortSignal) => {
+    try {
+      const refreshed = await verifySession(active.token, signal ?? new AbortController().signal, active.generation);
+      if (liveSession.current !== active || signal?.aborted) return;
+      if (refreshed.organisation.id !== active.organisation.id || refreshed.user.id !== active.user.id) {
+        invalidate();
+        setStatus("unauthenticated");
+        return;
+      }
+      if (hasSameEffectiveAuthority(active, refreshed)) return;
+      liveSession.current = refreshed;
+      setSession(refreshed);
+    } catch {
+      if (liveSession.current !== active || signal?.aborted) return;
+      const restricted = { ...active, role: "member" as const, membership: withoutOfficerAuthority(active.membership) };
+      liveSession.current = restricted;
+      setSession(restricted);
+    }
+  }, [invalidate]);
+
+  useEffect(() => {
+    if (!session || session.role === "member") return;
+    const expires = Date.parse(session.membership.effective_office?.effective_until ?? "");
+    if (!Number.isFinite(expires)) return;
+    let timer: number | undefined;
+    const checkExpiry = () => {
+      window.clearTimeout(timer);
+      if (liveSession.current !== session) return;
+      const remaining = expires - Date.now();
+      if (remaining > 0) {
+        timer = window.setTimeout(checkExpiry, Math.min(remaining, 2_147_483_647));
+        return;
+      }
+
+      const expired = { ...session, role: "member" as const, membership: withoutOfficerAuthority(session.membership) };
+      liveSession.current = expired;
+      setSession(expired);
+      void refreshCapabilities(expired);
+    };
+    checkExpiry();
+    window.addEventListener("focus", checkExpiry);
+    document.addEventListener("visibilitychange", checkExpiry);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", checkExpiry);
+      document.removeEventListener("visibilitychange", checkExpiry);
+    };
+  }, [refreshCapabilities, session]);
+
   const authenticatedFetch = useCallback(async (input: string, init: RequestInit = {}) => {
     const active = liveSession.current;
     if (!session || active !== session) throw new Error("No verified session is active.");
@@ -195,12 +281,13 @@ export function DevAuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await fetch(url.href, { ...init, headers, signal: controller.signal });
       if (generation.current !== attempt) throw new DOMException("Session changed.", "AbortError");
+      if (response.status === 403) void refreshCapabilities(active);
       return response;
     } finally {
       pending.current.delete(controller);
       init.signal?.removeEventListener("abort", abort);
     }
-  }, [session]);
+  }, [refreshCapabilities, session]);
 
   const value = useMemo<DevAuthContextValue>(() => ({
     enabled: true,

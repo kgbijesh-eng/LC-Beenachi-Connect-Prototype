@@ -17,6 +17,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3qPaymentRecordingApiNarrowImplementationTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
 
     public function test_3q_document_records_narrow_api_implementation_boundary(): void
     {
@@ -67,6 +69,7 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends FinancialPo
         $club = Club::where('code', 'LCB')->firstOrFail();
         $user = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
         $this->grantPaymentRecordPermissionToRole('president-admin');
+        self::seedAnnouncementOfficerTerm($user->clubMemberships()->where('club_id', $club->id)->sole(), 'president-admin');
 
         $member = Member::query()->create([
             'club_id' => $club->id,
@@ -138,13 +141,15 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends FinancialPo
             'email' => 'treasurer-payment-api@lcbeenachi.test',
         ]);
 
-        ClubMembership::query()->create([
+        $membership = ClubMembership::query()->create([
             'club_id' => $club->id,
             'user_id' => $user->id,
             'role_id' => $treasurerRole->id,
             'status' => 'active',
             'joined_at' => now(),
         ]);
+
+        self::seedAnnouncementOfficerTerm($membership, 'treasurer');
 
         $member = Member::query()->create([
             'club_id' => $club->id,
@@ -169,6 +174,24 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends FinancialPo
             ->assertJsonPath('payment.amount', '500.00')
             ->assertJsonPath('payment.payment_mode', 'cash')
             ->assertJsonPath('payment.status', 'posted');
+        $secretary = User::factory()->create();
+        $secretaryMembership = ClubMembership::create([
+            'club_id' => $club->id,
+            'user_id' => $secretary->id,
+            'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id,
+            'status' => 'active',
+        ]);
+        self::seedAnnouncementOfficerTerm($secretaryMembership, 'secretary');
+        $payments = app(PaymentRecordingService::class);
+        $input = ['amount' => '100', 'payment_date' => '2026-06-08', 'payment_mode' => 'cash'];
+        try {
+            $payments->record($secretary, $member, $input);
+            $this->fail('A secretary without the payment grant must be denied.');
+        } catch (\Illuminate\Auth\Access\AuthorizationException $exception) {
+            $this->assertSame('The user does not have permission to record payments.', $exception->getMessage());
+        }
+        $this->grantPaymentRecordPermissionToRole('secretary');
+        $this->assertSame($secretary->id, $payments->record($secretary, $member, $input)->received_by_user_id);
     }
 
     public function test_normal_member_cannot_record_payment_through_api(): void
@@ -247,6 +270,7 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends FinancialPo
         $club = Club::where('code', 'LCB')->firstOrFail();
         $user = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
         $this->grantPaymentRecordPermissionToRole('president-admin');
+        self::seedAnnouncementOfficerTerm($user->clubMemberships()->where('club_id', $club->id)->sole(), 'president-admin');
 
         $otherClub = Club::query()->create([
             'name' => 'Other Club',
@@ -288,6 +312,7 @@ class Milestone3qPaymentRecordingApiNarrowImplementationTest extends FinancialPo
         $club = Club::where('code', 'LCB')->firstOrFail();
         $user = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
         $this->grantPaymentRecordPermissionToRole('president-admin');
+        self::seedAnnouncementOfficerTerm($user->clubMemberships()->where('club_id', $club->id)->sole(), 'president-admin');
 
         $member = Member::query()->create([
             'club_id' => $club->id,

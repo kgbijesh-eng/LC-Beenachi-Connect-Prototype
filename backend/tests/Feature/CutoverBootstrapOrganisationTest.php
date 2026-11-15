@@ -23,6 +23,8 @@ use Tests\Support\CutoverPostgresTestCase;
 
 class CutoverBootstrapOrganisationTest extends CutoverPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
     private Club $club;
     private User $president;
     private User $secretary;
@@ -37,7 +39,8 @@ class CutoverBootstrapOrganisationTest extends CutoverPostgresTestCase
         config(['instance.organisation_code' => 'BOOT']);
         foreach (['president' => 'president-admin', 'secretary' => 'secretary', 'preparer' => 'treasurer'] as $key => $slug) {
             $this->$key = User::factory()->create();
-            ClubMembership::create(['club_id' => $this->club->id, 'user_id' => $this->$key->id, 'role_id' => Role::where('slug', $slug)->firstOrFail()->id, 'status' => 'active']);
+            $membership = ClubMembership::create(['club_id' => $this->club->id, 'user_id' => $this->$key->id, 'role_id' => Role::where('slug', $slug)->firstOrFail()->id, 'status' => 'active']);
+            self::seedAnnouncementOfficerTerm($membership, $slug);
         }
         $this->service = app(ClubCutoverPackageBootstrapService::class);
     }

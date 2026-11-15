@@ -1,23 +1,30 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FinanceBackend from "../FinanceBackend";
+import { DevAuthProvider, useDevAuth } from "../DevAuthSession";
 
 const onRecordPayment = vi.fn();
+let useRealSession = false;
 const auth = vi.hoisted(() => ({
+  authenticatedFetch: (url: string, init?: RequestInit) => fetch(url, init),
   session: {
     token: "test-token",
     role: "president",
     user: { id: 10 },
     membership: {
+      authority_as_of: "2020-01-01T00:00:00Z",
+      effective_office: { office: "president", effective_until: "2099-01-01T00:00:00Z" },
+      permissions: [{ slug: "finance.manage" }],
       club: { id: 7 },
       member: { id: 101 }
     }
   }
 }));
 
-vi.mock("../DevAuthSession", () => ({
-  useDevAuth: () => auth
-}));
+vi.mock("../DevAuthSession", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../DevAuthSession")>();
+  return { ...actual, useDevAuth: () => useRealSession ? actual.useDevAuth() : auth };
+});
 
 const members = [
   { id: 102, full_name: "First Listed Member", member_code: "M102", status: "active" },
@@ -190,4 +197,58 @@ describe("Outstanding Dues to Record Member Payment", () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/clubs/7/members?"))).toBe(false);
     expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/clubs/7/finance/me/summary"))).toBe(true);
   });
+});
+
+
+function PaymentFormSession() {
+  const auth = useDevAuth();
+  return auth.session
+    ? <FinanceBackend role={auth.session.role} view="record-payment" memberId={101} obligationId={501} />
+    : <button onClick={() => void auth.login("member@example.test", "synthetic-password")}>Sign in</button>;
+}
+
+it("keeps the production payment rejection visible through an authority refresh", async () => {
+  useRealSession = true;
+  vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://127.0.0.1:8000");
+  const fetchMock = installFinanceFetch();
+  const financeFetch = fetchMock.getMockImplementation()!;
+  let verifications = 0;
+  fetchMock.mockImplementation((input, init) => {
+    const url = String(input);
+    if (url.endsWith("/auth/login")) return jsonResponse({ token: "synthetic-token" });
+    if (url.endsWith("/auth/me")) {
+      const initial = ++verifications === 1;
+      return jsonResponse({
+        user: { id: 10, email: "member@example.test", name: "Synthetic member" },
+        instance_organisation: { id: 7, code: "LCB", name: "Club" },
+        club_memberships: [{
+          id: 1, status: "active", club: { id: 7, code: "LCB" }, role: { slug: "member" },
+          member: { id: 101 }, authority_as_of: "2020-01-01T00:00:00Z",
+          effective_office: initial ? { office: "president", effective_until: "2099-01-01T00:00:00Z" } : null,
+          permissions: initial ? [{ slug: "finance.manage" }] : [{ slug: "finance.self.view" }]
+        }]
+      });
+    }
+    if (init?.method === "POST" && url.endsWith("/finance/members/101/payments")) {
+      return jsonResponse({ message: "Payment authority has ended." }, 403);
+    }
+    return financeFetch(input, init);
+  });
+  try {
+    render(<DevAuthProvider><PaymentFormSession /></DevAuthProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByDisplayValue("July Membership Dues - ID 501 - INR 1,250.00");
+    fireEvent.click(screen.getByRole("button", { name: "Review Payment" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm backend submission" }));
+    await waitFor(() => expect(verifications).toBe(2));
+    expect(await screen.findByText("Payment authority has ended.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Review Payment" })).toBeNull();
+    expect(fetchMock.mock.calls.filter(([url, init]) => init?.method === "POST"
+      && String(url).endsWith("/finance/members/101/payments"))).toHaveLength(1);
+  } finally {
+    cleanup();
+    useRealSession = false;
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  }
 });

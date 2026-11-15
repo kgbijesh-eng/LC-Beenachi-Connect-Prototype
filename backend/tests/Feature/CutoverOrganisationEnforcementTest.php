@@ -280,9 +280,28 @@ class CutoverOrganisationEnforcementTest extends CutoverPostgresTestCase
         try{
             $one->start();$this->awaitFile($d1.'/locked');$two->start();$this->awaitFile($d2.'/started');
             $c=DB::connection()->getConfig();$pdo=new PDO("pgsql:host={$c['host']};port={$c['port']};dbname={$c['database']}",$c['username'],$c['password'],[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
-            $deadline=microtime(true)+15;
-            do{$pdo->query('SELECT pg_stat_clear_snapshot()')->fetchColumn();$waiting=(int)$pdo->query("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND application_name LIKE 'p02b2-c-%' AND wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid))>0")->fetchColumn();if($waiting>0){break;}usleep(5_000);}while(microtime(true)<$deadline);
-            $this->assertGreaterThan(0,$waiting,'An independent PostgreSQL worker must really wait.');
+            $holderPid = (int) file_get_contents($d1.'/pid');
+            $waiterPid = (int) file_get_contents($d2.'/pid');
+            $holderLock = json_decode(file_get_contents($d1.'/locked'), true, flags: JSON_THROW_ON_ERROR);
+            $this->assertStringContainsString('"clubs"', $holderLock['sql']);
+            $this->assertContains($this->club->id, array_map('intval', $holderLock['bindings']));
+            $query = $pdo->prepare("SELECT query FROM pg_stat_activity WHERE pid = ? AND wait_event_type = 'Lock' AND ? = ANY(pg_blocking_pids(pid))");
+            $deadline = microtime(true) + 15;
+            do {
+                $query->execute([$waiterPid, $holderPid]);
+                $waitingSql = $query->fetchColumn();
+                if ($waitingSql !== false) {
+                    break;
+                }
+                usleep(5_000);
+            } while (microtime(true) < $deadline);
+            $this->assertIsString($waitingSql, 'The second worker must wait on the first worker.');
+            $this->assertStringContainsString('"clubs"', $waitingSql);
+            $this->assertStringContainsString('for update', strtolower($waitingSql));
+            fwrite(STDOUT, "\nC_BLOCKING_EDGE ".json_encode([
+                'club_id' => $this->club->id, 'holder_pid' => $holderPid, 'waiter_pid' => $waiterPid,
+                'holder_lock' => $holderLock, 'waiter_sql' => $waitingSql,
+            ], JSON_THROW_ON_ERROR)."\n");
             file_put_contents($d1.'/release','1');$one->wait();$two->wait();
             $results=[json_decode(file_get_contents($d1.'/result.json'),true,flags:JSON_THROW_ON_ERROR),json_decode(file_get_contents($d2.'/result.json'),true,flags:JSON_THROW_ON_ERROR)];
             foreach($results as $result){$this->assertStringContainsString('"clubs"',$result['locks'][0]);}

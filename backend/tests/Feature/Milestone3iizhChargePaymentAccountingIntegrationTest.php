@@ -37,10 +37,13 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Tests\Support\FinancialPostgresTestCase;
+use Tests\Support\SeedsAnnouncementOfficerTerms;
 use Tests\Support\DisposableCorruptionFixture;
 
 class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPostgresTestCase
 {
+    use SeedsAnnouncementOfficerTerms;
+
 
     public function test_integrations_are_disabled_by_default_and_posted_opening_alone_changes_no_source_behaviour(): void
     {
@@ -820,7 +823,8 @@ class Milestone3iizhChargePaymentAccountingIntegrationTest extends FinancialPost
         foreach (['finance.manage', 'finance.void'] as $slug) {
             $role->permissions()->syncWithoutDetaching([\App\Models\Permission::firstOrCreate(['slug' => $slug], ['name' => $slug, 'group' => 'finance'])->id]);
         }
-        \App\Models\ClubMembership::create(['club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => $role->id, 'status' => 'active']);
+        $membership = \App\Models\ClubMembership::create(['club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => $role->id, 'status' => 'active']);
+        self::seedAnnouncementOfficerTerm($membership, 'treasurer');
         $member = Member::create(['club_id' => $club->id, 'member_code' => 'M001', 'full_name' => 'Member One', 'status' => 'active']);
         $accounts = [];
         foreach ([['receivable', 'MEMBER-RECEIVABLES', 'asset', 'debit'], ['bank', 'BANK-OPERATING', 'asset', 'debit'], ['income', 'INCOME-MEMBERSHIP-DUES', 'income', 'credit'], ['equity', 'OPENING-BALANCE-EQUITY', 'equity', 'credit']] as [$key, $code, $type, $normal]) {

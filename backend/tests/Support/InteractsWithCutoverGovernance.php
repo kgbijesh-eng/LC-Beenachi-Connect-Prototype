@@ -16,6 +16,7 @@ use App\Services\Finance\ClubCutoverPackageBootstrapService;
 
 trait InteractsWithCutoverGovernance
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
     protected function bootstrapCutoverPackage(Club $club, User $preparer, User $president, User $secretary, string $reference, int $version = 1): ClubAccountingCutoverPackage
     {
         // Explicit synthetic instance assignment, never an application request resolver.
@@ -30,7 +31,8 @@ trait InteractsWithCutoverGovernance
 
     protected function cutoverMember(Club $club, User $user, string $role, string $status = 'active'): void
     {
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $user->id, 'role_id' => Role::where('slug', $role)->firstOrFail()->id, 'status' => $status]);
+        $membership = ClubMembership::create(['club_id' => $club->id, 'user_id' => $user->id, 'role_id' => Role::where('slug', $role)->firstOrFail()->id, 'status' => $status]);
+        self::seedAnnouncementOfficerTerm($membership, $role);
     }
 
     protected function dualAssign(ClubAccountingCutoverPackage $package, User $subject, string $slug, User $president, User $secretary, string $reference): ClubAccountingCutoverPermissionAssignment

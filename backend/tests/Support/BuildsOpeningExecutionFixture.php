@@ -29,16 +29,19 @@ use Tests\Support\CutoverPostgresTestCase;
 
 trait BuildsOpeningExecutionFixture
 {
+    use SeedsAnnouncementOfficerTerms;
+
     protected function authorizedFixture(string $scenario, int $iteration, bool $authorize = true): array
     {
         foreach (['grantor', 'preparer', 'verifier', 'ca', 'president', 'operator'] as $key) {
             $$key = User::factory()->create();
         }
         $club = Club::create(['name' => "Concurrency {$scenario} {$iteration}", 'code' => 'EF'.str_pad((string) $iteration, 2, '0', STR_PAD_LEFT)]);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $verifier->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $grantor->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $preparer->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
+        self::seedAnnouncementOfficerTerm(ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']), 'president-admin');
+        self::seedAnnouncementOfficerTerm(ClubMembership::create(['club_id' => $club->id, 'user_id' => $verifier->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active']), 'secretary');
+        $grantorMembership = ClubMembership::create(['club_id' => $club->id, 'user_id' => $grantor->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
+        self::seedAnnouncementOfficerTerm($grantorMembership, 'treasurer');
+        $preparerMembership = ClubMembership::create(['club_id' => $club->id, 'user_id' => $preparer->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
         $accounts = [];
         foreach ([['cash', 'CASH-ON-HAND', 'asset', 'debit'], ['bank', 'BANK-OPERATING', 'asset', 'debit'], ['receivable', 'MEMBER-RECEIVABLES', 'asset', 'debit'], ['other_asset', 'CLUB-PROPERTY', 'asset', 'debit'], ['liability', 'LIABILITY-GENERAL', 'liability', 'credit'], ['restricted', 'LIABILITY-RESTRICTED-COLLECTION', 'liability', 'credit'], ['equity', 'OPENING-BALANCE-EQUITY', 'equity', 'credit'], ['surplus', 'ACCUMULATED-SURPLUS', 'equity', 'credit']] as [$key, $code, $type, $normal]) {
             $accounts[$key] = LedgerAccount::create(['club_id' => $club->id, 'code' => $code, 'name' => $code, 'account_type' => $type, 'normal_balance' => $normal, 'currency' => 'INR', 'is_active' => true, 'created_by_user_id' => $grantor->id]);
@@ -69,6 +72,13 @@ trait BuildsOpeningExecutionFixture
             $package = $package->fresh('evidenceReferences');
         }
         $package = $service->refreshValidation($club->id, $package->id, $grantor->id, $package->lock_version);
+        $handover = now('UTC')->format('Y-m-d H:i:sP');
+        \Illuminate\Support\Facades\DB::table('club_officer_terms')->where('membership_id', $grantorMembership->id)->update([
+            'ended_at' => $handover,
+            'termination_reference' => 'fixture-treasurer-handover',
+            'termination_reason' => 'Synthetic separation of package author and preparer',
+        ]);
+        self::seedAnnouncementOfficerTerm($preparerMembership, 'treasurer', $handover);
         $admin = app(ClubCutoverAuthorityAdministrationService::class);
         $caAppointment = $this->dualAppoint($package, $ca, 'independent_ca', $president, $verifier, "CA-{$scenario}-{$iteration}");
         $this->dualAttestEligibility($caAppointment, $president, $verifier, "ELIGIBILITY-{$scenario}-{$iteration}");

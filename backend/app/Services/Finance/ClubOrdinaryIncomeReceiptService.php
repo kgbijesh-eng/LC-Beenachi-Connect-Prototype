@@ -38,8 +38,7 @@ final class ClubOrdinaryIncomeReceiptService
                 if ($correction === null) {
                     throw new \Illuminate\Auth\Access\AuthorizationException();
                 }
-                $correction->assertReplacementAdmission($context, $actor, $input);
-                app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'finance.club.ordinary_income_receipts.reverse');
+                $correction->assertReplacementAdmission($context, $club, $actor, $input);
 
                 return DB::transaction(fn (): ClubOrdinaryIncomeReceipt => $this->recordBody($context, $club, $actor, $canonical), 3);
             });

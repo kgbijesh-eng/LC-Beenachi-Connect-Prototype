@@ -14,7 +14,8 @@ const authState = vi.hoisted(() => ({
   }
 }));
 
-vi.mock("../DevAuthSession", () => ({
+vi.mock("../DevAuthSession", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../DevAuthSession")>(),
   useDevAuth: () => ({ session: authState.session })
 }));
 

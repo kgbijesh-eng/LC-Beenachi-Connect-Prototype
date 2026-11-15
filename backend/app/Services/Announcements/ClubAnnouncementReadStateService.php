@@ -53,19 +53,13 @@ class ClubAnnouncementReadStateService
         $this->attach($announcement, $read);
     }
 
-    public function readablePublishedAudiences(User $user, Club $club, bool $management): array
+    public function readablePublishedAudiences(User $user, Club $club, bool $management, ?\DateTimeInterface $at = null): array
     {
         if ($management) {
             return ClubAnnouncement::audiences();
         }
 
-        $membership = $user->clubMemberships()
-            ->with('role')
-            ->where('club_id', $club->id)
-            ->where('status', 'active')
-            ->first();
-
-        if ($membership !== null && in_array($membership->role?->slug, self::READ_ONLY_OFFICER_AUDIENCE_ROLES, true)) {
+        if (in_array($this->permissions->effectiveOffice($user, (int) $club->id, $at), self::READ_ONLY_OFFICER_AUDIENCE_ROLES, true)) {
             return [
                 ClubAnnouncement::AUDIENCE_CLUB_MEMBERS,
                 ClubAnnouncement::AUDIENCE_OFFICERS,
@@ -79,8 +73,9 @@ class ClubAnnouncementReadStateService
     {
         return $this->transactions->run($club, function ($context) use ($club, $announcement, $user): ?ClubAnnouncementRead {
             $this->actorAuthorisation->requirePermission($context, $club->id, $user, 'announcements.view');
-            $management = $this->permissions->userHasPermission($user, ClubAnnouncement::PERMISSION_MANAGEMENT_VIEW, $club->id);
-            $readablePublishedAudiences = $this->readablePublishedAudiences($user, $club, $management);
+            $at = now('UTC')->toImmutable();
+            $management = $this->permissions->userHasPermission($user, ClubAnnouncement::PERMISSION_MANAGEMENT_VIEW, $club->id, $at);
+            $readablePublishedAudiences = $this->readablePublishedAudiences($user, $club, $management, $at);
             $locked = ClubAnnouncement::query()
                 ->where('club_id', $club->id)
                 ->whereKey($announcement->id)

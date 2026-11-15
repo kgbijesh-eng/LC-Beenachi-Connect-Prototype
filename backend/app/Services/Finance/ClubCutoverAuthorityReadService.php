@@ -10,7 +10,7 @@ use App\Models\ClubAccountingCutoverBootstrapOperation;
 use App\Models\ClubAccountingCutoverCaEligibility;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingCutoverPermissionAssignment;
-use App\Models\ClubMembership;
+use App\Services\Access\ClubPermissionService;
 use App\Models\User;
 use App\Services\Finance\Exceptions\CutoverAuthorizationException;
 
@@ -20,12 +20,12 @@ final class ClubCutoverAuthorityReadService
 
     public function metadata(ClubAccountingCutoverPackage $package, User $actor): array
     {
-        $membership = ClubMembership::with('role')->where('club_id', $package->club_id)->where('user_id', $actor->id)->where('status', 'active')->first();
-        $role = $membership?->role?->slug;
+        $at = now('UTC')->toImmutable();
+        $role = app(ClubPermissionService::class)->effectiveOffice($actor, (int) $package->club_id, $at);
         $appointments = ClubAccountingCutoverAuthorityAppointment::with('events')->where('cutover_package_id', $package->id);
         $permissions = ClubAccountingCutoverPermissionAssignment::with(['events', 'permission'])->where('cutover_package_id', $package->id);
-        if (in_array($role, ['president-admin', 'secretary'], true)) {
-            if ($this->authority->uniqueOfficer($package, $role)->id !== $actor->id) {
+        if (in_array($role, ['president', 'secretary'], true)) {
+            if ($this->authority->uniqueOfficer($package, $role, $at)->id !== $actor->id) {
                 throw new CutoverAuthorizationException('Unique active governance officer resolution is required.');
             }
 

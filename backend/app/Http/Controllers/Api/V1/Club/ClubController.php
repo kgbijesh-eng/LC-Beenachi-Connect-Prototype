@@ -32,6 +32,8 @@ class ClubController extends Controller
         ]);
 
         $membership = $user->clubMemberships->first();
+        $authorityAt = now('UTC')->toImmutable();
+        $authority = $membership ? $permissions->membershipAuthority($membership, $authorityAt) : ['permissions' => [], 'term' => null];
 
         return response()->json([
             'club' => [
@@ -52,7 +54,9 @@ class ClubController extends Controller
                     'slug' => $membership->role->slug,
                 ],
             ] : null,
-            'permissions' => $permissions->userPermissionSlugs($user, $club->id),
+            'permissions' => $authority['permissions'],
+            'effective_office' => $permissions->officePayload($authority['term']),
+            'authority_as_of' => $authorityAt->toISOString(),
         ]);
     }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { useDevAuth, type DevRole } from "./DevAuthSession";
+import { hasEffectivePermission, useDevAuth, type DevRole } from "./DevAuthSession";
 import { formatInrPaise } from "./ClubAccountStatementBackend";
 import { rupeesToPaise } from "./ClubExpenseBackend";
 
@@ -15,8 +15,8 @@ type Page = { data: Receipt[]; meta: { current_page: number; last_page: number; 
 
 export default function ClubOrdinaryIncomeReceiptHistoryBackend({ role }: { role: DevRole }) {
   const { session, authenticatedFetch } = useDevAuth();
-  const allowed = role === "president" || role === "secretary" || role === "treasurer";
-  const canCorrect = role === "president" || role === "treasurer";
+  const allowed = hasEffectivePermission(session, "finance.club.ordinary_income_receipts.view");
+  const canCorrect = hasEffectivePermission(session, "finance.club.ordinary_income_receipts.reverse");
   const [rows, setRows] = useState<Receipt[]>([]); const [selected, setSelected] = useState<Receipt | null>(null);
   const [message, setMessage] = useState(allowed ? "Loading ordinary income history…" : "You are not authorized to view ordinary income receipts.");
   const [filters, setFilters] = useState({ date_from: "", date_to: "", search: "", subtype: "", status: "" });

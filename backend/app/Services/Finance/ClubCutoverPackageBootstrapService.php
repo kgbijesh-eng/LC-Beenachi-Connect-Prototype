@@ -10,7 +10,6 @@ use App\Models\ClubAccountingCutoverBootstrapApproval;
 use App\Models\ClubAccountingCutoverBootstrapOperation;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingCutoverPermissionAssignment;
-use App\Models\ClubMembership;
 use App\Models\Permission;
 use App\Models\User;
 use App\Services\Access\OrganisationTransactionContext;
@@ -32,8 +31,9 @@ final class ClubCutoverPackageBootstrapService
         }
 
         return $this->organisations->run($club, function () use ($club, $preparer, $packageVersion, $reference, $requester): ClubAccountingCutoverBootstrapOperation {
-            $this->authority->governanceOfficerRoleForClub($club->id, $requester);
-            $this->assertPreparer($club->id, $preparer->id);
+            $at = now('UTC')->toImmutable();
+            $this->authority->governanceOfficerRoleForClub($club->id, $requester, $at);
+            $this->assertPreparer($club->id, $preparer->id, $at);
             $permission = Permission::query()->where('slug', 'finance.cutover.package.prepare')->firstOrFail();
             $binding = [
                 'club_id' => $club->id, 'package_version' => $packageVersion,
@@ -59,12 +59,19 @@ final class ClubCutoverPackageBootstrapService
     public function approve(ClubAccountingCutoverBootstrapOperation $operation, User $actor, string $approvalReference): ClubAccountingCutoverBootstrapOperation
     {
         return $this->organisations->run($operation->club_id, function (OrganisationTransactionContext $context) use ($operation, $actor, $approvalReference): ClubAccountingCutoverBootstrapOperation {
-            $operation = ClubAccountingCutoverBootstrapOperation::query()->whereKey($operation->id)
-                ->where('club_id', $context->organisationId)->lockForUpdate()->firstOrFail();
+            $at = now('UTC')->toImmutable();
+            $scoped = ClubAccountingCutoverBootstrapOperation::query()->whereKey($operation->id)
+                ->where('club_id', $context->organisationId);
+            $snapshot = $scoped->firstOrFail();
+            $role = $snapshot->status === 'applied' ? null
+                : $this->authority->governanceOfficerRoleForClub($context->organisationId, $actor, $at);
+            $operation = $scoped->lockForUpdate()->firstOrFail();
             if ($operation->status === 'applied') {
                 return $operation;
             }
-            $role = $this->authority->governanceOfficerRoleForClub($operation->club_id, $actor);
+            if ($role === null) {
+                throw new CutoverAuthorizationException('The package bootstrap operation changed during admission.');
+            }
             if ($operation->approvals()->where(fn ($query) => $query->where('approval_role', $role)->orWhere('approved_by_user_id', $actor->id))->exists()) {
                 throw new CutoverAuthorizationException('Each governance role and actor may approve bootstrap only once.');
             }
@@ -75,19 +82,19 @@ final class ClubCutoverPackageBootstrapService
                 'operation_digest' => $operation->request_digest, 'approved_at' => now(),
             ]);
             if ($operation->approvals()->count() === 2) {
-                $this->apply($operation);
+                $this->apply($operation, $at);
             }
 
             return $operation->fresh('approvals');
         }, attempts: 1);
     }
 
-    private function apply(ClubAccountingCutoverBootstrapOperation $operation): void
+    private function apply(ClubAccountingCutoverBootstrapOperation $operation, \DateTimeInterface $at): void
     {
-        $this->assertPreparer($operation->club_id, $operation->preparer_user_id);
+        $this->assertPreparer($operation->club_id, $operation->preparer_user_id, $at);
         foreach (['president' => 'president-admin', 'secretary' => 'secretary'] as $approvalRole => $membershipRole) {
             $approvedBy = (int) $operation->approvals()->where('approval_role', $approvalRole)->value('approved_by_user_id');
-            if ($approvedBy < 1 || $this->authority->uniqueOfficerForClub($operation->club_id, $membershipRole)->id !== $approvedBy) {
+            if ($approvedBy < 1 || $this->authority->uniqueOfficerForClub($operation->club_id, $membershipRole, $at)->id !== $approvedBy) {
                 throw new CutoverAuthorizationException('Both bootstrap governance approvals must retain their current officer basis.');
             }
         }
@@ -113,11 +120,9 @@ final class ClubCutoverPackageBootstrapService
         AuditLog::create(['club_id' => $package->club_id, 'user_id' => $operation->preparer_user_id, 'action' => 'finance.cutover_package.created', 'auditable_type' => ClubAccountingCutoverPackage::class, 'auditable_id' => $package->id, 'metadata' => ['package_version' => $package->package_version, 'bootstrap_operation_id' => $operation->id]]);
     }
 
-    private function assertPreparer(int $clubId, int $userId): void
+    private function assertPreparer(int $clubId, int $userId, \DateTimeInterface $at): void
     {
-        $count = ClubMembership::query()->where('club_id', $clubId)->where('user_id', $userId)->where('status', 'active')
-            ->whereHas('role', fn ($role) => $role->where('slug', 'treasurer'))->count();
-        if ($count !== 1) {
+        if ($this->authority->uniqueOfficerForClub($clubId, 'treasurer', $at)->id !== $userId) {
             throw new CutoverAuthorizationException('The unique active same-club Treasurer is required as package preparer.');
         }
     }

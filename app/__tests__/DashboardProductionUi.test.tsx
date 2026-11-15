@@ -16,6 +16,9 @@ function syntheticSession(role: SyntheticRole, name = "Synthetic Officer") {
       status: "active",
       club: { id: 1, code: "LCB", name: "LC Beenachi" },
       role: { slug: role, name: role },
+      authority_as_of: "2020-01-01T00:00:00Z",
+      effective_office: role === "member" ? null : { office: role === "president-admin" ? "president" : role, effective_until: "2099-01-01T00:00:00Z" },
+      permissions: [{ slug: "members.view" }],
       member: { id: 1, member_code: "1000001", full_name: name }
     }]
   };

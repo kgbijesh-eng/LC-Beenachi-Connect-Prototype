@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { useDevAuth, type DevRole } from "./DevAuthSession";
+import { hasEffectivePermission, useDevAuth, type DevRole } from "./DevAuthSession";
 import ClubExpenseBackend, { type CorrectedExpenseDraft } from "./ClubExpenseBackend";
 import { formatInrPaise } from "./ClubAccountStatementBackend";
 
@@ -12,8 +12,8 @@ type Page = { data: Expense[]; meta: { current_page: number; last_page: number; 
 
 export default function ClubExpenseHistoryBackend({ role }: { role: DevRole }) {
   const { session, authenticatedFetch } = useDevAuth();
-  const allowed = role === "president" || role === "secretary" || role === "treasurer";
-  const canReverse = role === "president" || role === "treasurer";
+  const allowed = hasEffectivePermission(session, "finance.club.expenses.view");
+  const canReverse = hasEffectivePermission(session, "finance.club.expenses.reverse");
   const [rows, setRows] = useState<Expense[]>([]); const [selected, setSelected] = useState<Expense | null>(null);
   const [message, setMessage] = useState(allowed ? "Loading expense history…" : "You are not authorized to view club expenses.");
   const [filters, setFilters] = useState({ date_from: "", date_to: "", search: "", status: "" });

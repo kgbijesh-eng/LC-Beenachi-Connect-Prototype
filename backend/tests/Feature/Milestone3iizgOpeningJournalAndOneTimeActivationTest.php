@@ -267,6 +267,13 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends CutoverPostgr
         $this->dualAssign($fixture['package'], $fixture['president'], 'finance.cutover.package.business-approve', $fixture['president'], $fixture['verifier'], 'PRESIDENT-PERMISSION');
         $other = User::factory()->create();
         ClubMembership::create(['club_id' => $fixture['club']->id, 'user_id' => $other->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']);
+        $membership = ClubMembership::where('club_id', $fixture['club']->id)
+            ->where('user_id', $fixture['president']->id)->sole();
+        \Illuminate\Support\Facades\DB::table('club_officer_terms')->where('membership_id', $membership->id)->update([
+            'ended_at' => '2020-01-01 00:00:00+00',
+            'termination_reference' => 'fixture-vacant-presidency',
+            'termination_reason' => 'Synthetic expiry with legacy memberships retained',
+        ]);
         $this->expectException(CutoverAuthorizationException::class);
         app(ClubCutoverAuthorityResolver::class)->president($fixture['package'], $fixture['president'], 'finance.cutover.package.business-approve');
     }
@@ -462,10 +469,10 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends CutoverPostgr
             $$key = User::factory()->create();
         }
         $club = Club::create(['name' => 'Beenachi', 'code' => 'LCB']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $verifier->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $grantor->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $preparer->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
+        self::seedAnnouncementOfficerTerm(ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']), 'president-admin');
+        self::seedAnnouncementOfficerTerm(ClubMembership::create(['club_id' => $club->id, 'user_id' => $verifier->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active']), 'secretary');
+        self::seedAnnouncementOfficerTerm($grantorMembership = ClubMembership::create(['club_id' => $club->id, 'user_id' => $grantor->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']), 'treasurer');
+        $preparerMembership = ClubMembership::create(['club_id' => $club->id, 'user_id' => $preparer->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
         $accounts = [];
         foreach ([['cash', 'CASH-ON-HAND', 'asset', 'debit'], ['bank', 'BANK-OPERATING', 'asset', 'debit'], ['receivable', 'MEMBER-RECEIVABLES', 'asset', 'debit'], ['other_asset', 'CLUB-PROPERTY', 'asset', 'debit'], ['liability', 'LIABILITY-GENERAL', 'liability', 'credit'], ['restricted', 'LIABILITY-RESTRICTED-COLLECTION', 'liability', 'credit'], ['equity', 'OPENING-BALANCE-EQUITY', 'equity', 'credit'], ['surplus', 'ACCUMULATED-SURPLUS', 'equity', 'credit']] as [$key,$code,$type,$normal]) {
             $accounts[$key] = LedgerAccount::create(['club_id' => $club->id, 'code' => $code, 'name' => $code, 'account_type' => $type, 'normal_balance' => $normal, 'currency' => 'INR', 'is_active' => true, 'created_by_user_id' => $grantor->id]);
@@ -496,6 +503,13 @@ class Milestone3iizgOpeningJournalAndOneTimeActivationTest extends CutoverPostgr
             $package = $package->fresh('evidenceReferences');
         }
         $package = $service->refreshValidation($club->id, $package->id, $grantor->id, $package->lock_version);
+        $handover = now('UTC')->format('Y-m-d H:i:sP');
+        \Illuminate\Support\Facades\DB::table('club_officer_terms')->where('membership_id', $grantorMembership->id)->update([
+            'ended_at' => $handover,
+            'termination_reference' => 'fixture-treasurer-handover',
+            'termination_reason' => 'Synthetic separation of package author and preparer',
+        ]);
+        self::seedAnnouncementOfficerTerm($preparerMembership, 'treasurer', $handover);
 
         return compact('club', 'grantor', 'preparer', 'verifier', 'ca', 'president', 'operator', 'accounts', 'package');
     }

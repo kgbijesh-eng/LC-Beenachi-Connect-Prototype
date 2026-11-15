@@ -9,6 +9,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class LocalRoleApiPermissionSmokeTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
     public function test_seeded_president_admin_can_login_read_create_and_update_members(): void
     {
         $this->assertRoleCanManageMembers(
@@ -156,6 +158,12 @@ class LocalRoleApiPermissionSmokeTest extends FinancialPostgresTestCase
     {
         config(['instance.organisation_code' => 'LCB']);
         $this->seed(DatabaseSeeder::class);
+        $offices = ['president@lcbeenachi.test' => 'president-admin', 'secretary@lcbeenachi.test' => 'secretary', 'treasurer@lcbeenachi.test' => 'treasurer'];
+        if (isset($offices[$email])) {
+            $membership = \App\Models\ClubMembership::whereHas('user', fn ($query) => $query->where('email', $email))
+                ->whereHas('club', fn ($query) => $query->where('code', 'LCB'))->sole();
+            self::seedAnnouncementOfficerTerm($membership, $offices[$email]);
+        }
 
         $club = Club::where('code', 'LCB')->firstOrFail();
 

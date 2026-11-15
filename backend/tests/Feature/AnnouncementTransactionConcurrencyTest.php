@@ -26,6 +26,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class AnnouncementTransactionConcurrencyTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
     private const INPUT = ['title' => 'Race notice', 'body' => 'Synthetic race content', 'priority' => 'normal', 'audience' => 'club-members'];
 
     private Club $club;
@@ -87,7 +89,7 @@ class AnnouncementTransactionConcurrencyTest extends FinancialPostgresTestCase
     {
         $writer = $this->prepare($op);
         $target = $loss === 'maker' ? $this->maker->id : $writer['user'];
-        $update = ['role_id' => Role::where('slug', 'member')->sole()->id];
+        $update = [];
         if ($op === 'mark') {
             $reader = $this->actor('treasurer');
             $writer['user'] = $target = $reader->id;
@@ -96,13 +98,16 @@ class AnnouncementTransactionConcurrencyTest extends FinancialPostgresTestCase
                 $update = ['status' => 'inactive'];
             }
         }
-        $change = $this->operation('membership') + ['target_user' => $target, 'membership_update' => $update];
+        $change = $this->operation('membership') + ['target_user' => $target, 'membership_update' => $update, 'end_office' => $update === []];
         $before = $this->snapshot();
         $this->assertSame(
             $writerFirst ? ['ok', 'ok'] : ['ok', $loss === 'audience' ? 'ineligible' : 'http_403'],
             $this->race(...($writerFirst ? [$writer, $change] : [$change, $writer])),
         );
         $membership = ClubMembership::where('club_id', $this->club->id)->where('user_id', $target)->sole();
+        if ($update === []) {
+            $this->assertNotNull(DB::table('club_officer_terms')->where('membership_id', $membership->id)->value('ended_at'));
+        }
         foreach ($update as $field => $value) {
             $this->assertSame($value, $membership->{$field});
         }
@@ -240,6 +245,26 @@ class AnnouncementTransactionConcurrencyTest extends FinancialPostgresTestCase
         $this->assertDatabaseCount('club_announcement_reads', 0);
     }
 
+    public function test_officer_authority_expires_while_writer_waits_for_club(): void
+    {
+        $expires = now('UTC')->addSeconds(12)->startOfSecond();
+        $membership = ClubMembership::where('club_id', $this->club->id)->where('user_id', $this->checker->id)->sole();
+        DB::table('club_officer_terms')->where('membership_id', $membership->id)->update([
+            'ended_at' => $expires->format('Y-m-d H:i:sP'),
+            'termination_reference' => 'test-expiry-during-club-wait',
+            'termination_reason' => 'Synthetic scheduled end',
+        ]);
+        $holder = $this->prepare('create');
+        $waiter = array_replace($holder, ['user' => $this->checker->id]);
+        $before = $this->snapshot();
+
+        $this->assertSame(['ok', 'http_403'], $this->race($holder, $waiter, function () use ($expires): void {
+            $this->assertTrue(now()->lt($expires), 'The writer must already be blocked before the term ends.');
+            $this->await(fn () => now()->gte($expires));
+        }));
+        $this->assertEffect('create', $holder, $before);
+    }
+
     public function test_gets_complete_while_club_is_locked(): void
     {
         $marker = $this->prepare('mark');
@@ -343,7 +368,9 @@ class AnnouncementTransactionConcurrencyTest extends FinancialPostgresTestCase
     private function actor(string $role): User
     {
         $user = User::factory()->create();
-        ClubMembership::create(['club_id' => $this->club->id, 'user_id' => $user->id, 'role_id' => Role::where('slug', $role)->sole()->id, 'status' => 'active']);
+        $membership = ClubMembership::create(['club_id' => $this->club->id, 'user_id' => $user->id, 'role_id' => Role::where('slug', $role)->sole()->id, 'status' => 'active']);
+
+        $this->seedAnnouncementOfficerTerm($membership, $role);
 
         return $user;
     }

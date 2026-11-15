@@ -186,16 +186,6 @@ class ClubEventController extends Controller
 
     private function userCanManageEvents(User $user, Club $club): bool
     {
-        $membership = $user->clubMemberships()
-            ->with('role.permissions')
-            ->where('club_id', $club->id)
-            ->where('status', 'active')
-            ->first();
-
-        $role = $membership?->role;
-
-        return $role !== null
-            && in_array($role->slug, ClubEvent::MANAGEMENT_ROLE_SLUGS, true)
-            && $role->permissions->contains('slug', ClubEvent::PERMISSION_MANAGE);
+        return app(\App\Services\Access\ClubPermissionService::class)->userHasPermission($user, 'events.manage', (int) $club->id);
     }
 }

@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\Permission;
 use App\Models\User;
+use App\Services\Access\ClubPermissionService;
 use App\Services\Access\InstanceOrganisation;
 use App\Services\Access\OrganisationAccessRejected;
 use App\Services\Access\OrganisationTransactionGuard;
@@ -51,7 +53,7 @@ class AuthController extends Controller
         });
     }
 
-    public function me(Request $request): JsonResponse
+    public function me(Request $request, ClubPermissionService $permissions): JsonResponse
     {
         $user = $request->user();
 
@@ -69,6 +71,8 @@ class AuthController extends Controller
         $user->load(['members' => fn ($query) => $query->where('club_id', $organisation->id)
             ->select('id', 'club_id', 'user_id', 'member_code', 'full_name')]);
 
+        $authorityAt = now('UTC')->toImmutable();
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
@@ -76,7 +80,7 @@ class AuthController extends Controller
                 'email' => $user->email,
             ],
             'instance_organisation' => ['id' => $organisation->id, 'code' => $organisation->code, 'name' => $organisation->name],
-            'club_memberships' => $memberships->map(function ($membership) use ($user): array {
+            'club_memberships' => $memberships->map(function ($membership) use ($user, $permissions, $authorityAt): array {
                 $clubId = $membership->club_id;
 
                 $clubMembers = $user->members->filter(function ($member) use ($user, $clubId) {
@@ -102,6 +106,8 @@ class AuthController extends Controller
                     ];
                 }
 
+                $authority = $permissions->membershipAuthority($membership, $authorityAt);
+
                 return [
                     'id' => $membership->id,
                     'status' => $membership->status,
@@ -119,7 +125,9 @@ class AuthController extends Controller
                         'name' => $membership->role->name,
                         'slug' => $membership->role->slug,
                     ],
-                    'permissions' => $membership->role->permissions
+                    'effective_office' => $permissions->officePayload($authority['term']),
+                    'authority_as_of' => $authorityAt->toISOString(),
+                    'permissions' => Permission::query()->whereIn('slug', $authority['permissions'])->get()
                         ->sortBy('slug')
                         ->values()
                         ->map(fn ($permission): array => [
