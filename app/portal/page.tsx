@@ -1571,7 +1571,11 @@ function PreviewNavIcon({ label }: { label: string }) {
 function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevIdentity; role: Role; initialScreen: Screen }) {
   const { session, logout } = useDevAuth();
   const [screen, setScreen] = useState<Screen>(initialScreen);
-  const useOwnMemberData = role === "member" && ["dashboard", "my-dues", "payment-history", "member-profile"].includes(screen);
+  const useOwnMemberData = role === "member" && [
+    "dashboard", "my-dues", "payment-history", "member-profile",
+    "events-meetings", "event-meeting-detail", "announcements",
+    "announcement-detail", "announcement-single-detail"
+  ].includes(screen);
   const [currentMembers, setCurrentMembers] = useState<Member[]>([]);
   const [memberStatus, setMemberStatus] = useState<MemberLoadStatus>("loading");
   const [activeMemberCount, setActiveMemberCount] = useState<number | null>(null);
