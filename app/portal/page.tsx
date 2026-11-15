@@ -13,10 +13,12 @@ import ClubInternalTransferBackend from "../ClubInternalTransferBackend";
 import ClubOrdinaryIncomeReceiptBackend from "../ClubOrdinaryIncomeReceiptBackend";
 import ClubOrdinaryIncomeReceiptHistoryBackend from "../ClubOrdinaryIncomeReceiptHistoryBackend";
 import PersonalProfileDocuments from "../PersonalProfileDocuments";
-import AnnouncementsBackend, { AnnouncementDashboardStatus } from "../AnnouncementsBackend";
+import AnnouncementsBackend from "../AnnouncementsBackend";
 import { DevAuthProvider, hasEffectivePermission, type DevIdentity, type DevRole, useDevAuth } from "../DevAuthSession";
 import { getApiBaseUrl } from "../apiBaseUrl";
 import LoginScreen from "../LoginScreen";
+import DashboardPreview, { type DashboardDestination } from "../DashboardPreview";
+import previewStyles from "../DashboardPreview.module.css";
 
 type Role = DevRole;
 type FinanceSummaryStatus = "loading" | "ready" | "error";
@@ -1051,6 +1053,7 @@ const peopleMenuItems: NavItem[] = [
   {
     label: "Members",
     children: [
+      { label: "Member Directory", screen: "members" },
       detailItem("People", "Active Members"),
       detailItem("People", "Inactive Members"),
       detailItem("People", "Profile Update Pending"),
@@ -1072,6 +1075,7 @@ const peopleMenuItems: NavItem[] = [
   {
     label: "Celebrations",
     children: [
+      { label: "Celebrations Overview", screen: "celebrations" },
       detailItem("People", "Today"),
       detailItem("People", "This Week"),
       detailItem("People", "Birthdays"),
@@ -1556,9 +1560,18 @@ function PrototypeGate() {
   return <PrototypeWorkspace key={auth.session.identity} identity={auth.session.identity} role={auth.session.role} initialScreen="dashboard" />;
 }
 
+function PreviewNavIcon({ label }: { label: string }) {
+  const path = /dashboard|home/i.test(label) ? "M4 10l8-6 8 6v10H4zM9 20v-6h6v6"
+    : /finance|dues|payment/i.test(label) ? "M4 6h16v13H4zM4 10h16m-6 3h6v3h-6z"
+    : /member|profile|people/i.test(label) ? "M9 17a5 5 0 0 1 10 0v2H5v-2a5 5 0 0 1 4-5M15 7a3 3 0 1 0-6 0 3 3 0 0 0 6 0z"
+    : /event|meeting|activity/i.test(label) ? "M4 6h16v14H4zM8 4v4m8-4v4M4 11h16"
+    : "M6 4h12v16H6zM9 9h6m-6 4h6m-6 4h4";
+  return <svg className={previewStyles.navIcon} aria-hidden="true" viewBox="0 0 24 24"><path d={path} /></svg>;
+}
 function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevIdentity; role: Role; initialScreen: Screen }) {
   const { session, logout } = useDevAuth();
   const [screen, setScreen] = useState<Screen>(initialScreen);
+  const useOwnMemberData = role === "member" && ["dashboard", "my-dues", "payment-history", "member-profile"].includes(screen);
   const [currentMembers, setCurrentMembers] = useState<Member[]>([]);
   const [memberStatus, setMemberStatus] = useState<MemberLoadStatus>("loading");
   const [activeMemberCount, setActiveMemberCount] = useState<number | null>(null);
@@ -1708,18 +1721,21 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
 
         const linkedMemberInfo = activeMembership?.member ?? null;
 
-        const listResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members", { headers: authHeaders, signal: controller.signal });
-        if (!listResponse.ok) throw new Error("Current member data could not be loaded.");
-        const listPayload = await listResponse.json() as { members?: unknown };
-        if (!Array.isArray(listPayload.members) || !listPayload.members.every(isBackendMemberRecord)) {
-          throw new Error("Current member data could not be loaded.");
-        }
-        const importedRecords = listPayload.members.filter(isImportedCurrentMember);
-        if (importedRecords.length !== 47) throw new Error("The expected 47 imported current members are not safely distinguishable.");
-        listReady = true;
-        if (!cancelled) {
-          setActiveMemberCount(importedRecords.filter((record) => record.status.toLowerCase() === "active").length);
-          setActiveMemberStatus("ready");
+        let importedRecords: BackendMemberRecord[] = [];
+        if (!useOwnMemberData) {
+          const listResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members", { headers: authHeaders, signal: controller.signal });
+          if (!listResponse.ok) throw new Error("Current member data could not be loaded.");
+          const listPayload = await listResponse.json() as { members?: unknown };
+          if (!Array.isArray(listPayload.members) || !listPayload.members.every(isBackendMemberRecord)) {
+            throw new Error("Current member data could not be loaded.");
+          }
+          importedRecords = listPayload.members.filter(isImportedCurrentMember);
+          if (importedRecords.length !== 47) throw new Error("The expected 47 imported current members are not safely distinguishable.");
+          listReady = true;
+          if (!cancelled) {
+            setActiveMemberCount(importedRecords.filter((record) => record.status.toLowerCase() === "active").length);
+            setActiveMemberStatus("ready");
+          }
         }
 
         let records: BackendMemberRecord[];
@@ -1736,7 +1752,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           if (!isBackendMemberRecord(selfRecord) || Number(selfRecord.id) !== Number(linkedMemberInfo.id)) {
             throw new Error("No genuine club member profile is linked.");
           }
-          records = importedRecords.map((record) => Number(record.id) === Number(selfRecord.id) ? selfRecord : record);
+          records = useOwnMemberData ? [selfRecord] : importedRecords.map((record) => Number(record.id) === Number(selfRecord.id) ? selfRecord : record);
         } else {
           records = await Promise.all(importedRecords.map(async (record) => {
             const profileResponse = await fetch(API_BASE_URL + "/clubs/" + clubId + "/members/" + record.id, { headers: authHeaders, signal: controller.signal });
@@ -1776,13 +1792,15 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
       }
     }
 
-    loadCurrentMembers();
+    void Promise.resolve().then(() => {
+      if (!cancelled) return loadCurrentMembers();
+    });
     return () => {
       cancelled = true;
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [role, memberRefreshKey, session]);
+  }, [role, memberRefreshKey, session, useOwnMemberData]);
   const expenseTrimmed = totalFellowshipExpenseInput.trim();
   const isValidExpenseFormat = /^\d+(\.\d*)?$/.test(expenseTrimmed) || expenseTrimmed === ".";
   const parsedExpense = parseFloat(expenseTrimmed);
@@ -1874,6 +1892,26 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
     screen === "my-finance-summary" ||
     screen === "my-dues" ||
     screen === "payment-history";
+
+  function openDashboardDestination(destination: DashboardDestination) {
+    const screens = {
+      "record-payment": "record-member-payment",
+      outstanding: "outstanding-dues",
+      "my-dues": "my-dues",
+      "my-receipts": "payment-history",
+      profile: "member-profile",
+      events: "events-meetings",
+      announcements: "announcements",
+      statement: "finance-module",
+      "finance-report": "finance-module"
+    } satisfies Record<DashboardDestination, Screen>;
+    handleSetScreen(screens[destination]);
+    if (destination === "statement") {
+      setFinanceSection("Club Account Statement");
+      setClubStatementSection("Account Overview");
+    }
+    if (destination === "finance-report") setFinanceSection("Club Finance Reports");
+  }
 
   function handleSetScreen(nextScreen: Screen) {
     if (nextScreen === "fellowship-queue") {
@@ -2185,6 +2223,14 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
                       ? "Club member records"
                       : null;
 
+  const accountDetails = (
+    <div className="prototypeSwitcher">
+          <span>Signed in</span>
+          <small>{session?.user.email ?? identity}</small>
+          <button type="button" onClick={() => void logout()}>Sign out</button>
+        </div>
+  );
+
   return (
     <MemberDataContext.Provider value={{ members: currentMembers, status: memberStatus, activeMemberCount, activeMemberStatus, error: memberLoadError, token: memberToken, clubId: memberClubId, authenticatedUserId, retry: () => setMemberRefreshKey((key) => key + 1) }}>
     <main className="shell">
@@ -2285,19 +2331,13 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           }
         }
       `}</style>
-      <aside className="sidebar" aria-label="Primary navigation">
+      <aside className={`sidebar ${previewStyles.sidebar}`} aria-label="Primary navigation">
         <div className="brand">
           <div className="brandMark">LC</div>
           <div>
             <strong>LC Beenachi Connect</strong>
             <span>Club Operations Platform</span>
           </div>
-        </div>
-
-        <div className="prototypeSwitcher">
-          <span>Signed in</span>
-          <small>{session?.user.email ?? identity}</small>
-          <button type="button" onClick={() => void logout()}>Sign out</button>
         </div>
 
         <nav className={role === "member" ? "memberNav" : undefined}>
@@ -2310,6 +2350,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
                     className={screen === item.screen ? "active navButton" : "navButton"}
                     onClick={() => openDirect(item)}
                   >
+                    <PreviewNavIcon label={item.label} />
                     {item.label}
                   </button>
                 ))
@@ -2320,7 +2361,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
                     onClick={() => toggleGroup(group)}
                     aria-expanded={isExpanded(group)}
                   >
-                    <span>{group.title}</span>
+                    <span className={previewStyles.navLabel}><PreviewNavIcon label={group.title} />{group.title}</span>
                     <span>{isExpanded(group) ? "▾" : "▸"}</span>
                   </button>
                   {isExpanded(group) && (
@@ -2368,6 +2409,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
             </div>
           ))}
         </nav>
+        {accountDetails}
       </aside>
 
       <section className="workspace">
@@ -2466,18 +2508,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
                 />
               )
             )}
-            {screen === "dashboard" && (
-              <Dashboard
-                role={role}
-                member={activeMember!}
-                setScreen={handleSetScreen}
-                openDashboardDetail={openDashboardDetail}
-                totalOutstanding={totalOutstanding}
-                months={fellowshipMonths}
-                selectedMonthKey={selectedFellowshipMonthKey}
-                setSelectedMonthKey={setSelectedFellowshipMonthKey}
-              />
-            )}
+            {screen === "dashboard" && <DashboardPreview navigate={openDashboardDestination} />}
             {screen === "dashboard-detail" && dashboardDetail && (
               <DashboardDetailScreen
                 detail={dashboardDetail}
@@ -2566,6 +2597,8 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
                       ? <ClubOrdinaryIncomeReceiptBackend role={role} />
                     : financeSection === "Ordinary Income History"
                       ? <ClubOrdinaryIncomeReceiptHistoryBackend role={role} />
+                    : financeSection === "Club Finance Reports"
+                      ? <ClubFinanceReportsPanel role={role} displayMode="reports" />
                     : <FinanceBackend role={role} view={financeSection === "Outstanding Dues" ? "outstanding" : financeSection === "Member Ledger / Dues" ? "summary" : "workspace"} onRecordPayment={openOutstandingPayment} />
                 )}
         {screen === "reports-tools-module" && (
@@ -4919,178 +4952,6 @@ function MemberFinanceSummaryPanel({
   );
 }
 
-function Dashboard({
-  role,
-  member,
-  setScreen,
-  months,
-  selectedMonthKey,
-  setSelectedMonthKey
-}: {
-  role: Role;
-  member: Member;
-  setScreen: (screen: Screen) => void;
-  openDashboardDetail: (detail: DashboardDetail) => void;
-  totalOutstanding: number;
-  months: Record<string, FellowshipMonthRecord>;
-  selectedMonthKey: string;
-  setSelectedMonthKey: (key: string) => void;
-}) {
-  const {
-    members: currentMembers,
-    status: currentMemberStatus,
-    activeMemberCount,
-    activeMemberStatus
-  } = useCurrentMemberData();
-  const [clientDate, setClientDate] = useState<Date | null>(null);
-  useEffect(() => {
-    void Promise.resolve().then(() => setClientDate(new Date()));
-  }, []);
-
-  const officerRole = role !== "member";
-  const genuineMembers = officerRole ? canonicalFellowshipMembers(currentMembers) : [];
-  const memberCountText = activeMemberStatus === "loading"
-    ? "Loading member records…"
-    : activeMemberStatus === "error"
-      ? "Unable to load member records"
-      : `${activeMemberCount ?? 0}`;
-  const dateText = clientDate
-    ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", year: "numeric" }).format(clientDate)
-    : "Loading current date…";
-  const currentMonthKey = clientDate
-    ? `${clientDate.getFullYear()}-${String(clientDate.getMonth() + 1).padStart(2, "0")}`
-    : null;
-  const currentMonth = currentMonthKey ? months[currentMonthKey] : null;
-  const currentMonthLabel = currentMonthKey ? fellowshipMonthLabel(currentMonthKey) : "Current month";
-  const lifecycleLabels: Record<FellowshipMonthLifecycle, string> = {
-    unprepared: "Unprepared",
-    draft: "Draft — sponsor selection",
-    payment_tracking: "Payment tracking open",
-    finalised: "Finalised"
-  };
-  const fellowshipSponsors = currentMonth
-    ? (currentMonth.lifecycle === "draft" ? currentMonth.selectedSponsors : currentMonth.confirmedSponsors)
-    : [];
-  const fellowshipReceived = currentMonth
-    ? currentMonth.confirmedSponsors.reduce((sum, memberId) => sum + (currentMonth.payments[memberId] || 0), 0)
-    : 0;
-  const fellowshipOutstanding = currentMonth
-    ? Math.max(0, currentMonth.confirmedSharePerSponsor * currentMonth.confirmedSponsors.length - fellowshipReceived)
-    : 0;
-  const birthdaysToday = officerRole && clientDate && currentMemberStatus === "ready"
-    ? genuineMembers.filter((currentMember) => {
-        if (!currentMember.birthDate) return false;
-        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(currentMember.birthDate);
-        return Boolean(match && Number(match[2]) === clientDate.getMonth() + 1 && Number(match[3]) === clientDate.getDate());
-      })
-    : [];
-  const birthdayText = !officerRole
-    ? "Available only in authorized officer views"
-    : currentMemberStatus === "loading"
-      ? "Loading birthday information…"
-      : currentMemberStatus === "error"
-        ? "Birthday information unavailable"
-        : birthdaysToday.length
-          ? `${birthdaysToday.length} member birthday${birthdaysToday.length === 1 ? "" : "s"} today`
-          : "No member birthdays today";
-
-  function openCurrentFellowship() {
-    if (currentMonthKey && currentMonth) setSelectedMonthKey(currentMonthKey);
-    setScreen(role === "president" || role === "secretary" ? "fellowship-administration" : "my-fellowship");
-  }
-
-  const fellowshipValue = !clientDate
-    ? "Loading current month…"
-    : currentMonth
-      ? `${currentMonthLabel} — ${lifecycleLabels[currentMonth.lifecycle]}`
-      : "Current month not prepared";
-  const roleName = role === "member" ? "Normal Member" : roleLabels[role];
-
-  return (
-    <section className="dashboardStack" style={{ minWidth: 0 }}>
-      <div className="dashboardIntro">
-        <div>
-          <p className="eyebrow">{roleName} Dashboard</p>
-          <h2>{dateText}</h2>
-          <p>Live club member and Fellowship information is shown where connected. Unconnected modules are marked as unavailable.</p>
-        </div>
-      </div>
-
-      <section className="compactPanel dashboardPanel">
-        <DashboardSectionHeader title="Connected club information" label="Verified sources only" />
-        <div className="compactDashboardGrid">
-          {officerRole ? (
-            <CompactDashboardCard label="Active Members" value={memberCountText} action="Open member directory" onClick={() => setScreen("members")} />
-          ) : (
-            <TruthStatusCard label="Active Members" value="Club-wide member totals are not shown in the Normal Member dashboard." />
-          )}
-          <TruthStatusCard label="Birthdays Today" value={birthdayText} />
-          <CompactDashboardCard label="Fellowship" value={fellowshipValue} action={currentMonth ? "Open current month" : "View existing months"} onClick={openCurrentFellowship} />
-        </div>
-        {currentMonth && (
-          <div className="metricsGrid" style={{ marginTop: "1rem" }}>
-            <Metric label="Fellowship month" value={currentMonthLabel} />
-            <Metric label="Lifecycle" value={lifecycleLabels[currentMonth.lifecycle]} />
-            <Metric label="Sponsor count" value={`${fellowshipSponsors.length}`} />
-            <Metric label="Amount received" value={formatSponsorShare(fellowshipReceived)} />
-            <Metric label="Outstanding" value={formatSponsorShare(fellowshipOutstanding)} />
-            <Metric label="Selected month retained" value={fellowshipMonthLabel(selectedMonthKey)} />
-          </div>
-        )}
-      </section>
-
-      {role === "member" ? (
-        <>
-          <FinanceBackend role={role} view="summary" isPersonal />
-          <section className="compactPanel dashboardPanel">
-            <DashboardSectionHeader title="Member dashboard sources" label="Own authorized records only" />
-            <div className="compactDashboardGrid">
-              <TruthStatusCard label="Meetings" value="Available in Events & Meetings." />
-              <TruthStatusCard label="Announcements" value={<AnnouncementDashboardStatus />} />
-              <TruthStatusCard label="Documents" value="Document activity is not connected to the Dashboard yet." />
-            </div>
-          </section>
-        </>
-      ) : (
-        <section className="compactPanel dashboardPanel">
-          <DashboardSectionHeader title="Operational source status" label="Unknown is not reported as zero" />
-          <div className="compactDashboardGrid">
-            <TruthStatusCard label="Finance & Dues" value="Available in Finance." />
-            <TruthStatusCard label="Announcements" value={<AnnouncementDashboardStatus />} />
-            <TruthStatusCard label="Events" value="Available in Events & Meetings." />
-            <TruthStatusCard label="Meetings" value="Available in Events & Meetings." />
-            <TruthStatusCard label="Recent Payments" value="Recent payment activity is unavailable here." />
-            <TruthStatusCard label="Documents" value="Document activity is not connected." />
-            <TruthStatusCard label="Pending Reports" value="Pending report totals are unavailable." />
-            <TruthStatusCard label="Approvals" value="Profile update review is available." />
-          </div>
-        </section>
-      )}
-
-      <section className="compactPanel dashboardPanel">
-        <DashboardSectionHeader title="Available navigation" label="No dashboard mutations" />
-        <div className="quickActionGrid">
-          <button onClick={() => setScreen("members")}>{role === "member" ? "Member Directory" : "Open Members"}</button>
-          <button onClick={openCurrentFellowship}>Open Fellowship</button>
-          {role !== "member" && <button onClick={() => setScreen("reports-tools-module")}>Open Reports</button>}
-          {role === "treasurer" && <button onClick={() => setScreen("record-member-payment")}>Record Member Payment</button>}
-          {(role === "president" || role === "secretary") && <button onClick={() => setScreen("announcements")}>Open Announcements</button>}
-          <button onClick={() => setScreen("celebrations")}>Open Celebrations</button>
-        </div>
-      </section>
-    </section>
-  );
-}
-
-function TruthStatusCard({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="compactDashboardCard" style={{ cursor: "default", overflowWrap: "anywhere" }}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>Source status</small>
-    </div>
-  );
-}
 function InternalMvpReadinessPanel({
   role,
   setScreen,

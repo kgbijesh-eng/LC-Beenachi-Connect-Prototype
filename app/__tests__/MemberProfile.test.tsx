@@ -159,7 +159,9 @@ function installFetchScenario(scenario: Scenario) {
 
 async function openSujeshProfile() {
   render(<Prototype />);
-  fireEvent.click(await screen.findByRole("button", { name: "Open Members" }));
+  fireEvent.click(await screen.findByRole("button", { name: authState.role === "treasurer" ? /Club Visibility/ : /^People/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Members\s*[▸▾]?$/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "Member Directory" }));
   fireEvent.click(await screen.findByRole("button", { name: /Sujesh P R/ }));
   await screen.findByRole("heading", { name: "Sujesh P R" });
 }
@@ -210,7 +212,7 @@ describe("Milestone 3IIO blood donor consent self-service", () => {
     expect(screen.getByRole("button", { name: "Submit Pending Request" })).toBeDisabled();
     expect(screen.getByText(/President or Secretary review/)).toBeInTheDocument();
     expect(screen.queryByText(/\bAdmin\b/i)).not.toBeInTheDocument();
-    expect(client).toHaveBeenCalledTimes(2);
+    expect(client).toHaveBeenCalledTimes(1);
     expect(client).toHaveBeenCalledWith("/clubs/1/members/me");
     expect(client.mock.calls.some(([path]) => path.includes("/members?"))).toBe(false);
   });
@@ -327,7 +329,9 @@ describe("MemberProfile document loading boundary", () => {
   it("keeps a selected core-profile failure page-blocking", async () => {
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] }, selectedCoreStatus: 500 });
     render(<Prototype />);
-    fireEvent.click(await screen.findByRole("button", { name: "Open Members" }));
+    fireEvent.click(await screen.findByRole("button", { name: authState.role === "treasurer" ? /Club Visibility/ : /^People/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Members\s*[▸▾]?$/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "Member Directory" }));
     fireEvent.click(await screen.findByRole("button", { name: /Sujesh P R/ }));
 
     expect(await screen.findByText("The selected member profile is unavailable for this role.")).toBeInTheDocument();
@@ -383,11 +387,11 @@ describe("MemberProfile document loading boundary", () => {
   });
 
   it.each([
-    ["president", "bijesh-president", "president-admin", 2],
-    ["secretary", "rajeesh-secretary", "secretary", 2],
-    ["treasurer", "ranjith-treasurer", "treasurer", 2],
-    ["member", "sajith-member", "member", 1]
-  ] as const)("reports the connected Events & Meetings source truthfully for %s", async (role, identity, roleSlug, expectedCount) => {
+    ["president", "bijesh-president", "president-admin"],
+    ["secretary", "rajeesh-secretary", "secretary"],
+    ["treasurer", "ranjith-treasurer", "treasurer"],
+    ["member", "sajith-member", "member"]
+  ] as const)("reports the connected Events & Meetings source truthfully for %s", async (role, identity, roleSlug) => {
     authState.role = role;
     authState.identity = identity;
     authState.session.role = role;
@@ -400,7 +404,7 @@ describe("MemberProfile document loading boundary", () => {
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
     render(<Prototype />);
 
-    expect(await screen.findAllByText("Available in Events & Meetings.")).toHaveLength(expectedCount);
+    expect(await screen.findByText("Club calendar unavailable.")).toBeVisible();
     expect(screen.queryByText("No live event source is connected.")).not.toBeInTheDocument();
     expect(screen.queryByText("Meeting information is not connected.")).not.toBeInTheDocument();
     expect(screen.queryByText("Meeting information is not connected to the Dashboard yet.")).not.toBeInTheDocument();
@@ -419,7 +423,7 @@ describe("MemberProfile document loading boundary", () => {
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
     render(<Prototype />);
 
-    expect(await screen.findByText("Available in Finance.")).toBeInTheDocument();
+    expect(await screen.findByText("Unable to verify dues. No priority can be confirmed.")).toBeVisible();
     expect(screen.queryByText("Finance summary not connected")).not.toBeInTheDocument();
   });
 
@@ -474,7 +478,7 @@ describe("MemberProfile document loading boundary", () => {
     expect(screen.queryByText("The profile update approval workflow is not connected yet.")).not.toBeInTheDocument();
   });
 
-  it("labels the officer dashboard profile-update review source as connected", async () => {
+  it("keeps the default dashboard focused on verified activity", async () => {
     authState.role = "president";
     authState.identity = "bijesh-president";
     authState.session.role = "president";
@@ -485,7 +489,7 @@ describe("MemberProfile document loading boundary", () => {
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
     render(<Prototype />);
 
-    expect(await screen.findByText("Profile update review is available.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Club announcements" })).toBeVisible();
     expect(screen.queryByText("Approval totals are unavailable.")).not.toBeInTheDocument();
   });
 
@@ -637,7 +641,11 @@ describe("MemberProfile document loading boundary", () => {
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
     render(<Prototype />);
 
-    fireEvent.click(screen.getByRole("button", { name: role === "member" ? "Celebrations" : "Open Celebrations" }));
+    if (role !== "member") {
+      fireEvent.click(screen.getByRole("button", { name: role === "treasurer" ? /Club Visibility/ : /^People/ }));
+      fireEvent.click(screen.getByRole("button", { name: /^Celebrations\s*[▸▾]?$/ }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: role === "member" ? "Celebrations" : "Celebrations Overview" }));
 
     expect(await screen.findByText("July 2026")).toBeInTheDocument();
     expect(screen.getByLabelText("Celebration month")).toHaveValue("7");
