@@ -118,24 +118,45 @@ final class ClubOpeningJournalActivationService
         if (! $actor) {
             throw new CutoverExecutionException('The cutover execution request is invalid.');
         }
-        $package = ClubAccountingCutoverPackage::query()->whereKey($request->packageId)->where('club_id', $context->organisationId)->lockForUpdate()->first();
+        $at = now('UTC')->toImmutable();
+        $scoped = ClubAccountingCutoverPackage::query()->whereKey($request->packageId)->where('club_id', $context->organisationId);
+        $snapshot = $scoped->first();
+        if (! $snapshot) {
+            throw new CutoverExecutionException('The cutover package violates club scope.');
+        }
+        $byReference = ClubAccountingCutoverExecutionSuccess::query()->where('execution_reference', $request->executionReference)->where('club_id', $context->organisationId);
+        $boundaryFor = fn (ClubAccountingCutoverPackage $current) => ClubAccountingCutoverExecutionSuccess::query()
+            ->where('club_id', $current->club_id)->where('lions_year', $current->lions_year)
+            ->where('cutover_date', $current->cutover_date)->where('opening_source_type', self::SOURCE_TYPE);
+
+        $admitted = null;
+        if (! $byReference->exists() && ! $boundaryFor($snapshot)->exists()) {
+            $this->assertExecutable($snapshot, $request);
+            $appointment = $this->authority->appointment($snapshot, $actor, ClubAccountingCutoverAuthorityAppointment::TYPE_TECHNICAL_OPERATOR, $at);
+            $permission = $this->authority->permission($snapshot, $actor, 'finance.cutover.package.execute', $at);
+            [$review, $approval] = $this->trustedBindings($snapshot, $at);
+            $dryRun = $this->decisionPair($snapshot, ClubAccountingCutoverDecision::STAGE_DRY_RUN, $review, $approval, $at);
+            $activation = $this->decisionPair($snapshot, ClubAccountingCutoverDecision::STAGE_ACTIVATION, $review, $approval, $at);
+            $admitted = $this->bindingIds($review, $approval, $dryRun, $activation);
+        }
+
+        $package = $scoped->lockForUpdate()->first();
         if (! $package) {
             throw new CutoverExecutionException('The cutover package violates club scope.');
         }
-        $existing = ClubAccountingCutoverExecutionSuccess::query()->where('execution_reference', $request->executionReference)->where('club_id', $context->organisationId)->lockForUpdate()->first();
-        $boundary = ClubAccountingCutoverExecutionSuccess::query()->where('club_id', $package->club_id)->where('lions_year', $package->lions_year)->where('cutover_date', $package->cutover_date)->where('opening_source_type', self::SOURCE_TYPE)->lockForUpdate()->first();
+        $existing = $byReference->lockForUpdate()->first();
+        $boundary = $boundaryFor($package)->lockForUpdate()->first();
         if ($existing || $boundary) {
             return $this->replay($request, $package, $actor, $existing, $boundary);
         }
-        if ($package->status !== ClubAccountingCutoverPackage::STATUS_ACTIVATION_AUTHORIZED || $package->lock_version !== $request->expectedLockVersion || ! hash_equals((string) $package->canonical_checksum, $request->canonicalChecksum)) {
-            throw new CutoverExecutionException('The package is not executable or its binding is stale.');
-        }
 
-        $appointment = $this->authority->appointment($package, $actor, ClubAccountingCutoverAuthorityAppointment::TYPE_TECHNICAL_OPERATOR);
-        $permission = $this->authority->permission($package, $actor, 'finance.cutover.package.execute');
+        $this->assertExecutable($package, $request);
         [$review, $approval] = $this->trustedBindings($package);
         $dryRun = $this->decisionPair($package, ClubAccountingCutoverDecision::STAGE_DRY_RUN, $review, $approval);
         $activation = $this->decisionPair($package, ClubAccountingCutoverDecision::STAGE_ACTIVATION, $review, $approval);
+        if ($admitted !== $this->bindingIds($review, $approval, $dryRun, $activation)) {
+            throw new CutoverExecutionException('The opening authority bindings changed during admission.');
+        }
         if (ClubAccountingCutoverAuthorityConsumption::query()->where('cutover_package_id', $package->id)->exists() || ClubJournalEntry::query()->where('club_id', $package->club_id)->where('source_type', self::SOURCE_TYPE)->exists()) {
             throw new CutoverExecutionConflictException('A prior opening execution exists.');
         }
@@ -173,6 +194,20 @@ final class ClubOpeningJournalActivationService
         return $success->fresh()->load('journalEntry.lines');
     }
 
+    private function assertExecutable(ClubAccountingCutoverPackage $package, CutoverExecutionRequest $request): void
+    {
+        if ($package->status !== ClubAccountingCutoverPackage::STATUS_ACTIVATION_AUTHORIZED
+            || $package->lock_version !== $request->expectedLockVersion
+            || ! hash_equals((string) $package->canonical_checksum, $request->canonicalChecksum)) {
+            throw new CutoverExecutionException('The package is not executable or its binding is stale.');
+        }
+    }
+
+    private function bindingIds($review, $approval, array $dryRun, array $activation): array
+    {
+        return [$review->id, $approval->id, $dryRun['president']->id, $dryRun['ca']->id, $activation['president']->id, $activation['ca']->id];
+    }
+
     private function replay(CutoverExecutionRequest $request, ClubAccountingCutoverPackage $package, User $actor, ?ClubAccountingCutoverExecutionSuccess $byReference, ?ClubAccountingCutoverExecutionSuccess $byBoundary): ClubAccountingCutoverExecutionSuccess
     {
         if (! $byReference || ! $byBoundary || ! $byReference->is($byBoundary) || $byReference->cutover_package_id !== $package->id || $byReference->package_version !== $package->package_version || $byReference->executed_by_user_id !== $actor->id || ! hash_equals($byReference->canonical_checksum, $request->canonicalChecksum) || strtolower($byReference->idempotency_key) !== strtolower($request->idempotencyKey)) {
@@ -187,7 +222,7 @@ final class ClubOpeningJournalActivationService
         return $byReference->fresh()->load('journalEntry.lines');
     }
 
-    private function trustedBindings(ClubAccountingCutoverPackage $package): array
+    private function trustedBindings(ClubAccountingCutoverPackage $package, ?\DateTimeInterface $at = null): array
     {
         $review = ClubAccountingCutoverReview::query()->where('cutover_package_id', $package->id)->where('status', 'current')->whereNotNull('authority_basis')->whereDoesntHave('events', fn ($query) => $query->whereIn('event_type', ['revoked', 'invalidated']))->latest('id')->first();
         $approval = ClubAccountingCutoverApproval::query()->where('cutover_package_id', $package->id)->where('status', 'current')->whereNotNull('authority_basis')->whereDoesntHave('events', fn ($query) => $query->whereIn('event_type', ['revoked', 'invalidated']))->latest('id')->first();
@@ -204,14 +239,16 @@ final class ClubOpeningJournalActivationService
         if (! $reviewer || ! $president) {
             throw new CutoverExecutionException('The trusted approval actors are unavailable.');
         }
-        $this->authority->appointment($package, $reviewer, ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA);
-        $this->authority->permission($package, $reviewer, 'finance.cutover.package.accounting-review');
-        $this->authority->president($package, $president, 'finance.cutover.package.business-approve');
+        if ($at !== null) {
+            $this->authority->appointment($package, $reviewer, ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, $at);
+            $this->authority->permission($package, $reviewer, 'finance.cutover.package.accounting-review', $at);
+            $this->authority->president($package, $president, 'finance.cutover.package.business-approve', $at);
+        }
 
         return [$review, $approval];
     }
 
-    private function decisionPair(ClubAccountingCutoverPackage $package, string $stage, $review, $approval): array
+    private function decisionPair(ClubAccountingCutoverPackage $package, string $stage, $review, $approval, ?\DateTimeInterface $at = null): array
     {
         $decisions = ClubAccountingCutoverDecision::query()->with('events')->where('cutover_package_id', $package->id)->where('decision_stage', $stage)->get()->reject(fn ($decision) => $decision->events->isNotEmpty())->filter(fn ($decision) => $decision->package_version === $package->package_version && hash_equals($decision->canonical_checksum, (string) $package->canonical_checksum) && $decision->accounting_review_id === $review->id && $decision->president_approval_id === $approval->id);
         $president = $decisions->where('actor_authority', 'president');
@@ -228,9 +265,11 @@ final class ClubOpeningJournalActivationService
         $permission = $stage === ClubAccountingCutoverDecision::STAGE_DRY_RUN
             ? 'finance.cutover.package.dry-run-accept'
             : 'finance.cutover.package.activate-authorize';
-        $this->authority->president($package, $presidentActor, $permission);
-        $this->authority->appointment($package, $caActor, ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA);
-        $this->authority->permission($package, $caActor, $permission);
+        if ($at !== null) {
+            $this->authority->president($package, $presidentActor, $permission, $at);
+            $this->authority->appointment($package, $caActor, ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, $at);
+            $this->authority->permission($package, $caActor, $permission, $at);
+        }
 
         return ['president' => $president->first(), 'ca' => $ca->first()];
     }

@@ -52,7 +52,7 @@ class Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest exten
         $this->assertDatabaseHas('club_accounting_cutover_permission_assignments', ['id' => $applied->permission_assignment_id, 'cutover_package_id' => $applied->cutover_package_id, 'user_id' => $preparer->id]);
         $this->assertSame($applied->cutover_package_id, $service->approve($applied, $secretary, 'IGNORED-REPLAY')->cutover_package_id);
         $otherPreparer = User::factory()->create();
-        $this->cutoverMember($club, $otherPreparer, 'treasurer');
+        $this->cutoverMember($club, $otherPreparer, 'member');
         $this->expectAuthorization(fn () => $service->request($club, $otherPreparer, 1, ' bootstrap-001 ', $secretary));
         $this->expectException(CutoverPackageException::class);
         app(ClubAccountingCutoverPackageService::class)->createDraft($club->id, $preparer->id);
@@ -85,7 +85,8 @@ class Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest exten
         $resolver = app(ClubCutoverAuthorityResolver::class);
         $prepare = $this->dualAssign($f['package'], $f['treasurer'], 'finance.cutover.package.prepare', $f['president'], $f['secretary'], 'ROLELOSS-PREPARE');
         $this->assertSame($prepare->id, $resolver->permission($f['package'], $f['treasurer'], 'finance.cutover.package.prepare')->id);
-        ClubMembership::query()->where('club_id', $f['club']->id)->where('user_id', $f['treasurer']->id)->update(['role_id' => Role::where('slug', 'member')->firstOrFail()->id]);
+        $this->travel(1)->seconds();
+        $this->endOfficerTerm($f['club'], 'treasurer');
         $this->expectAuthorization(fn () => $resolver->permission($f['package'], $f['treasurer'], 'finance.cutover.package.prepare'));
 
         $this->dualAssign($f['package'], $f['secretary'], 'finance.cutover.package.verify', $f['president'], $f['secretary'], 'ROLELOSS-VERIFY');
@@ -124,13 +125,18 @@ class Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest exten
         $caAppointment = $this->dualAppoint($f['package'], $f['ca'], 'independent_ca', $f['president'], $f['secretary'], 'ROLEGAIN-CA');
         $this->dualAttestEligibility($caAppointment, $f['president'], $f['secretary'], 'ROLEGAIN-CA-ELIGIBILITY');
         $operatorAppointment = $this->dualAppoint($f['package'], $f['operator'], 'technical_operator', $f['president'], $f['secretary'], 'ROLEGAIN-OPERATOR');
-        $this->cutoverMember($f['club'], $f['ca'], 'president-admin');
+        $this->appointSuccessor($f['club'], $f['ca'], 'president', 'president-admin');
         $this->expectAuthorization(fn () => $resolver->appointment($f['package'], $f['ca'], 'independent_ca'));
 
-        $this->cutoverMember($f['club'], $f['operator'], 'president-admin');
+        $this->travel(1)->seconds();
+        $this->appointSuccessor($f['club'], $f['operator'], 'president', 'president-admin');
         $this->expectAuthorization(fn () => $resolver->appointment($f['package'], $f['operator'], 'technical_operator'));
-        ClubMembership::query()->where('club_id', $f['club']->id)->where('user_id', $f['operator']->id)
-            ->update(['role_id' => Role::where('slug', 'secretary')->firstOrFail()->id]);
+
+        $this->travel(1)->seconds();
+        $this->endOfficerTerm($f['club'], 'president');
+        $handover = $this->endOfficerTerm($f['club'], 'secretary');
+        $membership = ClubMembership::where('club_id', $f['club']->id)->where('user_id', $f['operator']->id)->sole();
+        self::seedAnnouncementOfficerTerm($membership, 'secretary', $handover);
         $this->expectAuthorization(fn () => $resolver->appointment($f['package'], $f['operator'], 'technical_operator'));
     }
 
@@ -170,8 +176,14 @@ class Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest exten
         $this->expectAuthorization(fn () => $admin->approve($op, $f['president'], 'OFFICERS-INACTIVE'));
         ClubMembership::where('user_id', $f['president']->id)->update(['status' => 'active']);
         $extra = User::factory()->create();
-        $this->cutoverMember($f['club'], $extra, 'president-admin');
-        $this->expectAuthorization(fn () => $admin->approve($op, $f['president'], 'OFFICERS-AMBIGUOUS'));
+        try {
+            DB::transaction(fn () => $this->cutoverMember($f['club'], $extra, 'president-admin'));
+            $this->fail('The database must reject overlapping president terms.');
+        } catch (QueryException $exception) {
+            $this->assertSame('23P01', $exception->getCode());
+            $this->assertStringContainsString('club_officer_terms_office_no_overlap', $exception->getMessage());
+        }
+        $this->expectAuthorization(fn () => $admin->approve($op, $extra, 'OFFICERS-OVERLAP'));
     }
 
     public function test_operation_approval_rejects_a_changed_package_lock_binding(): void
@@ -333,6 +345,31 @@ class Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest exten
         $this->expectAuthorization(fn () => $read->metadata($f['package'], $other));
     }
 
+    private function endOfficerTerm(Club $club, string $office): string
+    {
+        $handover = now('UTC')->format('Y-m-d H:i:sP');
+        $this->assertSame(1, DB::table('club_officer_terms')
+            ->where('club_id', $club->id)->where('office', $office)->whereNull('ended_at')->update([
+                'ended_at' => $handover,
+                'termination_reference' => (string) Str::uuid(),
+                'termination_reason' => 'Fixture officer handover.',
+            ]));
+
+        return $handover;
+    }
+
+    private function appointSuccessor(Club $club, User $successor, string $office, string $role): void
+    {
+        $handover = $this->endOfficerTerm($club, $office);
+        $membership = ClubMembership::create([
+            'club_id' => $club->id,
+            'user_id' => $successor->id,
+            'role_id' => Role::where('slug', $role)->firstOrFail()->id,
+            'status' => 'active',
+        ]);
+        self::seedAnnouncementOfficerTerm($membership, $role, $handover);
+    }
+
     private function fixture(): array
     {
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
@@ -342,9 +379,9 @@ class Milestone3iizsCutoverAdministrationInternalEnforcementFoundationTest exten
         }
         $this->cutoverMember($club, $president, 'president-admin');
         $this->cutoverMember($club, $secretary, 'secretary');
-        $this->cutoverMember($club, $treasurer, 'treasurer');
         $this->cutoverMember($club, $creator, 'treasurer');
         $package = $this->bootstrapCutoverPackage($club, $creator, $president, $secretary, 'FIXTURE-BOOTSTRAP');
+        $this->appointSuccessor($club, $treasurer, 'treasurer', 'treasurer');
 
         return compact('club', 'package', 'president', 'secretary', 'treasurer', 'ca', 'operator');
     }

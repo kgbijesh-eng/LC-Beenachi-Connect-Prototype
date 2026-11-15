@@ -24,10 +24,12 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 use Tests\Support\RefreshesDatabaseWithoutTransactions;
+use Tests\Support\SeedsAnnouncementOfficerTerms;
 
 class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
 {
     use RefreshesDatabaseWithoutTransactions;
+    use SeedsAnnouncementOfficerTerms;
 
     public function test_authorized_same_club_officer_receives_balanced_canonical_statement(): void
     {
@@ -216,10 +218,11 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         ]);
         config(['instance.organisation_code' => $club->code]);
         $membership = ClubMembership::query()->where('club_id', $fixture['club']->id)->where('user_id', $fixture['officer']->id)->firstOrFail();
-        ClubMembership::create([
+        $officerMembership = ClubMembership::create([
             'club_id' => $club->id, 'user_id' => $fixture['officer']->id,
             'role_id' => $membership->role_id, 'status' => 'active',
         ]);
+        self::seedAnnouncementOfficerTerm($officerMembership, 'treasurer');
         ClubAccountingPeriod::create([
             'club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01',
             'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $fixture['officer']->id,
@@ -417,7 +420,8 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         ]);
         $role = Role::create(['name' => 'Finance Chair '.$suffix, 'slug' => 'finance-chair'.strtolower($suffix), 'description' => 'Finance Chair']);
         $role->permissions()->attach($permission);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $officer->id, 'role_id' => $role->id, 'status' => 'active']);
+        $officerMembership = ClubMembership::create(['club_id' => $club->id, 'user_id' => $officer->id, 'role_id' => $role->id, 'status' => 'active']);
+        self::seedAnnouncementOfficerTerm($officerMembership, 'treasurer');
         $period = ClubAccountingPeriod::create([
             'club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01',
             'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $officer->id,

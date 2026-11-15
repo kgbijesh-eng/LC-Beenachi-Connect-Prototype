@@ -15,7 +15,7 @@ use App\Models\ClubAccountingIntegrationProposalDecision;
 use App\Models\ClubAccountingPeriod;
 use App\Models\ClubAccountingSourceMapping;
 use App\Models\ClubCharge;
-use App\Models\ClubMembership;
+use App\Services\Access\ClubPermissionService;
 use App\Models\LedgerAccount;
 use App\Models\MemberPayment;
 use App\Models\User;
@@ -78,7 +78,8 @@ final class AccountingIntegrationProposalService
     public function propose(Club $club, User $actor, array $data): ClubAccountingIntegrationProposal
     {
         return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $actor, $data): ClubAccountingIntegrationProposal {
-            $role = $this->authority($club, $actor);
+            $at = now('UTC')->toImmutable();
+            $role = $this->authority($club, $actor, $at);
             $material = $this->normalizedMaterial($club, $data);
             $checksum = $this->checksum(array_merge($material, ['club_id'=>$club->id,'proposer_user_id'=>$actor->id,'proposer_role_slug'=>$role]));
             $replay = ClubAccountingIntegrationProposal::query()->where('club_id', $club->id)->where('client_request_id', strtolower($data['client_request_id']))->lockForUpdate()->first();
@@ -118,13 +119,24 @@ final class AccountingIntegrationProposalService
     private function terminal(Club $club, User $actor, ClubAccountingIntegrationProposal $proposal, int $lockVersion, string $decision, ?string $reason): ClubAccountingIntegrationProposal
     {
         return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $actor, $proposal, $lockVersion, $decision, $reason): ClubAccountingIntegrationProposal {
-            $locked = ClubAccountingIntegrationProposal::query()->whereKey($proposal->id)->where('club_id', $club->id)->lockForUpdate()->firstOrFail();
-            $role = $this->authority($club, $actor);
+            $at = now('UTC')->toImmutable();
+            $scoped = ClubAccountingIntegrationProposal::query()->whereKey($proposal->id)->where('club_id', $club->id);
+            $snapshot = $scoped->firstOrFail();
+            $role = $this->authority($club, $actor, $at);
+            $proposerRole = null;
+            if ($decision === 'approved' && $snapshot->proposer !== null) {
+                try {
+                    $proposerRole = $this->authority($club, $snapshot->proposer, $at);
+                } catch (AuthorizationException) {
+                    // Report the authority failure after the existing state and binding checks.
+                }
+            }
+            $locked = $scoped->lockForUpdate()->firstOrFail();
             if ($locked->status !== 'pending' || $locked->lock_version !== $lockVersion || $locked->decision()->exists()) throw new AccountingIntegrationConflictException('The proposal is terminal or its lock version is stale.');
             if ($decision === 'withdrawn' && $locked->proposer_user_id !== $actor->id) throw new AuthorizationException('Only the proposer may withdraw a proposal.');
             if ($decision !== 'withdrawn' && $locked->proposer_user_id === $actor->id) throw new AuthorizationException('The proposer cannot decide the same proposal.');
             $this->assertIntegrity($locked);
-            if ($decision === 'approved') $this->assertApprovalFresh($locked);
+            if ($decision === 'approved') $this->assertApprovalFresh($locked, $snapshot->proposer_user_id === $locked->proposer_user_id ? $proposerRole : null);
             $before = ['proposal'=>$this->proposalState($locked),'configuration'=>$this->configurationSnapshot($locked->club_id)];
             try { $result = $decision === 'approved' ? $this->apply($context, $locked, $actor) : null; }
             catch (AccountingIntegrationConflictException $exception) { throw $exception; }
@@ -168,13 +180,17 @@ final class AccountingIntegrationProposalService
         return $this->configuration->activateWithin($context, $proposal->club_id, $proposal->source_type, $proposal->coverage_start_date->format('Y-m-d'), $proposal->mapping_version, $proposal->reference, $actor);
     }
 
-    private function authority(Club $club, User $user): string
+    private function authority(Club $club, User $user, ?\DateTimeInterface $at = null): string
     {
-        $membership = ClubMembership::query()->with('role.permissions')->where('club_id', $club->id)->where('user_id', $user->id)->where('status', 'active')->first();
-        if (! $membership || ! $membership->role || ! in_array($membership->role->slug, ['president-admin', 'treasurer'], true) || ! $membership->role->permissions->contains('slug', self::PERMISSION)) {
+        $at ??= now('UTC')->toImmutable();
+        $permissions = app(ClubPermissionService::class);
+        $office = $permissions->effectiveOffice($user, (int) $club->id, $at);
+        if (! in_array($office, ['president', 'treasurer'], true)
+            || ! $permissions->userHasPermission($user, self::PERMISSION, (int) $club->id, $at)) {
             throw new AuthorizationException('An active same-club President or Treasurer appointment with the accounting integration permission is required.');
         }
-        return $membership->role->slug;
+
+        return $office === 'president' ? 'president-admin' : 'treasurer';
     }
 
     private function normalizedMaterial(Club $club, array $data): array
@@ -211,13 +227,11 @@ final class AccountingIntegrationProposalService
         if (! hash_equals($proposal->canonical_checksum, $this->checksum($checksumMaterial))) throw new AccountingIntegrationConflictException('The proposal integrity checksum is invalid.');
     }
 
-    private function assertApprovalFresh(ClubAccountingIntegrationProposal $proposal): void
+    private function assertApprovalFresh(ClubAccountingIntegrationProposal $proposal, ?string $proposerRole): void
     {
         $material = Arr::only($proposal->getAttributes(), ['proposal_type','source_type','source_key','ledger_account_id','mapping_version','effective_date','expires_at','coverage_start_date','activation_id','mapping_id','reference','reason','terminal_event_id']);
         if ($proposal->target_snapshot !== $this->targetSnapshot($proposal->club_id, $material, true)) throw new AccountingIntegrationConflictException('The authoritative proposal target is stale.');
-        try { $currentRole = $this->authority(Club::findOrFail($proposal->club_id), $proposal->proposer); }
-        catch (AuthorizationException) { throw new AccountingIntegrationConflictException('The proposer appointment context changed.'); }
-        if ($proposal->proposer_role_slug !== $currentRole) throw new AccountingIntegrationConflictException('The proposer appointment context changed.');
+        if ($proposerRole === null || $proposal->proposer_role_slug !== $proposerRole) throw new AccountingIntegrationConflictException('The proposer appointment context changed.');
     }
 
     private function terminalIdentity(array $data): ?int

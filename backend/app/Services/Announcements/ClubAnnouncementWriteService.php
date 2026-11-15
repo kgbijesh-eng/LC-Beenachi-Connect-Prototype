@@ -42,7 +42,8 @@ final class ClubAnnouncementWriteService
     public function createDraft(Club $club, User $actor, array $attributes): ClubAnnouncement
     {
         return $this->transactions->run($club, function () use ($club, $actor, $attributes): ClubAnnouncement {
-            [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.drafts.manage');
+            $at = now('UTC')->toImmutable();
+            [$role] = $this->authorizeActor($club, $actor, 'announcements.drafts.manage', $at);
             $state = $this->canonicalAttributes($attributes, true);
             $announcement = ClubAnnouncement::query()->create($state + [
                 'club_id' => $club->id,
@@ -63,8 +64,10 @@ final class ClubAnnouncementWriteService
     public function updateDraft(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion, array $attributes): ClubAnnouncement
     {
         return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion, $attributes): ClubAnnouncement {
+            $at = now('UTC')->toImmutable();
+            $this->announcementSnapshot($club, $announcement);
+            [$role] = $this->authorizeActor($club, $actor, 'announcements.drafts.manage', $at);
             $locked = $this->lockOne($club, (int) $announcement->getKey());
-            [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.drafts.manage');
             $this->assertVersion($locked, $lockVersion);
             $this->requireStatus($locked, [ClubAnnouncement::STATUS_DRAFT], 'Only Draft announcements can be edited.');
             $proposed = $this->canonicalAttributes($attributes, false, $this->state($locked));
@@ -93,9 +96,11 @@ final class ClubAnnouncementWriteService
     public function createReplacementDraft(Club $club, ClubAnnouncement $source, User $actor, array $attributes): ClubAnnouncement
     {
         return $this->transactions->run($club, function () use ($club, $source, $actor, $attributes): ClubAnnouncement {
+            $at = now('UTC')->toImmutable();
+            $this->announcementSnapshot($club, $source);
+            [$role] = $this->authorizeActor($club, $actor, 'announcements.replace', $at);
             $rows = $this->lockClubGraph($club, (int) $source->getKey());
             $locked = $rows->firstWhere('id', (int) $source->getKey());
-            [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.replace');
             $this->requireStatus($locked, [ClubAnnouncement::STATUS_PUBLISHED, ClubAnnouncement::STATUS_WITHDRAWN], 'Only Published or Withdrawn announcements can be replaced.');
             $this->assertValidGraph($rows);
             $direct = $rows->where('replaces_announcement_id', $locked->id);
@@ -140,16 +145,22 @@ final class ClubAnnouncementWriteService
     public function revokeApproval(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion, ClubAnnouncementPublicationDecision $approval, string $reason): ClubAnnouncementPublicationDecision
     {
         return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion, $approval, $reason): ClubAnnouncementPublicationDecision {
-            $locked = $this->lockOne($club, (int) $announcement->getKey());
-            $this->assertVersion($locked, $lockVersion);
-            $this->requireStatus($locked, [ClubAnnouncement::STATUS_DRAFT], 'Only an unchanged Draft approval can be revoked.');
-            $maker = User::query()->find($locked->updated_by_user_id);
+            $at = now('UTC')->toImmutable();
+            $snapshot = $this->announcementSnapshot($club, $announcement);
+            $this->assertVersion($snapshot, $lockVersion);
+            $this->requireStatus($snapshot, [ClubAnnouncement::STATUS_DRAFT], 'Only an unchanged Draft approval can be revoked.');
+            $maker = User::query()->find($snapshot->updated_by_user_id);
             if (! $maker) {
                 abort(403, 'The approval maker can no longer be classified.');
             }
-            [$memberships] = $this->lockDecisionMemberships($club, $maker, $actor);
-            $makerRole = $this->qualifyingRole($memberships[(int) $maker->id]);
-            $checkerRole = $this->authorizeMembership($memberships[(int) $actor->id], 'announcements.approve');
+            [$memberships] = $this->decisionMemberships($club, $maker, $actor);
+            $makerRole = $this->qualifyingRole($memberships[(int) $maker->id], $at);
+            $checkerRole = $this->authorizeMembership($memberships[(int) $actor->id], 'announcements.approve', $at);
+            $locked = $this->lockOne($club, (int) $announcement->getKey());
+            $this->assertVersion($locked, $lockVersion);
+            if ($locked->status !== $snapshot->status || $locked->updated_by_user_id !== $snapshot->updated_by_user_id) {
+                throw new ConflictHttpException('The announcement changed while the decision was being evaluated.');
+            }
             $lockedApproval = ClubAnnouncementPublicationDecision::query()->where('club_id', $club->id)
                 ->where('club_announcement_id', $locked->id)->whereKey($approval->id)->lockForUpdate()->first();
             if (! $lockedApproval) {
@@ -195,13 +206,14 @@ final class ClubAnnouncementWriteService
     public function publish(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion): ClubAnnouncement
     {
         return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion): ClubAnnouncement {
+            $at = now('UTC')->toImmutable();
             $projection = ClubAnnouncement::query()->where('club_id', $club->id)->whereKey($announcement->getKey())->value('replaces_announcement_id');
             if (! ClubAnnouncement::query()->where('club_id', $club->id)->whereKey($announcement->getKey())->exists()) {
                 abort(404, 'Announcement not found for this club.');
             }
+            [$role] = $this->authorizeActor($club, $actor, 'announcements.publish', $at);
             $rows = $projection === null ? null : $this->lockClubGraph($club, (int) $announcement->getKey());
             $locked = $rows?->firstWhere('id', (int) $announcement->getKey()) ?? $this->lockOne($club, (int) $announcement->getKey());
-            [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.publish');
             $this->assertVersion($locked, $lockVersion);
             $this->requireStatus($locked, [ClubAnnouncement::STATUS_DRAFT], 'Only Draft announcements can be published.');
             if ($rows !== null) {
@@ -234,8 +246,10 @@ final class ClubAnnouncementWriteService
     public function withdraw(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion, string $reason): ClubAnnouncement
     {
         return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion, $reason): ClubAnnouncement {
+            $at = now('UTC')->toImmutable();
+            $this->announcementSnapshot($club, $announcement);
+            [$role] = $this->authorizeActor($club, $actor, 'announcements.withdraw', $at);
             $locked = $this->lockOne($club, (int) $announcement->getKey());
-            [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.withdraw');
             $this->assertVersion($locked, $lockVersion);
             $this->requireStatus($locked, [ClubAnnouncement::STATUS_PUBLISHED], 'Only Published announcements can be withdrawn.');
             $this->requireReason($reason, 'reason', 3, 1000);
@@ -260,8 +274,10 @@ final class ClubAnnouncementWriteService
     public function archive(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion): ClubAnnouncement
     {
         return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion): ClubAnnouncement {
+            $at = now('UTC')->toImmutable();
+            $this->announcementSnapshot($club, $announcement);
+            [$role] = $this->authorizeActor($club, $actor, 'announcements.archive', $at);
             $locked = $this->lockOne($club, (int) $announcement->getKey());
-            [$role] = $this->lockAndAuthorize($club, $actor, 'announcements.archive');
             $this->assertVersion($locked, $lockVersion);
             $this->requireStatus($locked, [ClubAnnouncement::STATUS_DRAFT, ClubAnnouncement::STATUS_PUBLISHED, ClubAnnouncement::STATUS_WITHDRAWN], 'Only Draft, Published, or Withdrawn announcements can be archived.');
             $priorStored = $locked->status;
@@ -286,19 +302,25 @@ final class ClubAnnouncementWriteService
     private function decide(Club $club, ClubAnnouncement $announcement, User $actor, int $lockVersion, string $decisionValue, ?string $reason): ClubAnnouncementPublicationDecision
     {
         return $this->transactions->run($club, function () use ($club, $announcement, $actor, $lockVersion, $decisionValue, $reason): ClubAnnouncementPublicationDecision {
-            $locked = $this->lockOne($club, (int) $announcement->getKey());
-            $this->assertVersion($locked, $lockVersion);
-            $this->requireStatus($locked, [ClubAnnouncement::STATUS_DRAFT], 'Only Draft announcements can be adjudicated.');
-            if (! $this->requiresChecker($locked)) {
+            $at = now('UTC')->toImmutable();
+            $snapshot = $this->announcementSnapshot($club, $announcement);
+            $this->assertVersion($snapshot, $lockVersion);
+            $this->requireStatus($snapshot, [ClubAnnouncement::STATUS_DRAFT], 'Only Draft announcements can be adjudicated.');
+            if (! $this->requiresChecker($snapshot)) {
                 throw new ConflictHttpException('This routine announcement does not require checker adjudication.');
             }
-            $makerId = (int) $locked->updated_by_user_id;
+            $makerId = (int) $snapshot->updated_by_user_id;
             if ($makerId === (int) $actor->id) {
                 throw new ConflictHttpException('The maker and checker must be different users.');
             }
-            [$memberships] = $this->lockDecisionMemberships($club, User::query()->findOrFail($makerId), $actor);
-            $makerRole = $this->qualifyingRole($memberships[$makerId]);
-            $checkerRole = $this->authorizeMembership($memberships[(int) $actor->id], 'announcements.approve');
+            [$memberships] = $this->decisionMemberships($club, User::query()->findOrFail($makerId), $actor);
+            $makerRole = $this->qualifyingRole($memberships[$makerId], $at);
+            $checkerRole = $this->authorizeMembership($memberships[(int) $actor->id], 'announcements.approve', $at);
+            $locked = $this->lockOne($club, (int) $announcement->getKey());
+            $this->assertVersion($locked, $lockVersion);
+            if ($locked->status !== $snapshot->status || $locked->updated_by_user_id !== $snapshot->updated_by_user_id) {
+                throw new ConflictHttpException('The announcement changed while the decision was being evaluated.');
+            }
             if ($decisionValue === ClubAnnouncementPublicationDecision::DECISION_APPROVED) {
                 if ($reason !== null) {
                     $this->requireReason($reason, 'reason');
@@ -332,6 +354,14 @@ final class ClubAnnouncementWriteService
         });
     }
 
+    private function announcementSnapshot(Club $club, ClubAnnouncement $announcement): ClubAnnouncement
+    {
+        $snapshot = ClubAnnouncement::query()->where('club_id', $club->id)->whereKey($announcement->getKey())->first();
+        abort_if($snapshot === null, 404, 'Announcement not found for this club.');
+
+        return $snapshot;
+    }
+
     private function lockOne(Club $club, int $id): ClubAnnouncement
     {
         $record = ClubAnnouncement::query()->where('club_id', $club->id)->whereKey($id)->lockForUpdate()->first();
@@ -357,22 +387,22 @@ final class ClubAnnouncementWriteService
         return $rows;
     }
 
-    private function lockAndAuthorize(Club $club, User $actor, string $permission): array
+    private function authorizeActor(Club $club, User $actor, string $permission, \DateTimeInterface $at): array
     {
         $membership = ClubMembership::query()->with('role.permissions')->where('club_id', $club->id)
-            ->where('user_id', $actor->id)->lockForUpdate()->first();
+            ->where('user_id', $actor->id)->first();
         if (! $membership) {
             abort(403, 'Active club authorization is required.');
         }
 
-        return [$this->authorizeMembership($membership, $permission), $membership];
+        return [$this->authorizeMembership($membership, $permission, $at), $membership];
     }
 
-    private function lockDecisionMemberships(Club $club, User $maker, User $checker): array
+    private function decisionMemberships(Club $club, User $maker, User $checker): array
     {
         $memberships = ClubMembership::query()->with('role.permissions')->where('club_id', $club->id)
             ->whereIn('user_id', array_unique([(int) $maker->id, (int) $checker->id]))
-            ->orderBy('id')->lockForUpdate()->get()->keyBy('user_id');
+            ->orderBy('id')->get()->keyBy('user_id');
         if (! $memberships->has((int) $maker->id) || ! $memberships->has((int) $checker->id)) {
             abort(403, 'Active maker and checker club authorization is required.');
         }
@@ -380,23 +410,23 @@ final class ClubAnnouncementWriteService
         return [$memberships];
     }
 
-    private function authorizeMembership(ClubMembership $membership, string $permission): string
+    private function authorizeMembership(ClubMembership $membership, string $permission, \DateTimeInterface $at): string
     {
-        if ($membership->status !== 'active' || ! $membership->role || ! $membership->role->permissions->contains('slug', $permission)) {
+        if (! in_array($permission, app(\App\Services\Access\ClubPermissionService::class)->membershipAuthority($membership, $at)['permissions'], true)) {
             abort(403, 'Active club permission is required.');
         }
 
-        return $this->qualifyingRole($membership);
+        return $this->qualifyingRole($membership, $at);
     }
 
-    private function qualifyingRole(ClubMembership $membership): string
+    private function qualifyingRole(ClubMembership $membership, \DateTimeInterface $at): string
     {
         if ($membership->status !== 'active' || ! $membership->role) {
             abort(403, 'An active qualifying club role is required.');
         }
 
-        return match ($membership->role->slug) {
-            'president-admin' => ClubAnnouncementPublicationDecision::ROLE_PRESIDENT,
+        return match (app(\App\Services\Access\OfficerTermResolver::class)->forMembership((int) $membership->club_id, (int) $membership->id, $at)?->office) {
+            'president' => ClubAnnouncementPublicationDecision::ROLE_PRESIDENT,
             'secretary' => ClubAnnouncementPublicationDecision::ROLE_SECRETARY,
             default => abort(403, 'A qualifying announcement role is required.'),
         };

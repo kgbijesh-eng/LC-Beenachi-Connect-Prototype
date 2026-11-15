@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { useDevAuth } from "./DevAuthSession";
+import { hasEffectivePermission, useDevAuth } from "./DevAuthSession";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 
@@ -51,9 +51,9 @@ export default function ProfileUpdatesBackend({
   role: Role;
   mode: "own" | "review";
 }) {
-  const canReviewRequests = role === "president" || role === "secretary";
-  const canManageRequests = canReviewRequests;
   const { session } = useDevAuth();
+  const canReviewRequests = hasEffectivePermission(session, "profile_updates.review");
+  const canManageRequests = hasEffectivePermission(session, "profile_updates.approve");
   const [token, setToken] = useState("");
   const [club, setClub] = useState(0);
   const [rows, setRows] = useState<Row[]>([]);

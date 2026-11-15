@@ -26,6 +26,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3iiwAnnouncementMutationServiceFoundationTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
     private ClubAnnouncementWriteService $service;
 
     protected function setUp(): void
@@ -269,11 +271,12 @@ class Milestone3iiwAnnouncementMutationServiceFoundationTest extends FinancialPo
     private function actor(Club $club, string $roleSlug, string $status = 'active'): User
     {
         $user = User::factory()->create();
-        ClubMembership::query()->create([
+        $membership = ClubMembership::query()->create([
             'club_id' => $club->id, 'user_id' => $user->id,
             'role_id' => Role::query()->where('slug', $roleSlug)->firstOrFail()->id,
             'status' => $status, 'joined_at' => now(),
         ]);
+        $this->seedAnnouncementOfficerTerm($membership, $roleSlug);
 
         return $user;
     }

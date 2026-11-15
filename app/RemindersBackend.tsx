@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useDevAuth } from "./DevAuthSession";
+import { hasEffectivePermission, useDevAuth } from "./DevAuthSession";
 
 type Role = "president" | "secretary" | "treasurer" | "member";
 type Reminder = {
@@ -17,7 +17,7 @@ import { getApiBaseUrl } from "./apiBaseUrl";
 const API = getApiBaseUrl();
 export default function RemindersBackend({ role, onBack }: { role: Role; onBack: () => void }) {
   const { session } = useDevAuth();
-  const canManage = role === "president" || role === "secretary";
+  const canManage = hasEffectivePermission(session, "reminders.manage");
   const [token, setToken] = useState("");
   const [clubId, setClubId] = useState(0);
   const [rows, setRows] = useState<Reminder[]>([]);

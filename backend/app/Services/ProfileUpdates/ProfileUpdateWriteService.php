@@ -68,7 +68,8 @@ class ProfileUpdateWriteService
 
     public function reject(Club $club, User $user, ProfileUpdateRequest $request, int $version, string $reason): ProfileUpdateRequest
     {
-        return $this->transactions->run($club, function () use ($club, $user, $request, $version, $reason) {
+        return $this->transactions->run($club, function ($context) use ($club, $user, $request, $version, $reason) {
+            app(\App\Services\Access\TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $user, 'profile_updates.approve');
             $r = $this->locked($club, $request, $version);
             $r->update(['status' => 'rejected', 'pending_guard' => null, 'reviewer_user_id' => $user->id, 'decided_at' => now(), 'rejection_reason' => trim($reason), 'lock_version' => $r->lock_version + 1]);
             $this->audit($club, $user, $r, 'profile_updates.rejected', ['before' => 'pending', 'after' => 'rejected', 'reason' => trim($reason)]);
@@ -80,7 +81,8 @@ class ProfileUpdateWriteService
     public function approve(Club $club, User $user, ProfileUpdateRequest $request, int $version): ProfileUpdateRequest
     {
         try {
-            return $this->transactions->run($club, function () use ($club, $user, $request, $version) {
+            return $this->transactions->run($club, function ($context) use ($club, $user, $request, $version) {
+                app(\App\Services\Access\TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $user, 'profile_updates.approve');
                 $r = $this->locked($club, $request, $version);
                 $member = Member::whereKey($r->member_id)->where('club_id', $club->id)->lockForUpdate()->firstOrFail();
                 $r->load('changes');

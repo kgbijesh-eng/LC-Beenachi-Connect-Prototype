@@ -24,6 +24,8 @@ use Illuminate\Support\Str;
 /** Committed synthetic prerequisites; never opens an ambient wrapper. */
 final class IntegrationConfigurationFixture
 {
+    use SeedsAnnouncementOfficerTerms;
+
     public static function actions(): array
     {
         return ['map', 'activate', 'revokeMapping', 'revokeActivation', 'propose', 'propose-replay', 'approve', 'reject', 'withdraw'];
@@ -37,7 +39,8 @@ final class IntegrationConfigurationFixture
         foreach (['treasurer' => $p['actor'], 'president-admin' => ($p['decider'] = User::factory()->create()->id)] as $slug => $id) {
             $role = Role::firstOrCreate(['slug' => $slug], ['name' => $slug]);
             $role->permissions()->syncWithoutDetaching([$permission->id]);
-            ClubMembership::updateOrCreate(['club_id' => $p['club'], 'user_id' => $id], ['role_id' => $role->id, 'status' => 'active']);
+            $membership = ClubMembership::updateOrCreate(['club_id' => $p['club'], 'user_id' => $id], ['role_id' => $role->id, 'status' => 'active']);
+            self::seedAnnouncementOfficerTerm($membership, $slug);
         }
         $p['reference'] = 'B4-'.Str::uuid();
         $p['proposal_input'] = ['client_request_id' => (string) Str::uuid(), 'proposal_type' => 'mapping_create', 'source_type' => 'member_charge', 'source_key' => 'membership_dues', 'ledger_account_id' => $p['income'], 'mapping_version' => 'B4-V1', 'effective_date' => '2027-07-01', 'reference' => $p['reference']];

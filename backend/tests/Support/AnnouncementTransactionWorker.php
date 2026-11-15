@@ -65,7 +65,12 @@ try {
     } elseif ($operation === 'membership') {
         app(OrganisationTransactionGuard::class)->run($club, function () use ($p, $club): void {
             $membership = ClubMembership::where('club_id', $club->id)->where('user_id', $p['target_user'])->lockForUpdate()->firstOrFail();
-            $membership->update($p['membership_update']);
+            if ($p['end_office'] ?? false) {
+                \Illuminate\Support\Facades\DB::table('club_officer_terms')->where('membership_id', $membership->id)
+                    ->update(['ended_at' => now('UTC')->format('Y-m-d H:i:sP'), 'termination_reference' => 'test-term-end', 'termination_reason' => 'Synthetic authority loss']);
+            } else {
+                $membership->update($p['membership_update']);
+            }
         });
     } elseif (isset($p['route'])) {
         $request = Request::create($p['route'], $p['method'], $p['payload'] ?? [], [], [], [

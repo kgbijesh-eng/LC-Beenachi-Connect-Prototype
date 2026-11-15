@@ -26,6 +26,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3iizvClubExpenseRecordingTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
 
     public function test_expense_posts_once_and_flows_into_the_canonical_statement(): void
     {
@@ -131,7 +133,8 @@ class Milestone3iizvClubExpenseRecordingTest extends FinancialPostgresTestCase
         $officer = User::factory()->create();
         $permissions = collect(['finance.club.expenses.create', 'finance.club.statement.view'])->map(fn ($slug) => Permission::firstOrCreate(['slug' => $slug], ['name' => $slug, 'group' => 'finance', 'description' => $slug]));
         $role = Role::create(['name' => "Treasurer {$suffix}", 'slug' => 'treasurer-'.strtolower($suffix), 'description' => 'Treasurer']); $role->permissions()->attach($permissions->pluck('id'));
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $officer->id, 'role_id' => $role->id, 'status' => 'active']);
+        $membership = ClubMembership::create(['club_id' => $club->id, 'user_id' => $officer->id, 'role_id' => $role->id, 'status' => 'active']);
+        self::seedAnnouncementOfficerTerm($membership, 'treasurer');
         $period = ClubAccountingPeriod::create(['club_id' => $club->id, 'lions_year' => '2027-28', 'start_date' => '2027-07-01', 'end_date' => '2028-06-30', 'status' => 'open', 'created_by_user_id' => $officer->id]);
         $bank = $this->account($club, $officer, 'BANK-MAIN', 'asset', 'debit', 'CASH_AND_BANK');
         $equity = $this->account($club, $officer, 'OPENING-EQUITY', 'equity', 'credit', 'FUND_BALANCE_EQUITY');

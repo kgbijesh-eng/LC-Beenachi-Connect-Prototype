@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { useDevAuth, type DevRole } from "./DevAuthSession";
+import { hasEffectivePermission, useDevAuth, type DevRole } from "./DevAuthSession";
 
 type Amounts = {
   opening_balance_paise: number;
@@ -126,7 +126,7 @@ export default function ClubAccountStatementBackend({ role }: { role: DevRole })
   const [to, setTo] = useState("");
   const [requestQuery, setRequestQuery] = useState(() => `lions_year=${encodeURIComponent(currentLionsYear())}`);
 
-  const allowedRole = role === "president" || role === "secretary" || role === "treasurer";
+  const allowedRole = hasEffectivePermission(session, "finance.club.statement.view");
 
   useEffect(() => {
     let cancelled = false;

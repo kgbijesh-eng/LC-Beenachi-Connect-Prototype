@@ -25,8 +25,7 @@ class MemberDataImportCommitService
     {
         return app(OrganisationTransactionGuard::class)->run($clubId, function ($context) use ($clubId, $rows, $actor): array {
             app(TransactionActorAuthorisation::class)->requirePermission($context, $clubId, $actor, 'club.view');
-            $role = $actor->clubMemberships()->with('role')->where('club_id', $clubId)->where('status', 'active')->first()?->role?->slug;
-            if (! in_array($role, ['president-admin', 'secretary', 'treasurer'], true)) {
+            if (app(\App\Services\Access\ClubPermissionService::class)->effectiveOffice($actor, $clubId) === null) {
                 throw new AuthorizationException();
             }
 

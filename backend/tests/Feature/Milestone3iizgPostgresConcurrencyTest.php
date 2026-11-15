@@ -36,9 +36,8 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         $this->requireExplicitPostgres();
         $this->seed(DefaultRolesAndPermissionsSeeder::class);
         $f = $this->authorizedFixture('permission', 99, false);
-        $subject = User::factory()->create();
-        $this->cutoverMember($f['club'], $subject, 'treasurer');
-        $permission = Permission::where('slug', 'finance.cutover.package.prepare')->firstOrFail();
+        $subject = $f['preparer'];
+        $permission = Permission::where('slug', 'finance.cutover.package.validate')->firstOrFail();
         $base = ['club_id' => $f['club']->id, 'cutover_package_id' => $f['package']->id, 'user_id' => $subject->id, 'permission_id' => $permission->id, 'effective_at' => now()->subSecond()->toDateTimeString(), 'expires_at' => null, 'assigned_by_user_id' => $f['verifier']->id, 'created_at' => now()->toDateTimeString(), 'updated_at' => now()->toDateTimeString()];
         $rows = [[...$base, 'public_id' => (string) Str::uuid(), 'assignment_reference' => 'PG-PERMISSION-ONE'], [...$base, 'public_id' => (string) Str::uuid(), 'assignment_reference' => 'PG-PERMISSION-TWO']];
         $barrier = sys_get_temp_dir().DIRECTORY_SEPARATOR.'3iizs-pg-permission-'.Str::lower(Str::random(8));
@@ -504,10 +503,10 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
             $$key = User::factory()->create();
         }
         $club = Club::create(['name' => "Concurrency {$scenario} {$iteration}", 'code' => $this->scenarioClubCode($scenario, $iteration)]);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $verifier->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $grantor->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $preparer->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
+        self::seedAnnouncementOfficerTerm(ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']), 'president-admin');
+        self::seedAnnouncementOfficerTerm(ClubMembership::create(['club_id' => $club->id, 'user_id' => $verifier->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active']), 'secretary');
+        self::seedAnnouncementOfficerTerm($grantorMembership = ClubMembership::create(['club_id' => $club->id, 'user_id' => $grantor->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']), 'treasurer');
+        $preparerMembership = ClubMembership::create(['club_id' => $club->id, 'user_id' => $preparer->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
         $accounts = [];
         foreach ([['cash', 'CASH-ON-HAND', 'asset', 'debit'], ['bank', 'BANK-OPERATING', 'asset', 'debit'], ['receivable', 'MEMBER-RECEIVABLES', 'asset', 'debit'], ['other_asset', 'CLUB-PROPERTY', 'asset', 'debit'], ['liability', 'LIABILITY-GENERAL', 'liability', 'credit'], ['restricted', 'LIABILITY-RESTRICTED-COLLECTION', 'liability', 'credit'], ['equity', 'OPENING-BALANCE-EQUITY', 'equity', 'credit'], ['surplus', 'ACCUMULATED-SURPLUS', 'equity', 'credit']] as [$key, $code, $type, $normal]) {
             $accounts[$key] = LedgerAccount::create(['club_id' => $club->id, 'code' => $code, 'name' => $code, 'account_type' => $type, 'normal_balance' => $normal, 'currency' => 'INR', 'is_active' => true, 'created_by_user_id' => $grantor->id]);
@@ -538,6 +537,13 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
             $package = $package->fresh('evidenceReferences');
         }
         $package = $service->refreshValidation($club->id, $package->id, $grantor->id, $package->lock_version);
+        $handover = now('UTC')->format('Y-m-d H:i:sP');
+        \Illuminate\Support\Facades\DB::table('club_officer_terms')->where('membership_id', $grantorMembership->id)->update([
+            'ended_at' => $handover,
+            'termination_reference' => 'fixture-treasurer-handover',
+            'termination_reason' => 'Synthetic separation of package author and preparer',
+        ]);
+        self::seedAnnouncementOfficerTerm($preparerMembership, 'treasurer', $handover);
         $admin = app(ClubCutoverAuthorityAdministrationService::class);
         $caAppointment = $this->dualAppoint($package, $ca, 'independent_ca', $president, $verifier, "CA-{$scenario}-{$iteration}");
         $this->dualAttestEligibility($caAppointment, $president, $verifier, "ELIGIBILITY-{$scenario}-{$iteration}");
@@ -559,7 +565,7 @@ class Milestone3iizgPostgresConcurrencyTest extends CutoverPostgresTestCase
         }
         $package = $package->fresh();
 
-        return compact('club', 'package', 'operator', 'ca', 'president', 'verifier');
+        return compact('club', 'package', 'operator', 'ca', 'president', 'verifier', 'preparer');
     }
 
     private function scenarioClubCode(string $scenario, int $iteration): string

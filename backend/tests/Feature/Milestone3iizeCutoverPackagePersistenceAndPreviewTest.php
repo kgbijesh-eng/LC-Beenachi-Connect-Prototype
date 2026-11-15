@@ -349,9 +349,9 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends CutoverPostg
         $ca = User::factory()->create();
         $president = User::factory()->create();
         $club = Club::create(['name' => 'Beenachi', 'code' => 'LCB']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $verifier->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active']);
-        ClubMembership::create(['club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
+        self::seedAnnouncementOfficerTerm(ClubMembership::create(['club_id' => $club->id, 'user_id' => $president->id, 'role_id' => Role::where('slug', 'president-admin')->firstOrFail()->id, 'status' => 'active']), 'president-admin');
+        self::seedAnnouncementOfficerTerm(ClubMembership::create(['club_id' => $club->id, 'user_id' => $verifier->id, 'role_id' => Role::where('slug', 'secretary')->firstOrFail()->id, 'status' => 'active']), 'secretary');
+        self::seedAnnouncementOfficerTerm(ClubMembership::create(['club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']), 'treasurer');
         ClubMembership::create(['club_id' => $club->id, 'user_id' => $preparer->id, 'role_id' => Role::where('slug', 'treasurer')->firstOrFail()->id, 'status' => 'active']);
         $otherClub = Club::create(['name' => 'Other', 'code' => 'OTH']);
         $accounts = [
@@ -420,6 +420,16 @@ class Milestone3iizeCutoverPackagePersistenceAndPreviewTest extends CutoverPostg
         $package = $this->service()->replaceEvidenceReferences($fixture['club']->id, $package->id, $fixture['actor']->id, 2, $this->evidence());
         $package = $this->verifyAllEvidence($fixture, $package);
         $package = $this->service()->refreshValidation($fixture['club']->id, $package->id, $fixture['actor']->id, $package->lock_version);
+        $memberships = ClubMembership::where('club_id', $fixture['club']->id);
+        $author = (clone $memberships)->where('user_id', $fixture['actor']->id)->sole();
+        $preparer = (clone $memberships)->where('user_id', $fixture['preparer']->id)->sole();
+        $handover = now('UTC')->format('Y-m-d H:i:sP');
+        \Illuminate\Support\Facades\DB::table('club_officer_terms')->where('membership_id', $author->id)->update([
+            'ended_at' => $handover,
+            'termination_reference' => 'preview-treasurer-handover',
+            'termination_reason' => 'Synthetic transfer from package author to preparer',
+        ]);
+        self::seedAnnouncementOfficerTerm($preparer, 'treasurer', $handover);
         $this->dualAssign($package, $fixture['preparer'], 'finance.cutover.package.prepare', $fixture['president'], $fixture['verifier'], 'PREPARE-'.$package->id);
         $appointment = $this->dualAppoint($package, $fixture['ca'], 'independent_ca', $fixture['president'], $fixture['verifier'], 'CA-'.$package->id);
         $this->dualAttestEligibility($appointment, $fixture['president'], $fixture['verifier'], 'ELIGIBILITY-'.$package->id);

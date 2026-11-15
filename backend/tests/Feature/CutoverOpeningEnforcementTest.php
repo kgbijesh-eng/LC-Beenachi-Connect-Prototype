@@ -45,6 +45,30 @@ class CutoverOpeningEnforcementTest extends CutoverPostgresTestCase
         return app(ClubOpeningJournalActivationService::class)->execute($request);
     }
 
+    public function test_independent_appointees_can_act_without_office_but_cannot_use_officer_permissions(): void
+    {
+        $fixture = $this->fixture();
+        $resolver = app(\App\Services\Finance\ClubCutoverAuthorityResolver::class);
+        $capabilities = app(\App\Services\Access\ClubPermissionService::class);
+        foreach (['ca' => 'accounting-review', 'operator' => 'execute'] as $key => $action) {
+            $actor = $fixture[$key];
+            $this->assertNull($capabilities->effectiveOffice($actor, $fixture['club']->id));
+            $assignment = $resolver->permission($fixture['package'], $actor, 'finance.cutover.package.'.$action);
+            $this->assertSame($actor->id, $assignment->user_id);
+
+            try {
+                $resolver->president($fixture['package'], $actor, 'finance.cutover.package.business-approve');
+                $this->fail('An independent appointment granted President authority.');
+            } catch (\App\Services\Finance\Exceptions\CutoverAuthorizationException $exception) {
+                $this->assertStringContainsString('President', $exception->getMessage());
+            }
+        }
+
+        $success = $this->execute($this->request($fixture));
+        $this->assertSame($fixture['operator']->id, $success->executed_by_user_id);
+        $this->assertSame($success->journal_entry_id, Consumption::sole()->journal_entry_id);
+    }
+
     private function assertNoFinancialWrites(): void
     {
         $this->assertSame(0, ClubJournalEntry::count());
@@ -203,6 +227,44 @@ class CutoverOpeningEnforcementTest extends CutoverPostgresTestCase
         $this->assertSame(1, Consumption::count());
         $this->assertSame(Success::first()->id, $this->execute($request)->id);
         $this->assertSame(1, Success::count());
+    }
+
+    #[DataProvider('presidentExpiryCases')]
+    public function test_expired_president_denies_fresh_execution_but_allows_exact_replay(bool $posted): void
+    {
+        $fixture = $this->fixture();
+        $request = $this->request($fixture);
+        $original = $posted ? $this->execute($request) : null;
+        $membership = DB::table('club_memberships')->where('club_id', $fixture['club']->id)
+            ->where('user_id', $fixture['president']->id)->sole();
+        $this->assertSame(1, DB::table('club_officer_terms')->where('membership_id', $membership->id)->update([
+            'ended_at' => '2020-01-01 00:00:00+00',
+            'termination_reference' => 'opening-expiry-test',
+            'termination_reason' => 'Synthetic end of President authority',
+        ]));
+
+        if ($original === null) {
+            try {
+                $this->execute($request);
+                $this->fail('Fresh execution used expired President authority.');
+            } catch (\App\Services\Finance\Exceptions\CutoverAuthorizationException $exception) {
+                $this->assertStringContainsString('president-admin', $exception->getMessage());
+            }
+            $this->assertNoFinancialWrites();
+
+            return;
+        }
+
+        $this->assertSame($original->id, $this->execute($request)->id);
+        $this->assertSame(1, ClubJournalEntry::count());
+        $this->assertSame(1, Success::count());
+        $this->assertSame(1, Consumption::count());
+        $this->assertSame($original->journal_entry_id, Consumption::sole()->journal_entry_id);
+    }
+
+    public static function presidentExpiryCases(): array
+    {
+        return ['fresh' => [false], 'replay' => [true]];
     }
 
     public function test_suspension_denies_exact_replay_without_altering_committed_provenance(): void

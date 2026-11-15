@@ -13,7 +13,7 @@ use App\Models\ClubAccountingCutoverCaEligibility;
 use App\Models\ClubAccountingCutoverPackage;
 use App\Models\ClubAccountingCutoverPermissionAssignment;
 use App\Models\ClubAccountingCutoverPermissionEvent;
-use App\Models\ClubMembership;
+use App\Services\Access\ClubPermissionService;
 use App\Models\Permission;
 use App\Models\User;
 use App\Services\Access\OrganisationTransactionContext;
@@ -31,13 +31,13 @@ final class ClubCutoverAuthorityAdministrationService
 
     public function requestPermission(ClubAccountingCutoverPackage $package, User $subject, string $slug, string $reference, User $requester, ?string $expiresAt = null): ClubAccountingCutoverAdminOperation
     {
-        return $this->withPackage($package, function (ClubAccountingCutoverPackage $current, OrganisationTransactionContext $context) use ($package, $subject, $slug, $reference, $requester, $expiresAt) {
+        return $this->withPackage($package, function (ClubAccountingCutoverPackage $current, OrganisationTransactionContext $context, \DateTimeInterface $at) use ($package, $subject, $slug, $reference, $requester, $expiresAt) {
             $permission = Permission::query()->where('slug', $slug)->first();
             if (! $permission || ! str_starts_with($slug, 'finance.cutover.package.')) {
                 throw new CutoverAuthorizationException('The exact cutover permission is undefined.');
             }
-            $this->assertPermissionRoleBasis($current, $subject, $slug);
-            $this->assertNoConflict($current, $subject, $slug);
+            $this->assertPermissionRoleBasis($current, $subject, $slug, $at);
+            $this->assertNoConflict($current, $subject, $slug, $at);
 
             return $this->request($context, $package, $requester, 'assign_permission', $subject, 'permission', $slug, $reference, null, $expiresAt);
         });
@@ -45,11 +45,11 @@ final class ClubCutoverAuthorityAdministrationService
 
     public function requestAppointment(ClubAccountingCutoverPackage $package, User $subject, string $type, string $reference, User $requester, ?string $expiresAt = null): ClubAccountingCutoverAdminOperation
     {
-        return $this->withPackage($package, function (ClubAccountingCutoverPackage $current, OrganisationTransactionContext $context) use ($package, $subject, $type, $reference, $requester, $expiresAt) {
+        return $this->withPackage($package, function (ClubAccountingCutoverPackage $current, OrganisationTransactionContext $context, \DateTimeInterface $at) use ($package, $subject, $type, $reference, $requester, $expiresAt) {
             if (! in_array($type, [ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, ClubAccountingCutoverAuthorityAppointment::TYPE_TECHNICAL_OPERATOR], true)) {
                 throw new CutoverAuthorizationException('The cutover authority type is invalid.');
             }
-            $this->assertNoConflict($current, $subject, $type);
+            $this->assertNoConflict($current, $subject, $type, $at);
 
             return $this->request($context, $package, $requester, 'appoint', $subject, 'appointment', $type, $reference, null, $expiresAt);
         });
@@ -99,7 +99,18 @@ final class ClubCutoverAuthorityAdministrationService
     public function approve(ClubAccountingCutoverAdminOperation $operation, User $actor, string $approvalReference): ClubAccountingCutoverAdminOperation
     {
         return $this->organisations->run($operation->club_id, function (OrganisationTransactionContext $context) use ($operation, $actor, $approvalReference) {
-            $operation = ClubAccountingCutoverAdminOperation::query()->whereKey($operation->id)->where('club_id', $context->organisationId)->lockForUpdate()->firstOrFail();
+            $at = now('UTC')->toImmutable();
+            $scoped = ClubAccountingCutoverAdminOperation::query()->whereKey($operation->id)->where('club_id', $context->organisationId);
+            $snapshot = $scoped->firstOrFail();
+            $role = null;
+            if ($snapshot->status !== 'applied') {
+                $packageSnapshot = $this->lockPackage($context, $snapshot->cutover_package_id, false);
+                if ($snapshot->package_version !== $packageSnapshot->package_version || $snapshot->package_lock_version !== $packageSnapshot->lock_version) {
+                    throw new CutoverAuthorizationException('The administration operation is stale for the current package version.');
+                }
+                $role = $this->authority->governanceOfficerRole($packageSnapshot, $actor, $at);
+            }
+            $operation = $scoped->lockForUpdate()->firstOrFail();
             if ($operation->status === 'applied') {
                 return $operation;
             }
@@ -107,7 +118,9 @@ final class ClubCutoverAuthorityAdministrationService
             if ($operation->package_version !== $package->package_version || $operation->package_lock_version !== $package->lock_version) {
                 throw new CutoverAuthorizationException('The administration operation is stale for the current package version.');
             }
-            $role = $this->authority->governanceOfficerRole($package, $actor);
+            if ($role === null || $snapshot->request_digest !== $operation->request_digest) {
+                throw new CutoverAuthorizationException('The administration operation changed during admission.');
+            }
             if ($operation->action === 'appoint' && $operation->target_key === ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA && $operation->subject_user_id === $actor->id) {
                 throw new CutoverAuthorizationException('An Independent CA appointment subject cannot approve their own appointment.');
             }
@@ -116,7 +129,7 @@ final class ClubCutoverAuthorityAdministrationService
             }
             ClubAccountingCutoverAdminApproval::create(['club_id' => $operation->club_id, 'cutover_package_id' => $operation->cutover_package_id, 'admin_operation_id' => $operation->id, 'approval_role' => $role, 'approved_by_user_id' => $actor->id, 'approval_reference' => $approvalReference, 'operation_digest' => $operation->request_digest, 'approved_at' => now()]);
             if ($operation->approvals()->count() === 2) {
-                $this->apply($context, $operation, $package);
+                $this->apply($context, $operation, $package, $at);
             }
 
             return $operation->fresh('approvals');
@@ -202,18 +215,18 @@ final class ClubCutoverAuthorityAdministrationService
         }
     }
 
-    private function apply(OrganisationTransactionContext $context, ClubAccountingCutoverAdminOperation $o, ClubAccountingCutoverPackage $p): void
+    private function apply(OrganisationTransactionContext $context, ClubAccountingCutoverAdminOperation $o, ClubAccountingCutoverPackage $p, \DateTimeInterface $at): void
     {
         $context->assertUsable($p->club_id);
         $record = null;
         if ($o->action === 'assign_permission') {
             $permission = Permission::where('slug', $o->target_key)->firstOrFail();
-            $this->assertPermissionRoleBasis($p, User::findOrFail($o->subject_user_id), $o->target_key);
-            $this->assertNoConflict($p, User::findOrFail($o->subject_user_id), $o->target_key);
+            $this->assertPermissionRoleBasis($p, User::findOrFail($o->subject_user_id), $o->target_key, $at);
+            $this->assertNoConflict($p, User::findOrFail($o->subject_user_id), $o->target_key, $at);
             $record = ClubAccountingCutoverPermissionAssignment::create(['club_id' => $p->club_id, 'cutover_package_id' => $p->id, 'user_id' => $o->subject_user_id, 'permission_id' => $permission->id, 'assignment_reference' => $o->operation_reference, 'effective_at' => now(), 'expires_at' => $o->expires_at, 'assigned_by_user_id' => $o->approvals()->where('approval_role', 'secretary')->value('approved_by_user_id')]);
         } elseif ($o->action === 'appoint') {
             $subject = User::findOrFail($o->subject_user_id);
-            $this->assertNoConflict($p, $subject, $o->target_key);
+            $this->assertNoConflict($p, $subject, $o->target_key, $at);
             $record = ClubAccountingCutoverAuthorityAppointment::create(['club_id' => $p->club_id, 'cutover_package_id' => $p->id, 'appointed_user_id' => $subject->id, 'authority_type' => $o->target_key, 'appointment_reference' => $o->operation_reference, 'effective_at' => now(), 'expires_at' => $o->expires_at, 'appointed_by_user_id' => $o->approvals()->where('approval_role', 'secretary')->value('approved_by_user_id')]);
         } elseif (in_array($o->action, ['revoke_appointment', 'revoke_permission'], true)) {
             if (ClubAccountingCutoverAuthorityConsumption::where('cutover_package_id', $p->id)->exists()) {
@@ -243,22 +256,22 @@ final class ClubCutoverAuthorityAdministrationService
     private function withPackage(ClubAccountingCutoverPackage $binding, Closure $operation): mixed
     {
         return $this->organisations->run($binding->club_id, function (OrganisationTransactionContext $context) use ($binding, $operation) {
-            return $operation($this->lockPackage($context, $binding->id), $context);
+            $at = now('UTC')->toImmutable();
+            return $operation($this->lockPackage($context, $binding->id), $context, $at);
         }, attempts: 1);
     }
 
-    private function lockPackage(OrganisationTransactionContext $context, int $packageId): ClubAccountingCutoverPackage
+    private function lockPackage(OrganisationTransactionContext $context, int $packageId, bool $lock = true): ClubAccountingCutoverPackage
     {
         $context->assertUsable();
-        return ClubAccountingCutoverPackage::whereKey($packageId)->where('club_id', $context->organisationId)->lockForUpdate()->firstOrFail();
+        return ClubAccountingCutoverPackage::whereKey($packageId)->where('club_id', $context->organisationId)->when($lock, fn ($query) => $query->lockForUpdate())->firstOrFail();
     }
 
-    private function assertNoConflict(ClubAccountingCutoverPackage $p, User $u, string $authority): void
+    private function assertNoConflict(ClubAccountingCutoverPackage $p, User $u, string $authority, \DateTimeInterface $at): void
     {
-        $president = $this->authority->uniqueOfficer($p, 'president-admin');
+        $president = $this->authority->uniqueOfficer($p, 'president-admin', $at);
         $ids = array_filter([$p->prepared_by_user_id, $p->internally_verified_by_user_id]);
-        $isSecretary = ClubMembership::query()->where('club_id', $p->club_id)->where('user_id', $u->id)->where('status', 'active')
-            ->whereHas('role', fn ($role) => $role->where('slug', 'secretary'))->exists();
+        $isSecretary = app(ClubPermissionService::class)->effectiveOffice($u, (int) $p->club_id, $at) === 'secretary';
         if (in_array($authority, ['independent_ca', 'technical_operator'], true) && (in_array($u->id, $ids, true) || $u->id === $president->id || $isSecretary)) {
             throw new CutoverAuthorizationException('The requested authority conflicts with package separation of duties.');
         }
@@ -270,18 +283,17 @@ final class ClubCutoverAuthorityAdministrationService
         }
     }
 
-    private function assertPermissionRoleBasis(ClubAccountingCutoverPackage $p, User $u, string $slug): void
+    private function assertPermissionRoleBasis(ClubAccountingCutoverPackage $p, User $u, string $slug, \DateTimeInterface $at): void
     {
-        $membership = ClubMembership::with('role')->where('club_id', $p->club_id)->where('user_id', $u->id)->where('status', 'active')->first();
-        $role = $membership?->role?->slug;
+        $role = app(ClubPermissionService::class)->effectiveOffice($u, (int) $p->club_id, $at);
         $appointmentTypes = ClubAccountingCutoverAuthorityAppointment::with('events')->where('cutover_package_id', $p->id)->where('appointed_user_id', $u->id)->get()->reject(fn ($a) => $a->events->whereIn('event_type', ['revoked', 'invalidated'])->isNotEmpty())->pluck('authority_type');
         $allowed = match ($slug) {
             'finance.cutover.package.prepare' => $role === 'treasurer',
             'finance.cutover.package.validate' => in_array($role, ['treasurer', 'secretary'], true),
             'finance.cutover.package.verify' => $role === 'secretary',
             'finance.cutover.package.accounting-review' => $appointmentTypes->contains('independent_ca'),
-            'finance.cutover.package.business-approve' => $role === 'president-admin',
-            'finance.cutover.package.dry-run-accept','finance.cutover.package.activate-authorize','finance.cutover.package.rollback-authorize' => $role === 'president-admin' || $appointmentTypes->contains('independent_ca'),
+            'finance.cutover.package.business-approve' => $role === 'president',
+            'finance.cutover.package.dry-run-accept','finance.cutover.package.activate-authorize','finance.cutover.package.rollback-authorize' => $role === 'president' || $appointmentTypes->contains('independent_ca'),
             'finance.cutover.package.execute' => $appointmentTypes->contains('technical_operator'),
             'finance.cutover.package.view-restricted-manifest' => $role === 'secretary' || $appointmentTypes->contains('independent_ca'),
             default => false,

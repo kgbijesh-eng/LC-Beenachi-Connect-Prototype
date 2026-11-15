@@ -37,6 +37,7 @@ use RuntimeException;
 /** Synthetic, committed prerequisites. No ambient wrapper or fake eligibility context. */
 final class FinancialOperationFixture
 {
+
     use BuildsMilestone3ijaeFixture;
 
     public static function actions(): array
@@ -50,7 +51,12 @@ final class FinancialOperationFixture
     {
         CarbonImmutable::setTestNow('2027-08-12 10:00:00');
         Carbon::setTestNow('2027-08-12 10:00:00');
-        $f = $this->fixture3ijae($suffix);
+        $f = $this->fixture3ijae($suffix, seedOfficer: false);
+        if (! in_array($action, ['post', 'post-replay', 'reverse', 'reverse-replay'], true)) {
+            $membership = ClubMembership::where('club_id', $f['club']->id)->where('user_id', $f['actor']->id)->sole();
+            self::seedAnnouncementOfficerTerm($membership, str_starts_with($action, 'legacy-') ? 'president-admin' : 'treasurer');
+        }
+
         $member = Member::create(['club_id' => $f['club']->id, 'member_code' => 'PROBE', 'full_name' => 'Synthetic financial member', 'status' => 'active']);
         $expense = $this->account3ijae($f['club'], $f['actor'], 'EXPENSE-'.$suffix, 'expense', 'debit', 'EXPENSES');
         $cash = $this->account3ijae($f['club'], $f['actor'], 'CASH-'.$suffix, 'asset', 'debit', 'CASH_AND_BANK');

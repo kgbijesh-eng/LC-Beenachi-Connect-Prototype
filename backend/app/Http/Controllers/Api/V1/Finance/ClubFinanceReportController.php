@@ -12,12 +12,6 @@ use Illuminate\Http\Request;
 
 class ClubFinanceReportController extends Controller
 {
-    private const CLUB_FINANCE_REPORT_ROLE_SLUGS = [
-        'president-admin',
-        'secretary',
-        'treasurer',
-    ];
-
     public function reports(Request $request, Club $club, ClubFinanceReportService $reports): JsonResponse
     {
         if (! $this->userCanReadClubFinanceReports($request->user(), $club)) {
@@ -50,21 +44,7 @@ class ClubFinanceReportController extends Controller
 
     private function userCanReadClubFinanceReports(User $user, Club $club): bool
     {
-        return in_array(
-            $this->activeRoleSlug($user, $club),
-            self::CLUB_FINANCE_REPORT_ROLE_SLUGS,
-            true
-        );
+        return app(\App\Services\Access\ClubPermissionService::class)->userHasPermission($user, 'finance.club.view', (int) $club->id);
     }
 
-    private function activeRoleSlug(User $user, Club $club): ?string
-    {
-        $membership = $user->clubMemberships()
-            ->with('role')
-            ->where('club_id', $club->id)
-            ->where('status', 'active')
-            ->first();
-
-        return $membership?->role?->slug;
-    }
 }

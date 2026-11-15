@@ -20,9 +20,12 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Process\Process;
 use Tests\Support\FinancialPostgresTestCase;
+use Tests\Support\SeedsAnnouncementOfficerTerms;
 
 class CredentialTransactionConcurrencyTest extends FinancialPostgresTestCase
 {
+    use SeedsAnnouncementOfficerTerms;
+
     private const OLD_PASSWORD = 'Synthetic!Original123';
 
     private const NEW_PASSWORD = 'Synthetic!Replacement123';
@@ -58,6 +61,7 @@ class CredentialTransactionConcurrencyTest extends FinancialPostgresTestCase
         if (in_array($scenario, ['issue-complete', 'http-cli'], true)) {
             $actor = User::factory()->create();
             $this->membership($club, $actor, 'president-admin');
+            self::seedAnnouncementOfficerTerm($actor->clubMemberships()->where('club_id', $club->id)->sole(), 'president-admin');
             $left = $this->request($club, "/api/v1/clubs/{$club->id}/members/account-activations", [
                 'member_code' => $member->member_code, 'email' => $email,
             ]) + ['bearer' => $actor->createToken('synthetic-issuer')->plainTextToken];
@@ -267,7 +271,7 @@ class CredentialTransactionConcurrencyTest extends FinancialPostgresTestCase
                 unlink($path);
             }
             file_put_contents("$dir/one.start", '1');
-            $this->await(fn () => is_file("$dir/one.locked"));
+            $this->await(fn () => is_file("$dir/one.locked"), fn () => $this->raceEvidence($dir));
             file_put_contents("$dir/two.start", '1');
             $holder = (int) file_get_contents("$dir/one.ready");
             $waiter = (int) file_get_contents("$dir/two.ready");
@@ -279,7 +283,9 @@ class CredentialTransactionConcurrencyTest extends FinancialPostgresTestCase
             $this->await(fn () => (int) DB::selectOne(
                 "SELECT count(*) AS n FROM pg_stat_activity WHERE pid=? AND wait_event_type='Lock' AND ?=ANY(pg_blocking_pids(pid)) AND query LIKE ?",
                 [$waiter, $holder, $query],
-            )->n === 1);
+            )->n === 1, fn () => $this->raceEvidence($dir));
+            $observed = $this->raceEvidence($dir);
+            $releaseRequestedAt = microtime(true);
             file_put_contents("$dir/one.finish", '1');
             $statuses = [];
             foreach ($workers as $name => $worker) {
@@ -290,7 +296,7 @@ class CredentialTransactionConcurrencyTest extends FinancialPostgresTestCase
                 $this->assertSame(0, $result['depth']);
                 $statuses[] = $result['status'];
             }
-            fwrite(STDOUT, "\nB6B_CREDENTIAL_LOCK_EDGE ".json_encode([$lock, $holder, $waiter, $statuses], JSON_THROW_ON_ERROR)."\n");
+            fwrite(STDOUT, "\nB6B_CREDENTIAL_LOCK_EDGE ".json_encode([$lock, $holder, $waiter, $statuses, $observed, $releaseRequestedAt, $this->raceEvidence($dir)], JSON_THROW_ON_ERROR)."\n");
 
             return $statuses;
         } finally {
@@ -307,12 +313,31 @@ class CredentialTransactionConcurrencyTest extends FinancialPostgresTestCase
         }
     }
 
-    private function await(callable $condition): void
+    private function raceEvidence(string $dir): array
+    {
+        $workers = [];
+        foreach (['one', 'two'] as $name) {
+            $pid = (int) file_get_contents("$dir/$name.ready");
+            $workers[$name] = [
+                'pid' => $pid,
+                'locked' => is_file("$dir/$name.locked"),
+                'result' => is_file("$dir/$name.result") ? json_decode(file_get_contents("$dir/$name.result"), true) : null,
+                'activity' => DB::selectOne(
+                    'SELECT state, wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE pid = ?',
+                    [$pid],
+                ),
+            ];
+        }
+
+        return $workers;
+    }
+
+    private function await(callable $condition, ?callable $evidence = null): void
     {
         $deadline = microtime(true) + 18;
         while (! $condition()) {
             if (microtime(true) > $deadline) {
-                $this->fail('The expected credential blocking edge was not observed.');
+                $this->fail('The expected credential blocking edge was not observed.'.($evidence ? ' '.json_encode($evidence(), JSON_THROW_ON_ERROR) : ''));
             }
             usleep(5000);
         }

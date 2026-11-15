@@ -24,8 +24,10 @@ final class ClubCutoverLifecycleService
     public function prepare(ClubAccountingCutoverPackage $package, User $actor, int $expectedLockVersion): ClubAccountingCutoverPackage
     {
         return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $actor, $expectedLockVersion): ClubAccountingCutoverPackage {
+            $at = now('UTC')->toImmutable();
+            $snapshot = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_DRAFT, false);
+            $this->authority->permission($snapshot, $actor, 'finance.cutover.package.prepare', $at);
             $locked = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_DRAFT);
-            $this->authority->permission($locked, $actor, 'finance.cutover.package.prepare');
             $validation = $this->packages->validate($locked);
             if (! $validation['valid']) {
                 throw new CutoverPackageException('The package must validate before preparation.');
@@ -40,8 +42,10 @@ final class ClubCutoverLifecycleService
     public function verify(ClubAccountingCutoverPackage $package, User $actor, int $expectedLockVersion): ClubAccountingCutoverPackage
     {
         return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $actor, $expectedLockVersion): ClubAccountingCutoverPackage {
+            $at = now('UTC')->toImmutable();
+            $snapshot = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_PREPARED, false);
+            $this->authority->permission($snapshot, $actor, 'finance.cutover.package.verify', $at);
             $locked = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_PREPARED);
-            $this->authority->permission($locked, $actor, 'finance.cutover.package.verify');
             if ($locked->prepared_by_user_id === $actor->id) {
                 throw new CutoverPackageException('The preparer cannot verify the same package.');
             }
@@ -57,13 +61,18 @@ final class ClubCutoverLifecycleService
     public function review(ClubAccountingCutoverPackage $package, User $actor, int $expectedLockVersion, string $classification, string $reference, string $reviewDate, string $rationale): ClubAccountingCutoverReview
     {
         return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $actor, $expectedLockVersion, $classification, $reference, $reviewDate, $rationale): ClubAccountingCutoverReview {
-            $locked = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_INTERNALLY_VERIFIED);
+            $at = now('UTC')->toImmutable();
+            $snapshot = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_INTERNALLY_VERIFIED, false);
             $classification = strtoupper(trim($classification));
-            if ($locked->dr033_classification !== null || ! preg_match('/\A[A-Z0-9][A-Z0-9._:-]{2,39}\z/', $classification)) {
+            if ($snapshot->dr033_classification !== null || ! preg_match('/\A[A-Z0-9][A-Z0-9._:-]{2,39}\z/', $classification)) {
                 throw new CutoverPackageException('DR-033 may be selected exactly once by the accounting review.');
             }
-            $appointment = $this->authority->appointment($locked, $actor, ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA);
-            $permission = $this->authority->permission($locked, $actor, 'finance.cutover.package.accounting-review');
+            $appointment = $this->authority->appointment($snapshot, $actor, ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, $at);
+            $permission = $this->authority->permission($snapshot, $actor, 'finance.cutover.package.accounting-review', $at);
+            $locked = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_INTERNALLY_VERIFIED);
+            if ($locked->dr033_classification !== null) {
+                throw new CutoverPackageException('DR-033 may be selected exactly once by the accounting review.');
+            }
             if (! LedgerAccount::query()->where('club_id', $locked->club_id)->where('code', $classification)->where('account_type', LedgerAccount::TYPE_EQUITY)->where('currency', $locked->currency)->where('is_active', true)->exists()) {
                 throw new CutoverPackageException('The selected DR-033 account is unavailable.');
             }
@@ -84,8 +93,10 @@ final class ClubCutoverLifecycleService
     public function approve(ClubAccountingCutoverPackage $package, User $actor, int $expectedLockVersion, string $approvalDate, string $reference): ClubAccountingCutoverApproval
     {
         return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $actor, $expectedLockVersion, $approvalDate, $reference): ClubAccountingCutoverApproval {
+            $at = now('UTC')->toImmutable();
+            $snapshot = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_ACCOUNTING_REVIEWED, false);
+            $permission = $this->authority->president($snapshot, $actor, 'finance.cutover.package.business-approve', $at);
             $locked = $this->lock($context, $package, $expectedLockVersion, ClubAccountingCutoverPackage::STATUS_ACCOUNTING_REVIEWED);
-            $permission = $this->authority->president($locked, $actor, 'finance.cutover.package.business-approve');
             $review = $this->trustedReview($locked);
             if ($review->recorded_by_user_id === $actor->id) {
                 throw new CutoverPackageException('The President and accounting reviewer must be different actors.');
@@ -101,24 +112,29 @@ final class ClubCutoverLifecycleService
     {
         return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $actor, $expectedLockVersion, $stage, $authorityType, $reference, $reason): ClubAccountingCutoverDecision {
             $requiredState = $stage === ClubAccountingCutoverDecision::STAGE_DRY_RUN ? ClubAccountingCutoverPackage::STATUS_BUSINESS_APPROVED : ClubAccountingCutoverPackage::STATUS_DRY_RUN_ACCEPTED;
-            $locked = $this->lock($context, $package, $expectedLockVersion, $requiredState);
+            $at = now('UTC')->toImmutable();
+            $snapshot = $this->lock($context, $package, $expectedLockVersion, $requiredState, false);
             $permissionSlug = $stage === ClubAccountingCutoverDecision::STAGE_DRY_RUN ? 'finance.cutover.package.dry-run-accept' : 'finance.cutover.package.activate-authorize';
-            $review = $this->trustedReview($locked);
-            $approval = $this->trustedApproval($locked);
+            $review = $this->trustedReview($snapshot);
+            $approval = $this->trustedApproval($snapshot);
             $appointment = null;
             if ($authorityType === ClubAccountingCutoverDecision::ACTOR_PRESIDENT) {
-                $permission = $this->authority->president($locked, $actor, $permissionSlug);
+                $permission = $this->authority->president($snapshot, $actor, $permissionSlug, $at);
                 if ($actor->id !== $approval->recorded_by_user_id) {
                     throw new CutoverPackageException('The trusted President approver must make the President decision.');
                 }
             } elseif ($authorityType === ClubAccountingCutoverDecision::ACTOR_INDEPENDENT_CA) {
-                $appointment = $this->authority->appointment($locked, $actor, ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA);
-                $permission = $this->authority->permission($locked, $actor, $permissionSlug);
+                $appointment = $this->authority->appointment($snapshot, $actor, ClubAccountingCutoverAuthorityAppointment::TYPE_INDEPENDENT_CA, $at);
+                $permission = $this->authority->permission($snapshot, $actor, $permissionSlug, $at);
                 if ($actor->id !== $review->recorded_by_user_id || $actor->id === $approval->recorded_by_user_id) {
                     throw new CutoverPackageException('The trusted accounting reviewer must make the independent-CA decision.');
                 }
             } else {
                 throw new CutoverPackageException('The decision authority is invalid.');
+            }
+            $locked = $this->lock($context, $package, $expectedLockVersion, $requiredState);
+            if ($this->trustedReview($locked)->id !== $review->id || $this->trustedApproval($locked)->id !== $approval->id) {
+                throw new CutoverPackageException('The decision bindings changed during admission.');
             }
             if ($this->currentDecisions($locked, $stage)->where('actor_authority', $authorityType)->isNotEmpty()) {
                 throw new CutoverPackageException('A current decision already exists for this stage and authority.');
@@ -138,21 +154,34 @@ final class ClubCutoverLifecycleService
     public function revoke(ClubAccountingCutoverDecision $decision, User $actor, string $reference, string $reason): ClubAccountingCutoverDecisionEvent
     {
         return $this->organisations->run($decision->club_id, function (OrganisationTransactionContext $context) use ($decision, $actor, $reference, $reason): ClubAccountingCutoverDecisionEvent {
-            $package = ClubAccountingCutoverPackage::whereKey($decision->cutover_package_id)->where('club_id', $context->organisationId)->lockForUpdate()->firstOrFail();
-            $decision = ClubAccountingCutoverDecision::query()->with('events')->where('club_id', $context->organisationId)->where('cutover_package_id', $package->id)->lockForUpdate()->findOrFail($decision->id);
-            if ($decision->recorded_by_user_id !== $actor->id || $decision->events->isNotEmpty()) {
-                throw new CutoverPackageException('Only the original actor may revoke a current decision.');
-            }
-            $permission = $this->authority->permission($package, $actor, 'finance.cutover.package.rollback-authorize');
+            $at = now('UTC')->toImmutable();
+            $packages = ClubAccountingCutoverPackage::whereKey($decision->cutover_package_id)->where('club_id', $context->organisationId);
+            $snapshot = $packages->firstOrFail();
+            $decisions = ClubAccountingCutoverDecision::query()->with('events')->where('club_id', $context->organisationId)
+                ->where('cutover_package_id', $snapshot->id);
+            $candidate = $decisions->findOrFail($decision->id);
+            $this->assertRevocableBy($candidate, $actor);
+            $permission = $this->authority->permission($snapshot, $actor, 'finance.cutover.package.rollback-authorize', $at);
+
+            $packages->lockForUpdate()->firstOrFail();
+            $decision = $decisions->lockForUpdate()->findOrFail($decision->id);
+            $this->assertRevocableBy($decision, $actor);
 
             return ClubAccountingCutoverDecisionEvent::create(['club_id' => $decision->club_id, 'cutover_package_id' => $decision->cutover_package_id, 'cutover_decision_id' => $decision->id, 'event_type' => 'revoked', 'event_reference' => $reference, 'reason' => $reason, 'recorded_by_user_id' => $actor->id, 'permission_assignment_id' => $permission->id, 'recorded_at' => now()]);
         }, attempts: 1);
     }
 
-    private function lock(OrganisationTransactionContext $context, ClubAccountingCutoverPackage $package, int $version, string $state): ClubAccountingCutoverPackage
+    private function assertRevocableBy(ClubAccountingCutoverDecision $decision, User $actor): void
+    {
+        if ($decision->recorded_by_user_id !== $actor->id || $decision->events->isNotEmpty()) {
+            throw new CutoverPackageException('Only the original actor may revoke a current decision.');
+        }
+    }
+
+    private function lock(OrganisationTransactionContext $context, ClubAccountingCutoverPackage $package, int $version, string $state, bool $lock = true): ClubAccountingCutoverPackage
     {
         $context->assertUsable($package->club_id);
-        $locked = ClubAccountingCutoverPackage::query()->whereKey($package->id)->where('club_id', $context->organisationId)->lockForUpdate()->first();
+        $locked = ClubAccountingCutoverPackage::query()->whereKey($package->id)->where('club_id', $context->organisationId)->when($lock, fn ($query) => $query->lockForUpdate())->first();
         if (! $locked || $locked->lock_version !== $version || $locked->status !== $state) {
             throw new CutoverPackageException('The cutover lifecycle state or lock version is stale.');
         }

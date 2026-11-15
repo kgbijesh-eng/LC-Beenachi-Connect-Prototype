@@ -52,6 +52,36 @@ class Milestone3gqFinanceDatabaseReadApiFoundationTest extends TestCase {
         $this->getJson("/api/v1/clubs/{$club->id}/finance/members/{$member->id}/summary")->assertJsonPath('data.paid_paise',0)->assertJsonPath('data.outstanding_paise',10000);
         $this->getJson("/api/v1/clubs/{$club->id}/finance/charges?not_a_filter=x")->assertUnprocessable();
     }
+    public function test_ordinary_member_cannot_read_another_members_payment_or_receipt_by_id(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        [$club, $member] = $this->actor('member', 'PRIVACY');
+        $this->member($club, $member, 'OWN');
+        $other = $this->member($club, null, 'OTHER');
+        $payment = MemberPayment::create([
+            'club_id' => $club->id, 'member_id' => $other->id, 'amount_paise' => 25025,
+            'payment_date' => '2026-07-10', 'payment_mode' => 'upi', 'external_reference' => 'PRIVATE-PAYMENT',
+            'idempotency_key' => '33333333-3333-4333-8333-333333333333', 'request_hash' => str_repeat('c', 64),
+            'status' => 'recorded', 'recorded_by_user_id' => User::factory()->create()->id,
+        ]);
+        $receipt = PaymentReceipt::create([
+            'club_id' => $club->id, 'member_payment_id' => $payment->id, 'receipt_number' => 'PRIVATE-RECEIPT',
+            'receipt_date' => '2026-07-10', 'financial_year' => '2026-27', 'status' => 'issued',
+            'issued_by_user_id' => $payment->recorded_by_user_id,
+        ]);
+
+        Sanctum::actingAs($member);
+        config(['instance.organisation_code' => $club->code]);
+        $this->assertFalse(app(\App\Services\Access\ClubPermissionService::class)->userHasPermission($member, 'payments.record', $club->id));
+        foreach (["payments/{$payment->id}", "receipts/{$receipt->id}"] as $resource) {
+            $this->getJson("/api/v1/clubs/{$club->id}/finance/{$resource}")
+                ->assertForbidden()
+                ->assertJsonMissingPath('data')
+                ->assertDontSee('PRIVATE-PAYMENT')
+                ->assertDontSee('PRIVATE-RECEIPT');
+        }
+    }
+
     private function actor(string $role,string $suffix):array{$club=Club::create(['name'=>"Finance $suffix",'code'=>"F$suffix",'timezone'=>'Asia/Kolkata','is_active'=>true]);$u=User::factory()->create();ClubMembership::create(['club_id'=>$club->id,'user_id'=>$u->id,'role_id'=>Role::where('slug',$role)->firstOrFail()->id,'status'=>'active','joined_at'=>now()]);return[$club,$u];}
     private function member(Club $c,?User $u,string $code):Member{return Member::create(['club_id'=>$c->id,'user_id'=>$u?->id,'member_code'=>$code.uniqid(),'full_name'=>'Duplicate Member','status'=>'active']);}
 }

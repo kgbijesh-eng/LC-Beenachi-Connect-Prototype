@@ -152,16 +152,18 @@ final class ClubAccountingCutoverPackageService
     public function refreshValidation(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion): ClubAccountingCutoverPackage
     {
         return $this->organisations->run($clubId, function (OrganisationTransactionContext $context) use ($packageId, $actorUserId, $expectedLockVersion): ClubAccountingCutoverPackage {
-            $package = $this->lockPackage($context->organisationId, $packageId, $expectedLockVersion);
+            $at = now('UTC')->toImmutable();
+            $package = $this->loadVersionedPackage($context->organisationId, $packageId, $expectedLockVersion, false);
             $actor = User::query()->find($actorUserId);
             if (! $actor) {
                 throw new CutoverPackageException('The validation request violates club scope.');
             }
             try {
-                $this->authority->permission($package, $actor, 'finance.cutover.package.validate');
+                $this->authority->permission($package, $actor, 'finance.cutover.package.validate', $at);
             } catch (\Throwable $e) {
                 throw new CutoverPackageException('Persisted validation requires the exact package validation permission.', previous: $e);
             }
+            $package = $this->loadVersionedPackage($context->organisationId, $packageId, $expectedLockVersion, true);
             $validation = $this->validate($package);
             $checksum = $this->checksum($package);
             $package->update([
@@ -300,16 +302,18 @@ final class ClubAccountingCutoverPackageService
     private function mutate(int $clubId, int $packageId, int $actorUserId, int $expectedLockVersion, string $reason, callable $mutation): ClubAccountingCutoverPackage
     {
         return $this->organisations->run($clubId, function (OrganisationTransactionContext $context) use ($packageId, $actorUserId, $expectedLockVersion, $reason, $mutation): ClubAccountingCutoverPackage {
-            $package = $this->lockPackage($context->organisationId, $packageId, $expectedLockVersion);
+            $at = now('UTC')->toImmutable();
+            $package = $this->loadVersionedPackage($context->organisationId, $packageId, $expectedLockVersion, false);
             $actor = User::query()->find($actorUserId);
             if (! $actor) {
                 throw new CutoverPackageException('The package authoring request violates club scope.');
             }
             try {
-                $this->authority->permission($package, $actor, 'finance.cutover.package.prepare');
+                $this->authority->permission($package, $actor, 'finance.cutover.package.prepare', $at);
             } catch (\Throwable $e) {
                 throw new CutoverPackageException('Package authoring requires the exact package preparation permission.', previous: $e);
             }
+            $package = $this->loadVersionedPackage($context->organisationId, $packageId, $expectedLockVersion, true);
             if ($package->status !== ClubAccountingCutoverPackage::STATUS_DRAFT) {
                 throw new CutoverPackageException('Only draft cutover packages may be edited.');
             }
@@ -403,9 +407,9 @@ final class ClubAccountingCutoverPackageService
         return $normalized;
     }
 
-    private function lockPackage(int $clubId, int $packageId, int $expectedLockVersion): ClubAccountingCutoverPackage
+    private function loadVersionedPackage(int $clubId, int $packageId, int $expectedLockVersion, bool $lock): ClubAccountingCutoverPackage
     {
-        $package = ClubAccountingCutoverPackage::query()->whereKey($packageId)->where('club_id', $clubId)->lockForUpdate()->first();
+        $package = ClubAccountingCutoverPackage::query()->whereKey($packageId)->where('club_id', $clubId)->when($lock, fn ($query) => $query->lockForUpdate())->first();
         if (! $package || $package->club_id !== $clubId) {
             throw new CutoverPackageException('The cutover package violates club scope.');
         }

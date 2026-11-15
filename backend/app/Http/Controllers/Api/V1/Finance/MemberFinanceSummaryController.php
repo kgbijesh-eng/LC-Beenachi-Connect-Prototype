@@ -13,12 +13,6 @@ use Illuminate\Http\Request;
 
 class MemberFinanceSummaryController extends Controller
 {
-    private const SELECTED_MEMBER_LOOKUP_ROLE_SLUGS = [
-        'president-admin',
-        'secretary',
-        'treasurer',
-    ];
-
     public function own(Request $request, Club $club, MemberFinanceSummaryService $summaries): JsonResponse
     {
         $member = Member::query()
@@ -66,21 +60,7 @@ class MemberFinanceSummaryController extends Controller
 
     private function userCanReadSelectedMemberSummary(User $user, Club $club): bool
     {
-        return in_array(
-            $this->activeRoleSlug($user, $club),
-            self::SELECTED_MEMBER_LOOKUP_ROLE_SLUGS,
-            true
-        );
+        return app(\App\Services\Access\ClubPermissionService::class)->userHasPermission($user, 'finance.club.view', (int) $club->id);
     }
 
-    private function activeRoleSlug(User $user, Club $club): ?string
-    {
-        $membership = $user->clubMemberships()
-            ->with('role')
-            ->where('club_id', $club->id)
-            ->where('status', 'active')
-            ->first();
-
-        return $membership?->role?->slug;
-    }
 }

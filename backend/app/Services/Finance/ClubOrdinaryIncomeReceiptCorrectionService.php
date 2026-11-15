@@ -9,7 +9,7 @@ use App\Services\Finance\Exceptions\{AlreadyReversedJournalException, ClubOrdina
 use Illuminate\Support\Facades\DB;
 use App\Services\Access\OrganisationTransactionContext;
 use App\Services\Access\OrganisationTransactionGuard;
-use App\Services\Access\TransactionActorAuthorisation;
+use App\Services\Access\ClubPermissionService;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -28,7 +28,16 @@ final class ClubOrdinaryIncomeReceiptCorrectionService
 
         try {
             return app(OrganisationTransactionGuard::class)->run($club, function (OrganisationTransactionContext $context) use ($club, $receiptPublicId, $actor, $canonical): ClubOrdinaryIncomeReceipt {
-                app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'finance.club.ordinary_income_receipts.reverse');
+                $context->assertUsable($club->id);
+                $decisionAt = now('UTC')->toImmutable();
+                $permissions = app(ClubPermissionService::class)->userPermissionSlugs($actor, $club->id, $decisionAt);
+                $required = ['finance.club.ordinary_income_receipts.reverse'];
+                if ($canonical['replacement'] !== null) {
+                    $required[] = 'finance.club.ordinary_income_receipts.create';
+                }
+                if (array_diff($required, $permissions)) {
+                    throw new \Illuminate\Auth\Access\AuthorizationException();
+                }
                 $lockedClub = Club::query()->whereKey($club->id)->lockForUpdate()->firstOrFail();
                 $receipt = ClubOrdinaryIncomeReceipt::query()->where('club_id', $lockedClub->id)->where('public_id', $receiptPublicId)->lockForUpdate()->firstOrFail();
                 $existing = ClubOrdinaryIncomeReceiptCorrection::query()->where('club_id', $lockedClub->id)->where('idempotency_key', $canonical['idempotency_key'])->lockForUpdate()->first();
@@ -64,7 +73,7 @@ final class ClubOrdinaryIncomeReceiptCorrectionService
                     $replacement = $canonical['replacement'];
                     $replacement['idempotency_key'] = (string) Str::uuid();
                     $replacement['corrected_from_receipt'] = $receipt->public_id;
-                    $this->replacementAdmission = [$context, $actor->id, $replacement];
+                    $this->replacementAdmission = [$context, $club->id, $actor, $replacement, $required, $decisionAt];
                     try {
                         $replacementReceipt = $this->receipts->recordWithin($context, $lockedClub, $actor, $replacement, $this);
                     } finally {
@@ -82,9 +91,13 @@ final class ClubOrdinaryIncomeReceiptCorrectionService
         }
     }
 
-    public function assertReplacementAdmission(OrganisationTransactionContext $context, User $actor, array $input): void
+    public function assertReplacementAdmission(OrganisationTransactionContext $context, Club $club, User $actor, array $input): void
     {
-        if ($this->replacementAdmission !== [$context, $actor->id, $input]) {
+        $context->assertUsable($club->id);
+        $decisionAt = $this->replacementAdmission[5] ?? null;
+        $required = ['finance.club.ordinary_income_receipts.reverse', 'finance.club.ordinary_income_receipts.create'];
+        if (! $decisionAt instanceof \DateTimeImmutable
+            || $this->replacementAdmission !== [$context, $club->id, $actor, $input, $required, $decisionAt]) {
             throw new \Illuminate\Auth\Access\AuthorizationException();
         }
     }

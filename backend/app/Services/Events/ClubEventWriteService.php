@@ -8,7 +8,8 @@ use App\Models\ClubEvent;
 use App\Models\User;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
+use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Access\TransactionActorAuthorisation;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -23,7 +24,8 @@ class ClubEventWriteService
 
     public function create(Club $club, User $actor, array $attributes): ClubEvent
     {
-        return DB::transaction(function () use ($club, $actor, $attributes): ClubEvent {
+        return app(OrganisationTransactionGuard::class)->run($club, function ($context) use ($club, $actor, $attributes): ClubEvent {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'events.manage');
             $event = ClubEvent::query()->create(array_merge(
                 $this->payload($club, $attributes),
                 [
@@ -43,7 +45,8 @@ class ClubEventWriteService
 
     public function update(Club $club, ClubEvent $event, User $actor, array $attributes): ClubEvent
     {
-        return DB::transaction(function () use ($club, $event, $actor, $attributes): ClubEvent {
+        return app(OrganisationTransactionGuard::class)->run($club, function ($context) use ($club, $event, $actor, $attributes): ClubEvent {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'events.manage');
             $locked = $this->lockedEvent($club, $event);
             $this->assertLockVersion($locked, (int) $attributes['lock_version']);
 
@@ -124,7 +127,8 @@ class ClubEventWriteService
 
     private function transition(Club $club, ClubEvent $event, User $actor, int $lockVersion, string $action, callable $changes): ClubEvent
     {
-        return DB::transaction(function () use ($club, $event, $actor, $lockVersion, $action, $changes): ClubEvent {
+        return app(OrganisationTransactionGuard::class)->run($club, function ($context) use ($club, $event, $actor, $lockVersion, $action, $changes): ClubEvent {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'events.manage');
             $locked = $this->lockedEvent($club, $event);
             $this->assertLockVersion($locked, $lockVersion);
 

@@ -16,6 +16,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3duPaymentRefreshRetestExecutionTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
 
     private string $docPath = __DIR__.'/../../docs/milestone_3du_payment_refresh_retest_execution.md';
 
@@ -83,28 +85,8 @@ class Milestone3duPaymentRefreshRetestExecutionTest extends FinancialPostgresTes
         ];
 
         $repoRoot = dirname(__DIR__, 3);
-        $status = shell_exec('git -C '.escapeshellarg($repoRoot).' status --short --untracked-files=all') ?? '';
-        $changed = collect(preg_split('/\R/', trim($status)))
-            ->filter()
-            ->map(function (string $line): string {
-                $path = preg_replace('/^[ MARCUD?!]{1,2}\s+/', '', $line) ?? $line;
-                $path = trim($path);
-                if (str_contains($path, ' -> ')) {
-                    $path = trim(substr($path, strrpos($path, ' -> ') + 4));
-                }
-
-                return str_replace('\\', '/', $path);
-            })
-            ->values()
-            ->all();
-
-        $branch = trim(shell_exec('git -C '.escapeshellarg($repoRoot).' rev-parse --abbrev-ref HEAD') ?? '');
-        $this->assertNotSame('', $branch, 'The repository branch must be readable.');
-
-        // The original milestone owns this allowlist. Blocked paths below apply on every branch.
-        if ($branch === 'milestone-3du-payment-refresh-retest-execution') {
-            $this->assertSame([], array_values(array_diff($changed, $allowed)), '3DU may change only approved 3DU docs/tests, plus the narrow 3DT lifecycle guard exception if used.');
-        }
+        $changed = $this->historical3duPaths($repoRoot);
+        $this->assertSame([], array_values(array_diff($changed, $allowed)), '3DU may change only approved 3DU docs/tests, plus the narrow 3DT lifecycle guard exception if used.');
 
         foreach ($this->blockedPaths() as $path) {
             $this->assertFalse($this->containsPathOrChild($changed, $path), "{$path} must not be edited in 3DU.");
@@ -114,14 +96,28 @@ class Milestone3duPaymentRefreshRetestExecutionTest extends FinancialPostgresTes
     public function test_3du_app_page_tsx_is_not_edited(): void
     {
         $repoRoot = dirname(__DIR__, 3);
-        $diff = shell_exec('git -C '.escapeshellarg($repoRoot).' diff --name-only HEAD') ?? '';
-        $changed = collect(preg_split('/\R/', trim($diff)))->filter()->all();
-        $this->assertNotContains('app/page.tsx', $changed);
+        $this->assertNotContains('app/page.tsx', $this->historical3duPaths($repoRoot));
+    }
+
+    private function historical3duPaths(string $repoRoot): array
+    {
+        $parent = '9591683c2c82d685d9a228674245b7437462bc6f';
+        $commit = '3f5a7f61879d6e41459b14c52d2b7c8d36754485';
+        $diff = new \Symfony\Component\Process\Process(
+            ['git', 'diff', '--name-only', '--no-renames', $parent, $commit, '--'],
+            $repoRoot,
+        );
+        $diff->mustRun();
+
+        return preg_split('/\R/', trim($diff->getOutput()), -1, PREG_SPLIT_NO_EMPTY);
     }
 
     public function test_targeted_dn_047_payment_refresh_retest_execution(): void
     {
         $this->seed(DatabaseSeeder::class);
+        $membership = \App\Models\ClubMembership::whereHas('user', fn ($query) => $query->where('email', 'president@lcbeenachi.test'))
+            ->whereHas('club', fn ($query) => $query->where('code', 'LCB'))->sole();
+        self::seedAnnouncementOfficerTerm($membership, 'president-admin');
 
         $club = Club::where('code', 'LCB')->firstOrFail();
 

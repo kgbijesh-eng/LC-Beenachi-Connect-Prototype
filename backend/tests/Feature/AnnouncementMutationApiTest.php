@@ -17,6 +17,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class AnnouncementMutationApiTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -207,13 +209,14 @@ class AnnouncementMutationApiTest extends FinancialPostgresTestCase
         ])->assertCreated()->assertJsonPath('data.replaces_announcement_id', $published['id']);
         $this->postJson("/api/v1/clubs/{$club->id}/announcements/{$published['id']}/replacements", $this->draft())
             ->assertUnprocessable()->assertJsonValidationErrors('audience');
-        ClubMembership::query()->create([
+        $foreignMembership = ClubMembership::query()->create([
             'club_id' => $other->id,
             'user_id' => $maker->id,
             'role_id' => Role::query()->where('slug', 'president-admin')->firstOrFail()->id,
             'status' => 'active',
             'joined_at' => now(),
         ]);
+        $this->seedAnnouncementOfficerTerm($foreignMembership, 'president-admin');
         config(['instance.organisation_code' => $other->code]);
         $this->postJson("/api/v1/clubs/{$other->id}/announcements/{$published['id']}/archive", ['lock_version' => 2])
             ->assertNotFound();
@@ -244,13 +247,15 @@ class AnnouncementMutationApiTest extends FinancialPostgresTestCase
     private function actor(Club $club, string $roleSlug, string $status = 'active'): User
     {
         $user = User::factory()->create();
-        ClubMembership::query()->create([
+        $membership = ClubMembership::query()->create([
             'club_id' => $club->id,
             'user_id' => $user->id,
             'role_id' => Role::query()->where('slug', $roleSlug)->firstOrFail()->id,
             'status' => $status,
             'joined_at' => now(),
         ]);
+
+        $this->seedAnnouncementOfficerTerm($membership, $roleSlug);
 
         return $user;
     }

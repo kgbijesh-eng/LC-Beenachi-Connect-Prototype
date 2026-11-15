@@ -26,9 +26,12 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\FinancialPostgresTestCase;
+use Tests\Support\SeedsAnnouncementOfficerTerms;
 
 class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNarrowImplementationTest extends FinancialPostgresTestCase
 {
+    use SeedsAnnouncementOfficerTerms;
+
 
     private Club $club;
 
@@ -54,8 +57,9 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         $withoutPermission = $this->officer('president-admin', false);
         config(['instance.organisation_code' => $this->club->code]);
         $this->actingAs($withoutPermission)->getJson($this->base().'/readiness')->assertForbidden();
-        foreach (['president-admin', 'treasurer'] as $slug) {
-            $actor = $this->officer($slug, true);
+        Role::where('slug', 'president-admin')->firstOrFail()->permissions()->syncWithoutDetaching([$this->permission->id]);
+        $treasurer = $this->officer('treasurer', true);
+        foreach ([$withoutPermission, $treasurer] as $actor) {
             config(['instance.organisation_code' => $this->club->code]);
             $this->actingAs($actor)->getJson($this->base().'/readiness')->assertOk()->assertJsonPath('data.club.id', $this->club->id)->assertJsonMissing(['member_name' => 'x', 'payment' => 'x', 'receipt' => 'x']);
         }
@@ -64,9 +68,9 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
             config(['instance.organisation_code' => $this->club->code]);
             $this->actingAs($actor)->getJson($this->base().'/readiness')->assertForbidden();
         }
-        $inactive = $this->officer('treasurer', true, 'inactive');
+        $treasurer->clubMemberships()->where('club_id', $this->club->id)->update(['status' => 'inactive']);
         config(['instance.organisation_code' => $this->club->code]);
-        $this->actingAs($inactive)->getJson($this->base().'/readiness')->assertForbidden();
+        $this->actingAs($treasurer)->getJson($this->base().'/readiness')->assertForbidden();
     }
 
     public function test_readiness_and_configuration_are_side_effect_free_and_publish_stable_status_vocabulary(): void
@@ -293,13 +297,14 @@ class Milestone3iizjProductionAccountingIntegrationConfigurationAndActivationNar
         return '/api/v1/clubs/'.$this->club->id.'/finance/accounting/integration';
     }
 
-    private function officer(string $roleSlug, bool $grant, string $status = 'active'): User
+    private function officer(string $roleSlug, bool $grant): User
     {
         $role = Role::where('slug', $roleSlug)->firstOrFail();
         if ($grant) {
             $role->permissions()->syncWithoutDetaching([$this->permission->id]);
         } $user = User::factory()->create();
-        ClubMembership::create(['club_id' => $this->club->id, 'user_id' => $user->id, 'role_id' => $role->id, 'status' => $status, 'joined_at' => now()]);
+        $membership = ClubMembership::create(['club_id' => $this->club->id, 'user_id' => $user->id, 'role_id' => $role->id, 'status' => 'active', 'joined_at' => now()]);
+        self::seedAnnouncementOfficerTerm($membership, $roleSlug);
 
         return $user;
     }

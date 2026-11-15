@@ -35,12 +35,6 @@ class MemberController extends Controller
         'country',
     ];
 
-    private const SENSITIVE_PROFILE_ROLE_SLUGS = [
-        'president-admin',
-        'secretary',
-        'treasurer',
-    ];
-
     public function index(Club $club): JsonResponse
     {
         $members = $club->members()
@@ -305,14 +299,6 @@ class MemberController extends Controller
             return true;
         }
 
-        $roleSlug = $user->clubMemberships()
-            ->with('role')
-            ->where('club_id', $club->id)
-            ->where('status', 'active')
-            ->first()
-            ?->role
-            ?->slug;
-
-        return in_array($roleSlug, self::SENSITIVE_PROFILE_ROLE_SLUGS, true);
+        return app(\App\Services\Access\ClubPermissionService::class)->effectiveOffice($user, (int) $club->id) !== null;
     }
 }

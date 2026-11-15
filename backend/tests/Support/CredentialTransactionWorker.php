@@ -32,8 +32,9 @@ try {
     file_put_contents("$dir/$name.ready", (string) DB::selectOne('SELECT pg_backend_pid() AS pid')->pid);
     $await("$dir/$name.start");
     $held = false;
+    $committedAt = null;
     $userLocked = false;
-    DB::listen(function ($query) use ($data, $dir, $name, $await, &$held, &$userLocked): void {
+    DB::listen(function ($query) use ($data, $dir, $name, $await, &$held, &$userLocked, &$committedAt): void {
         $club = str_contains($query->sql, '"clubs"') && str_contains($query->sql, 'for update');
         $user = str_contains($query->sql, 'pg_advisory_xact_lock');
         if ($club && $userLocked) {
@@ -48,6 +49,9 @@ try {
         };
         if (! $held && $barrier) {
             $held = true;
+            DB::afterCommit(static function () use (&$committedAt): void {
+                $committedAt = microtime(true);
+            });
             file_put_contents("$dir/$name.locked", '1');
             $await("$dir/$name.finish");
         }
@@ -76,7 +80,7 @@ try {
         $kernel->terminate($request, $response);
         $status = $response->getStatusCode();
     }
-    $result = ['status' => $status, 'depth' => DB::transactionLevel(), 'user_locked' => $userLocked];
+    $result = ['status' => $status, 'depth' => DB::transactionLevel(), 'user_locked' => $userLocked, 'committed_at' => $committedAt, 'finished_at' => microtime(true)];
 } catch (Throwable $e) {
     // Never copy request data, SQL bindings or response bodies into evidence.
     $result = ['error' => $e::class, 'depth' => DB::transactionLevel()];

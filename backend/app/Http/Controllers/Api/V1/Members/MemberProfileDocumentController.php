@@ -18,12 +18,12 @@ use Illuminate\Http\Request;
 class MemberProfileDocumentController extends Controller
 {
     private const OFFICER_READ_ROLE_SLUGS = [
-        'president-admin',
+        'president',
         'secretary',
     ];
 
     private const OFFICER_WRITE_ROLE_SLUGS = [
-        'president-admin',
+        'president',
         'secretary',
     ];
 
@@ -99,12 +99,12 @@ class MemberProfileDocumentController extends Controller
             ], 403);
         }
 
-        $document = $documents->createForMember(
-            $club,
-            $member,
-            $request->user(),
-            $request->validated()
-        );
+        $document = app(\App\Services\Access\OrganisationTransactionGuard::class)->run($club, function () use ($club, $member, $request, $documents) {
+            abort_unless($this->userCanWriteMemberDocuments($request->user(), $club), 403);
+            $current = Member::query()->where('club_id', $club->id)->whereKey($member->id)->firstOrFail();
+
+            return $documents->createForMember($club, $current, $request->user(), $request->validated());
+        });
 
         return response()->json([
             'profile_document' => (new MemberProfileDocumentResource($document))->resolve(),
@@ -136,11 +136,13 @@ class MemberProfileDocumentController extends Controller
             ], 403);
         }
 
-        $document = $documents->updateForMember(
-            $document,
-            $request->user(),
-            $request->validated()
-        );
+        $document = app(\App\Services\Access\OrganisationTransactionGuard::class)->run($club, function () use ($club, $member, $document, $request, $documents) {
+            abort_unless($this->userCanWriteMemberDocuments($request->user(), $club), 403);
+            $current = MemberProfileDocument::query()->where('club_id', $club->id)
+                ->where('member_id', $member->id)->whereKey($document->id)->lockForUpdate()->firstOrFail();
+
+            return $documents->updateForMember($current, $request->user(), $request->validated());
+        });
 
         return response()->json([
             'profile_document' => (new MemberProfileDocumentResource($document))->resolve(),
@@ -153,7 +155,7 @@ class MemberProfileDocumentController extends Controller
             return true;
         }
 
-        $roleSlug = $this->activeRoleSlug($user, $club);
+        $roleSlug = $this->effectiveOffice($user, $club);
 
         if (in_array($roleSlug, self::OFFICER_READ_ROLE_SLUGS, true)) {
             return true;
@@ -164,17 +166,11 @@ class MemberProfileDocumentController extends Controller
 
     private function userCanWriteMemberDocuments(User $user, Club $club): bool
     {
-        return in_array($this->activeRoleSlug($user, $club), self::OFFICER_WRITE_ROLE_SLUGS, true);
+        return in_array($this->effectiveOffice($user, $club), self::OFFICER_WRITE_ROLE_SLUGS, true);
     }
 
-    private function activeRoleSlug(User $user, Club $club): ?string
+    private function effectiveOffice(User $user, Club $club): ?string
     {
-        $membership = $user->clubMemberships()
-            ->with('role')
-            ->where('club_id', $club->id)
-            ->where('status', 'active')
-            ->first();
-
-        return $membership?->role?->slug;
+        return app(\App\Services\Access\ClubPermissionService::class)->effectiveOffice($user, (int) $club->id);
     }
 }

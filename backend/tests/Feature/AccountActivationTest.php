@@ -18,6 +18,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class AccountActivationTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
     public function test_authenticated_authorized_issuance_stores_only_hash_and_revokes_replacement(): void
     {
         [$club, $target, $member] = $this->linkedTarget();
@@ -227,9 +229,11 @@ class AccountActivationTest extends FinancialPostgresTestCase
             'email' => 'actor@example.test',
             'password' => 'Synthetic!Actor123',
         ]);
-        ClubMembership::query()->create([
+        $membership = ClubMembership::query()->create([
             'club_id' => $club->id, 'user_id' => $actor->id, 'role_id' => $role->id, 'status' => 'active',
         ]);
+
+        self::seedAnnouncementOfficerTerm($membership, 'secretary');
 
         return $actor;
     }

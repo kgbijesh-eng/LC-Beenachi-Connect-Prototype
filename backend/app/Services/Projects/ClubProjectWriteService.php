@@ -9,7 +9,8 @@ use App\Models\Member;
 use App\Models\User;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
+use App\Services\Access\OrganisationTransactionGuard;
+use App\Services\Access\TransactionActorAuthorisation;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -37,7 +38,8 @@ class ClubProjectWriteService
         $this->assertLeadMemberBelongsToClub($club, $attributes['lead_member_id'] ?? null);
         $this->assertPlannedDateOrder($attributes);
 
-        return DB::transaction(function () use ($club, $actor, $attributes): ClubProject {
+        return app(OrganisationTransactionGuard::class)->run($club, function ($context) use ($club, $actor, $attributes): ClubProject {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'projects.manage');
             $project = ClubProject::query()->create(array_merge(
                 Arr::only($attributes, ['record_type', ...self::DRAFT_FIELDS]),
                 [
@@ -61,7 +63,8 @@ class ClubProjectWriteService
         $this->assertPlannedDateOrder($attributes);
         $this->assertActualDateOrder($attributes);
 
-        return DB::transaction(function () use ($club, $project, $actor, $attributes): ClubProject {
+        return app(OrganisationTransactionGuard::class)->run($club, function ($context) use ($club, $project, $actor, $attributes): ClubProject {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'projects.manage');
             $locked = $this->lockedProject($club, $project);
             $this->assertLockVersion($locked, (int) $attributes['lock_version']);
 
@@ -173,7 +176,8 @@ class ClubProjectWriteService
 
     private function transition(Club $club, ClubProject $project, User $actor, int $lockVersion, string $action, callable $changes): ClubProject
     {
-        return DB::transaction(function () use ($club, $project, $actor, $lockVersion, $action, $changes): ClubProject {
+        return app(OrganisationTransactionGuard::class)->run($club, function ($context) use ($club, $project, $actor, $lockVersion, $action, $changes): ClubProject {
+            app(TransactionActorAuthorisation::class)->requirePermission($context, $club->id, $actor, 'projects.manage');
             $locked = $this->lockedProject($club, $project);
             $this->assertLockVersion($locked, $lockVersion);
             $before = $locked->toArray();

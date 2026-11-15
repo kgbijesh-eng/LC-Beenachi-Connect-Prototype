@@ -7,12 +7,6 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class MemberDataImportCommitRequest extends FormRequest
 {
-    private const IMPORT_COMMIT_ROLE_SLUGS = [
-        'president-admin',
-        'secretary',
-        'treasurer',
-    ];
-
     public function authorize(): bool
     {
         $user = $this->user();
@@ -22,15 +16,7 @@ class MemberDataImportCommitRequest extends FormRequest
             return false;
         }
 
-        $roleSlug = $user->clubMemberships()
-            ->with('role')
-            ->where('club_id', $club->id)
-            ->where('status', 'active')
-            ->first()
-            ?->role
-            ?->slug;
-
-        return in_array($roleSlug, self::IMPORT_COMMIT_ROLE_SLUGS, true);
+        return app(\App\Services\Access\ClubPermissionService::class)->effectiveOffice($user, (int) $club->id) !== null;
     }
 
     public function rules(): array

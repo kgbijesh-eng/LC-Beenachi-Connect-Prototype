@@ -24,14 +24,15 @@ final class ClubCutoverEvidenceVerificationService
         }
 
         return $this->organisations->run($package->club_id, function (OrganisationTransactionContext $context) use ($package, $evidence, $actor, $result, $reference, $safeNote, $expectedLockVersion) {
-            $locked = ClubAccountingCutoverPackage::whereKey($package->id)->where('club_id', $context->organisationId)->lockForUpdate()->firstOrFail();
-            $lockedEvidence = ClubAccountingCutoverEvidenceReference::query()->whereKey($evidence->id)
-                ->where('club_id', $locked->club_id)->where('cutover_package_id', $locked->id)->first();
-            if (! $lockedEvidence || $locked->club_id !== $package->club_id || $locked->package_version !== $package->package_version) {
-                throw new CutoverAuthorizationException('The evidence verification package binding is stale.');
-            }
-            $this->authority->activeMember($locked, $actor, 'secretary');
-            $this->authority->permission($locked, $actor, 'finance.cutover.package.verify');
+            $at = now('UTC')->toImmutable();
+            $scoped = ClubAccountingCutoverPackage::whereKey($package->id)->where('club_id', $context->organisationId);
+            $snapshot = $scoped->firstOrFail();
+            $this->boundEvidence($snapshot, $package, $evidence);
+            $this->authority->activeMember($snapshot, $actor, 'secretary', $at);
+            $this->authority->permission($snapshot, $actor, 'finance.cutover.package.verify', $at);
+
+            $locked = $scoped->lockForUpdate()->firstOrFail();
+            $lockedEvidence = $this->boundEvidence($locked, $package, $evidence);
             $bindingDigest = self::bindingDigest($lockedEvidence);
             $existing = ClubAccountingCutoverEvidenceVerification::where('club_id', $context->organisationId)->where('verification_reference', $reference)->first();
             if ($existing) {
@@ -55,6 +56,17 @@ final class ClubCutoverEvidenceVerificationService
 
             return $verification;
         }, attempts: 1);
+    }
+
+    private function boundEvidence(ClubAccountingCutoverPackage $current, ClubAccountingCutoverPackage $expected, ClubAccountingCutoverEvidenceReference $evidence): ClubAccountingCutoverEvidenceReference
+    {
+        $bound = ClubAccountingCutoverEvidenceReference::query()->whereKey($evidence->id)
+            ->where('club_id', $current->club_id)->where('cutover_package_id', $current->id)->first();
+        if (! $bound || $current->club_id !== $expected->club_id || $current->package_version !== $expected->package_version) {
+            throw new CutoverAuthorizationException('The evidence verification package binding is stale.');
+        }
+
+        return $bound;
     }
 
     private function createVerification(array $attributes): ClubAccountingCutoverEvidenceVerification

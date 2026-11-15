@@ -22,9 +22,10 @@ try{
     $safe=DB::selectOne("SELECT current_user='lc_beenachi_app' AND current_user=pg_get_userbyid(d.datdba) AND NOT r.rolsuper AND NOT r.rolcreatedb AND NOT r.rolcreaterole AND NOT r.rolreplication AND NOT r.rolbypassrls AND NOT EXISTS (SELECT 1 FROM pg_auth_members WHERE member=r.oid) AND NOT EXISTS (SELECT 1 FROM pg_database WHERE datname NOT IN ('lcb_p02b2_cutover_test','postgres','template0','template1')) AS safe FROM pg_database d JOIN pg_roles r ON r.rolname=current_user WHERE d.datname=current_database()");
     if(!in_array($safe->safe,[true,1,'1','t'],true)){throw new RuntimeException('Unsafe C worker role/inventory.');}
     DB::select("SELECT set_config('application_name',?,false)",['p02b2-c-'.$r['mode']]);
+    file_put_contents($directory.'/pid', (string) DB::selectOne('SELECT pg_backend_pid() AS pid')->pid);
     DB::listen(function(QueryExecuted $e)use(&$locks,$directory,$r){
         if(!str_contains(strtolower($e->sql),'for update')){return;}$locks[]=$e->sql;
-        if(count($locks)!==1){return;}file_put_contents($directory.'/locked','1');
+        if(count($locks)!==1){return;}file_put_contents($directory.'/locked',json_encode(['sql'=>$e->sql,'bindings'=>$e->bindings],JSON_THROW_ON_ERROR));
         if(!$r['hold']){return;}$deadline=microtime(true)+25;
         while(!is_file($directory.'/release')){if(microtime(true)>$deadline){throw new RuntimeException('C owned lock hold timeout.');}usleep(5_000);}
     });

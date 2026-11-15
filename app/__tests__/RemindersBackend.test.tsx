@@ -10,7 +10,8 @@ const authState = vi.hoisted(() => ({
   }
 }));
 
-vi.mock("../DevAuthSession", () => ({
+vi.mock("../DevAuthSession", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../DevAuthSession")>(),
   useDevAuth: () => ({ session: authState.session })
 }));
 
@@ -29,6 +30,7 @@ describe("Notifications source truth", () => {
     ["member", false]
   ] as const)("shows truthful reminder-only capability for %s", async (role, canManage) => {
     authState.role = role;
+    Object.assign(authState.session.membership, { authority_as_of: "2020-01-01T00:00:00Z", effective_office: canManage ? { office: role, effective_until: "2099-01-01T00:00:00Z" } : null, permissions: canManage ? [{ slug: "reminders.manage" }] : [] });
     global.fetch = vi.fn(async () => new Response(JSON.stringify({
       data: [],
       meta: { current_page: 1, last_page: 1, total: 0 }

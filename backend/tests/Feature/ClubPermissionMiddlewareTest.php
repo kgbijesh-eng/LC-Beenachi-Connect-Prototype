@@ -9,11 +9,13 @@ use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
+use Tests\Support\SeedsAnnouncementOfficerTerms;
 use Tests\TestCase;
 
 class ClubPermissionMiddlewareTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAnnouncementOfficerTerms;
 
     protected function setUp(): void
     {
@@ -31,6 +33,8 @@ class ClubPermissionMiddlewareTest extends TestCase
 
         $club = Club::where('code', 'LCB')->firstOrFail();
         $user = User::where('email', 'president@lcbeenachi.test')->firstOrFail();
+
+        self::seedAnnouncementOfficerTerm($user->clubMemberships()->where('club_id', $club->id)->sole(), 'president-admin');
 
         $token = $user->createToken('test-token')->plainTextToken;
 

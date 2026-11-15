@@ -34,7 +34,8 @@ authState.auth = {
   authenticatedFetch: async () => new Response(null, { status: 501 })
 };
 
-vi.mock("../DevAuthSession", () => ({
+vi.mock("../DevAuthSession", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../DevAuthSession")>(),
   DevAuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useDevAuth: () => authState.auth
 }));
@@ -164,6 +165,7 @@ async function openSujeshProfile() {
 }
 
 beforeEach(() => {
+  Object.assign(authState.session.membership, { effective_office: null, permissions: [] });
   authState.role = "treasurer";
   authState.identity = "ranjith-treasurer";
   authState.member = { id: 35, member_code: "26766860", full_name: "Ranjith MR" };
@@ -292,6 +294,7 @@ describe("MemberProfile document loading boundary", () => {
     authState.session.role = role;
     authState.session.identity = identity;
     authState.session.membership.role.slug = role === "president" ? "president-admin" : role;
+    Object.assign(authState.session.membership, { authority_as_of: "2020-01-01T00:00:00Z", effective_office: { office: role, effective_until: "2099-01-01T00:00:00Z" }, permissions: [{ slug: "members.manage" }] });
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
     await openSujeshProfile();
 

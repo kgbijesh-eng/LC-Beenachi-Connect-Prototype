@@ -13,12 +13,6 @@ use Illuminate\Http\Request;
 
 class PaymentHistoryController extends Controller
 {
-    private const SELECTED_MEMBER_PAYMENT_HISTORY_ROLE_SLUGS = [
-        'president-admin',
-        'secretary',
-        'treasurer',
-    ];
-
     private const DEFAULT_PER_PAGE = 10;
 
     private const MAX_PER_PAGE = 25;
@@ -97,21 +91,7 @@ class PaymentHistoryController extends Controller
 
     private function userCanReadSelectedMemberPaymentHistory(User $user, Club $club): bool
     {
-        return in_array(
-            $this->activeRoleSlug($user, $club),
-            self::SELECTED_MEMBER_PAYMENT_HISTORY_ROLE_SLUGS,
-            true
-        );
+        return app(\App\Services\Access\ClubPermissionService::class)->userHasPermission($user, 'finance.club.view', (int) $club->id);
     }
 
-    private function activeRoleSlug(User $user, Club $club): ?string
-    {
-        $membership = $user->clubMemberships()
-            ->with('role')
-            ->where('club_id', $club->id)
-            ->where('status', 'active')
-            ->first();
-
-        return $membership?->role?->slug;
-    }
 }

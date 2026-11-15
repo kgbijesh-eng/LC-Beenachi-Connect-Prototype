@@ -40,6 +40,11 @@ class ReceiptGenerationService
         $validated = $this->validateAttributes($attributes);
 
         return app(OrganisationTransactionGuard::class)->run((int) $payment->club_id, function (OrganisationTransactionContext $context) use ($issuedByUser, $payment, $validated): Receipt {
+            $scopedPayment = Payment::query()->where('club_id', $context->organisationId)
+                ->whereKey($payment->id)->firstOrFail();
+            $scopedPayment->load('club');
+            $this->authorizeGeneration($issuedByUser, $scopedPayment, now('UTC')->toImmutable());
+
             $lockedPayment = Payment::query()->where('club_id', $context->organisationId)
                 ->whereKey($payment->id)
                 ->lockForUpdate()
@@ -47,7 +52,6 @@ class ReceiptGenerationService
 
             $lockedPayment->loadMissing(['club', 'member', 'ledgerEntry']);
 
-            $this->authorizeGeneration($issuedByUser, $lockedPayment);
             $this->ensurePaymentIsReceiptable($lockedPayment);
             $this->ensurePaymentDoesNotAlreadyHaveReceipt($lockedPayment);
 
@@ -72,7 +76,7 @@ class ReceiptGenerationService
     /**
      * @throws AuthorizationException
      */
-    private function authorizeGeneration(User $issuedByUser, Payment $payment): void
+    private function authorizeGeneration(User $issuedByUser, Payment $payment, \DateTimeInterface $decisionAt): void
     {
         if (! $payment->club) {
             throw new AuthorizationException('Receipts cannot be generated for payments without a valid club.');
@@ -86,7 +90,7 @@ class ReceiptGenerationService
             throw new AuthorizationException('The user cannot access this club.');
         }
 
-        if (! $this->clubPermissionService->userHasPermission($issuedByUser, self::PERMISSION_GENERATE_RECEIPT, (int) $payment->club_id)) {
+        if (! $this->clubPermissionService->userHasPermission($issuedByUser, self::PERMISSION_GENERATE_RECEIPT, (int) $payment->club_id, $decisionAt)) {
             throw new AuthorizationException('The user does not have permission to generate receipts.');
         }
     }

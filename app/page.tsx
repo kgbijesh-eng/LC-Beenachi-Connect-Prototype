@@ -14,7 +14,7 @@ import ClubOrdinaryIncomeReceiptBackend from "./ClubOrdinaryIncomeReceiptBackend
 import ClubOrdinaryIncomeReceiptHistoryBackend from "./ClubOrdinaryIncomeReceiptHistoryBackend";
 import PersonalProfileDocuments from "./PersonalProfileDocuments";
 import AnnouncementsBackend, { AnnouncementDashboardStatus } from "./AnnouncementsBackend";
-import { DevAuthProvider, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";
+import { DevAuthProvider, hasEffectivePermission, type DevIdentity, type DevRole, useDevAuth } from "./DevAuthSession";
 import { getApiBaseUrl } from "./apiBaseUrl";
 import LoginScreen from "./LoginScreen";
 
@@ -3193,7 +3193,7 @@ function ClubFinanceReportsPanel({
   displayMode: "reports" | "balance-sheet";
 }) {
   const { session } = useDevAuth();
-  const canViewClubFinanceReports = role === "president" || role === "secretary" || role === "treasurer";
+  const canViewClubFinanceReports = hasEffectivePermission(session, "finance.club.view");
   const [status, setStatus] = useState<ClubFinanceReportStatus>(canViewClubFinanceReports ? "loading" : "forbidden");
   const [report, setReport] = useState<ClubFinanceReports | null>(null);
   const [balanceSheet, setBalanceSheet] = useState<ClubBalanceSheet | null>(null);
@@ -5703,7 +5703,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
     member.id &&
     linkedMemberCode === member.id
   );
-  const canManageProfileDocumentMetadata = role === "president" || role === "secretary";
+  const canManageProfileDocumentMetadata = hasEffectivePermission(session, "members.manage");
   const [documentStatus, setDocumentStatus] = useState<ProfileDocumentStatus>("initializing");
   const [documentMessage, setDocumentMessage] = useState("Loading profile document metadata...");
   const [documentToken, setDocumentToken] = useState<string | null>(null);
@@ -5720,7 +5720,7 @@ function MemberProfile({ member, role }: { member: Member; role: Role }) {
   });
   const isDocumentBusy = documentStatus === "initializing" || documentStatus === "loading" || documentStatus === "saving";
 
-  const canEditMember = role === "president" || role === "secretary";
+  const canEditMember = hasEffectivePermission(session, "members.manage");
   const [isEditingMember, setIsEditingMember] = useState(false);
   const [memberForm, setMemberForm] = useState({
     name: "",
@@ -7495,8 +7495,8 @@ function PaymentsReceiptsHub({ setScreen }: { setScreen: (screen: Screen) => voi
 }
 
 function RecordMemberPayment({ role }: { role: Role }) {
-  const { session } = useDevAuth();
-  const canRecordPayment = role === "president" || role === "secretary" || role === "treasurer";
+  const { session, authenticatedFetch } = useDevAuth();
+  const canRecordPayment = hasEffectivePermission(session, "payments.record");
   const [paymentStatus, setPaymentStatus] = useState<PaymentRecordingStatus>(canRecordPayment ? "initializing" : "ready");
   const [apiMessage, setApiMessage] = useState(
     canRecordPayment
@@ -7671,7 +7671,7 @@ function RecordMemberPayment({ role }: { role: Role }) {
     setRecordedPayment(null);
 
     try {
-      const response = await fetch(API_BASE_URL + "/clubs/" + paymentClubId + "/members/" + selectedMemberId + "/payments", {
+      const response = await authenticatedFetch("/clubs/" + paymentClubId + "/members/" + selectedMemberId + "/payments", {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -7914,7 +7914,7 @@ function CollectionBoxReceipt({ role }: { role: Role }) {
 
 function ReceiptList({ role }: { role: Role }) {
   const { session } = useDevAuth();
-  const canUsePstReceiptAccess = role === "president" || role === "secretary" || role === "treasurer";
+  const canUsePstReceiptAccess = hasEffectivePermission(session, "payments.record");
   const [status, setStatus] = useState<ReceiptLookupStatus>("initializing");
   const [message, setMessage] = useState("Loading receipt access context...");
   const [receiptToken, setReceiptToken] = useState<string | null>(null);
@@ -8199,7 +8199,7 @@ function ReceiptList({ role }: { role: Role }) {
 
 function PaymentHistory({ role }: { role: Role }) {
   const { session } = useDevAuth();
-  const canUseSelectedMemberHistory = role === "president" || role === "secretary" || role === "treasurer";
+  const canUseSelectedMemberHistory = hasEffectivePermission(session, "finance.club.view");
   const [status, setStatus] = useState<PaymentHistoryStatus>("initializing");
   const [message, setMessage] = useState("Loading payment history access context...");
   const [historyToken, setHistoryToken] = useState<string | null>(null);
@@ -9177,7 +9177,7 @@ function EventsMeetings({
   onSelectEventMeeting?: (item: BackendEventMeeting) => void;
 }) {
   const { session } = useDevAuth();
-  const canManageEvents = role === "president" || role === "secretary";
+  const canManageEvents = hasEffectivePermission(session, "events.manage");
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "missing-club" | "unauthenticated" | "forbidden" | "error">("loading");
   const [message, setMessage] = useState("Loading Events & Meetings from the backend...");
   const [token, setToken] = useState<string | null>(null);
@@ -9614,7 +9614,7 @@ function clubProjectForm(project: ClubProjectRecord): ClubProjectForm {
 
 function ProjectsActivities({ role, setScreen }: { role: Role; setScreen: (screen: Screen) => void }) {
   const { session } = useDevAuth();
-  const canManage = role === "president" || role === "secretary";
+  const canManage = hasEffectivePermission(session, "projects.manage");
   const [token, setToken] = useState<string | null>(null);
   const [clubId, setClubId] = useState<number | null>(null);
   const [records, setRecords] = useState<ClubProjectRecord[]>([]);

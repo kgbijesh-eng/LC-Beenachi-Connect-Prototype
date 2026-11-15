@@ -20,6 +20,8 @@ use Tests\Support\FinancialPostgresTestCase;
 
 class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends FinancialPostgresTestCase
 {
+    use \Tests\Support\SeedsAnnouncementOfficerTerms;
+
 
     public function test_3v_validation_document_exists_and_records_closure_boundary(): void
     {
@@ -293,13 +295,15 @@ class Milestone3vPaymentReceiptGenerationValidationAndClosureTest extends Financ
             'password' => 'password',
         ]);
 
-        ClubMembership::query()->create([
+        $membership = ClubMembership::query()->create([
             'club_id' => $club->id,
             'user_id' => $user->id,
             'role_id' => $role->id,
             'status' => 'active',
             'joined_at' => now(),
         ]);
+
+        self::seedAnnouncementOfficerTerm($membership, 'treasurer');
 
         return $user;
     }

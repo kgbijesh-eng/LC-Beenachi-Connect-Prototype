@@ -10,7 +10,8 @@ const auth = vi.hoisted(() => ({
   authenticatedFetch: vi.fn()
 }));
 
-vi.mock("../DevAuthSession", () => ({ useDevAuth: () => auth }));
+vi.mock("../DevAuthSession", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../DevAuthSession")>(), useDevAuth: () => auth }));
 
 import PersonalProfileDocuments from "../PersonalProfileDocuments";
 
