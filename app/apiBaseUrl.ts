@@ -2,6 +2,10 @@ const DEFAULT_API_ORIGIN = "http://127.0.0.1:8000";
 
 export function getApiBaseUrl(): string {
   const configured = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  // Hosted gateways can serve the frontend and API on either of their public hostnames.
+  if (configured === "same-origin") {
+    return typeof window === "undefined" ? "/api/v1" : new URL("/api/v1", window.location.origin).href;
+  }
   const origin = configured || (process.env.NODE_ENV === "production" ? "" : DEFAULT_API_ORIGIN);
   if (!origin) {
     if (typeof window === "undefined") return "/api/v1";
