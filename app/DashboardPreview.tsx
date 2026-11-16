@@ -6,12 +6,12 @@ import MemberDashboard from "./MemberDashboard";
 import memberStyles from "./MemberDashboard.module.css";
 import styles from "./DashboardPreview.module.css";
 
-export type DashboardDestination = "record-payment" | "statement" | "outstanding" | "finance-report"
+export type DashboardDestination = "record-payment" | "record-expense" | "statement" | "outstanding" | "finance-report"
   | "digital-card" | "my-dues" | "my-receipts" | "profile" | "events" | "announcements";
 
 type ReadState<T> = { status: "loading" | "unavailable" } | { status: "ready"; data: T };
 type ReadSource<T> = { path: string; fetcher: ReturnType<typeof useDevAuth>["authenticatedFetch"]; result: ReadState<T> };
-type Dues = { paise: number; members?: number; collected?: number };
+type Dues = { paise: number; members?: number; collected?: number; paymentCount?: number };
 type Activity = { id: number; title: string; date: string };
 type Payment = { id: number; member_id: number; amount_paise: number; payment_date: string; receipt: { receipt_number: string; status: string } | null };
 type Event = { club_id: number; title: string; status: string; starts_at: string | null; start_date: string | null; venue: string | null };
@@ -84,7 +84,7 @@ function DashboardContent({ navigate }: { navigate: (destination: DashboardDesti
 
   // The posted-ledger dues report and the allocated-obligations screen are separate sources.
   // Link the priority to the report that supplied it.
-  const readDues = useMemoizedDues(clubId, memberId, officer);
+  const readDues = useMemoizedDues(clubId, memberId, officer, session?.role === "treasurer");
   const readPayments = useMemoizedPayments(memberId);
   const readEvents = useMemoizedEvents(clubId);
   const dues = useSource(officer && canClubReport ? root + "/finance/reports" : canPersonalFinance ? root + "/finance/me/summary" : null, readDues);
@@ -131,6 +131,55 @@ function DashboardContent({ navigate }: { navigate: (destination: DashboardDesti
     onDues={canPersonalFinance ? () => navigate("my-dues") : undefined}
     onPayments={canPersonalFinance ? () => navigate("my-receipts") : undefined}
   />;
+
+  if (session?.role === "treasurer") {
+    const canExpense = hasEffectivePermission(session, "finance.club.expenses.create");
+    const actions: Array<[DashboardDestination, string, boolean]> = [
+      ["record-payment", "Record Payment", canRecord],
+      ["record-expense", "Record Expense", canExpense],
+      ["statement", "Open Statement", canStatement]
+    ];
+    const members = dues.status === "ready" ? dues.data.members : undefined;
+    const paymentCount = dues.status === "ready" ? dues.data.paymentCount : undefined;
+
+    return <section className={styles.preview} aria-label="Treasurer dashboard">
+      <header className={styles.treasurerHeader}><h2>Treasurer’s Dashboard</h2></header>
+      {canClubReport && <div className={styles.treasurerFigures}>
+        <section className={`${styles.metric} ${styles.treasurerDues}`} aria-labelledby="treasurer-dues">
+          <h3 id="treasurer-dues">Member dues outstanding</h3>
+          <p>All posted periods · Member ledger</p>
+          <div role="status">
+            <Amount source={dues} value={value => value.paise} />
+            {dues.status === "ready" && <p>{hasPriority
+              ? members === 1 ? "1 member has outstanding dues" : `${members} members have outstanding dues`
+              : "No outstanding dues in the posted member ledger"}</p>}
+            {dues.status === "unavailable" && <p>Unable to verify member dues.</p>}
+          </div>
+          <button type="button" className={hasPriority ? styles.primary : styles.textButton} onClick={() => navigate("finance-report")}>
+            {hasPriority ? "Review member-wise dues for follow-up" : "Open Member-wise Dues Summary"} ›
+          </button>
+        </section>
+        <section className={styles.metric} aria-labelledby="treasurer-payments">
+          <h3 id="treasurer-payments">Posted payments</h3>
+          <p>All posted periods</p>
+          <div role="status">
+            <strong>{dues.status === "loading" ? "Loading…" : dues.status === "ready" && dues.data.collected !== undefined
+              ? money.format(dues.data.collected / 100) : "Unavailable"}</strong>
+            <p>Posted payment count: {dues.status === "loading" ? "Loading…" : paymentCount ?? "Unavailable"}</p>
+          </div>
+        </section>
+      </div>}
+      <section className={styles.panel}>
+        <h3>Quick Actions</h3>
+        <div className={styles.quick}>
+          {actions.filter(([, , allowed]) => allowed).map(([target, label]) =>
+            <button type="button" key={target} onClick={() => navigate(target)}><span aria-hidden="true">↗</span>{label}</button>)}
+        </div>
+        {!actions.some(([, , allowed]) => allowed) && <p>No finance shortcuts are available for this account.</p>}
+      </section>
+      <div className={styles.treasurerActivity}>{events}{notices}</div>
+    </section>;
+  }
 
   const quick: Array<[DashboardDestination, string, boolean]> = [
     ["record-payment", "Record payment", canRecord],
@@ -194,17 +243,29 @@ function DashboardContent({ navigate }: { navigate: (destination: DashboardDesti
   </section>;
 }
 
-function useMemoizedDues(clubId: number | undefined, memberId: number | undefined, officer: boolean) {
+function useMemoizedDues(clubId: number | undefined, memberId: number | undefined, officer: boolean, treasurer: boolean) {
   return useCallback((body: unknown): Dues => {
     if (officer) {
-      const report = (body as { finance_reports?: { club_id: number; outstanding_dues_summary: { total_outstanding_amount: string; members_with_dues_count: number }; payment_collection_summary: { posted_payment_total: string } } })?.finance_reports;
+      const report = (body as { finance_reports?: { club_id: number; outstanding_dues_summary: { total_outstanding_amount: string; members_with_dues_count: number }; payment_collection_summary: { posted_payment_total: string; posted_payment_count?: number } } })?.finance_reports;
       if (!report || report.club_id !== clubId || !nonnegativeInteger(report.outstanding_dues_summary?.members_with_dues_count)) throw new Error("Invalid club report");
-      return { paise: paise(report.outstanding_dues_summary.total_outstanding_amount), members: report.outstanding_dues_summary.members_with_dues_count, collected: paise(report.payment_collection_summary?.posted_payment_total) };
+      const outstanding = paise(report.outstanding_dues_summary.total_outstanding_amount);
+      const members = report.outstanding_dues_summary.members_with_dues_count;
+      const collection = report.payment_collection_summary;
+      if (!treasurer) return { paise: outstanding, members, collected: paise(collection?.posted_payment_total) };
+      if ((outstanding === 0) !== (members === 0)) throw new Error("Inconsistent member dues");
+      const count = collection?.posted_payment_count;
+      let collected: number | undefined;
+      try {
+        collected = paise(collection?.posted_payment_total);
+      } catch {
+        // Missing payment totals do not invalidate verified member dues.
+      }
+      return { paise: outstanding, members, collected, paymentCount: nonnegativeInteger(count) ? count : undefined };
     }
     const balance = (body as { data?: { member_id: number; currency: string; outstanding_paise: number } })?.data;
     if (!balance || balance.member_id !== memberId || balance.currency !== "INR" || !nonnegativeInteger(balance.outstanding_paise)) throw new Error("Invalid personal balance");
     return { paise: balance.outstanding_paise };
-  }, [clubId, memberId, officer]);
+  }, [clubId, memberId, officer, treasurer]);
 }
 
 function useMemoizedPayments(memberId: number | undefined) {

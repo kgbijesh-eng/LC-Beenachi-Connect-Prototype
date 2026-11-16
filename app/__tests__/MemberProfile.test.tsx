@@ -421,10 +421,17 @@ describe("MemberProfile document loading boundary", () => {
     authState.session.role = role;
     authState.session.identity = identity;
     authState.session.membership.role.slug = roleSlug;
+    if (role === "treasurer") {
+      Object.assign(authState.session.membership, {
+        authority_as_of: "2020-01-01T00:00:00Z",
+        effective_office: { office: "treasurer", effective_until: "2099-01-01T00:00:00Z" },
+        permissions: ["finance.club.view", "club.view"].map(slug => ({ slug }))
+      });
+    }
     installFetchScenario({ documentStatus: 200, documentPayload: { profile_documents: [] } });
     render(<Prototype />);
 
-    expect(await screen.findByText("Unable to verify dues. No priority can be confirmed.")).toBeVisible();
+    expect(await screen.findByText(role === "treasurer" ? "Unable to verify member dues." : "Unable to verify dues. No priority can be confirmed.")).toBeVisible();
     expect(screen.queryByText("Finance summary not connected")).not.toBeInTheDocument();
   });
 

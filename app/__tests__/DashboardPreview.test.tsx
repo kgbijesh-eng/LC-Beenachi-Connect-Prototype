@@ -28,14 +28,14 @@ const report = (amount: string) => ({
   finance_reports: {
     club_id: 7,
     outstanding_dues_summary: { total_outstanding_amount: amount, members_with_dues_count: amount === "0.00" ? 0 : 1 },
-    payment_collection_summary: { posted_payment_total: "42.00" }
+    payment_collection_summary: { posted_payment_total: "42.00", posted_payment_count: 2 }
   }
 });
 
 beforeEach(() => {
   auth.session.role = "treasurer";
   auth.session.membership.member = null;
-  auth.session.membership.permissions = grants("club.view", "members.view", "finance.club.view", "finance.manage", "finance.club.statement.view", "events.view", "announcements.view");
+  auth.session.membership.permissions = grants("club.view", "members.view", "finance.club.view", "finance.manage", "finance.club.statement.view", "finance.club.expenses.create", "events.view", "announcements.view");
   auth.authenticatedFetch.mockReset();
 });
 
@@ -46,12 +46,15 @@ it("shows one verified officer priority and opens existing finance destinations 
   const navigate = vi.fn();
   render(<StrictMode><DashboardPreview navigate={navigate} /></StrictMode>);
 
-  expect(await screen.findByRole("heading", { name: "₹125.00 in posted ledger dues" })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: /Review posted dues/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Record payment" }));
-  fireEvent.click(screen.getByRole("button", { name: "Club Account Statement" }));
-  fireEvent.click(screen.getByRole("button", { name: "Outstanding dues" }));
-  expect(navigate.mock.calls).toEqual([["finance-report"], ["record-payment"], ["statement"], ["outstanding"]]);
+  expect(await screen.findByText("₹125.00")).toBeVisible();
+  expect(screen.getByText("1 member has outstanding dues")).toBeVisible();
+  expect(screen.getByText("₹42.00")).toBeVisible();
+  expect(screen.getByText("Posted payment count: 2")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: /Review member-wise dues/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Record Payment" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open Statement" }));
+  fireEvent.click(screen.getByRole("button", { name: "Record Expense" }));
+  expect(navigate.mock.calls).toEqual([["finance-report"], ["record-payment"], ["statement"], ["record-expense"]]);
   expect(auth.authenticatedFetch.mock.calls.map(([path]) => path)).toEqual([
     "/clubs/7/finance/reports",
     "/clubs/7/events?scope=upcoming&per_page=10",
@@ -92,11 +95,13 @@ it.each([true, false])("distinguishes confirmed zero from an unavailable report 
   auth.session.membership.permissions = grants("club.view", "finance.club.view");
   auth.authenticatedFetch.mockResolvedValue(available ? Response.json(report("0.00")) : Response.json({}, { status: 503 }));
   render(<DashboardPreview navigate={vi.fn()} />);
-  expect(screen.getByText("Checking outstanding dues…")).toBeVisible();
-  expect(await screen.findByText(available ? "No outstanding dues for the posted periods in this report." : "Unable to verify dues. No priority can be confirmed.")).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Record payment" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Club Account Statement" })).toBeNull();
-  if (!available) expect(screen.queryByText("₹0.00")).toBeNull();
+  expect(screen.getAllByText("Loading…").length).toBeGreaterThan(0);
+  expect(await screen.findByText(available ? "No outstanding dues in the posted member ledger" : "Unable to verify member dues.")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Record Payment" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Open Statement" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Record Expense" })).toBeNull();
+  if (available) expect(screen.getByText("₹0.00")).toBeVisible();
+  else expect(screen.queryByText("₹0.00")).toBeNull();
 });
 
 it.each([true, false])("distinguishes member loading from confirmed zero or failed verification (available: %s)", async available => {
@@ -116,4 +121,16 @@ it.each([true, false])("distinguishes member loading from confirmed zero or fail
     expect(screen.queryByText("₹0.00")).toBeNull();
     expect(screen.queryByText("Up to date")).toBeNull();
   }
+});
+
+it("keeps verified dues visible when the posted payment fields are invalid", async () => {
+  const data = report("125.00");
+  auth.authenticatedFetch.mockImplementation(async (path: string) => Response.json(path.endsWith("/reports")
+    ? { finance_reports: { ...data.finance_reports, payment_collection_summary: { posted_payment_total: null, posted_payment_count: -1 } } }
+    : { data: [] }));
+  render(<DashboardPreview navigate={vi.fn()} />);
+
+  expect(await screen.findByText("₹125.00")).toBeVisible();
+  expect(screen.getByText("Posted payment count: Unavailable")).toBeVisible();
+  expect(screen.queryByText("₹0.00")).toBeNull();
 });

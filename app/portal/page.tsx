@@ -1901,6 +1901,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
   function openDashboardDestination(destination: DashboardDestination) {
     const screens = {
       "record-payment": "record-member-payment",
+      "record-expense": "finance-module",
       outstanding: "outstanding-dues",
       "digital-card": "digital-card",
       "my-dues": "my-dues",
@@ -1916,6 +1917,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
       setFinanceSection("Club Account Statement");
       setClubStatementSection("Account Overview");
     }
+    if (destination === "record-expense") setFinanceSection("Record Expense");
     if (destination === "finance-report") setFinanceSection("Club Finance Reports");
   }
 
