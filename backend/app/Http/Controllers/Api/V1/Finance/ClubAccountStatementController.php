@@ -29,6 +29,7 @@ final class ClubAccountStatementController extends Controller
                 periodId: $request->filled('period_id') ? (int) $request->validated('period_id') : null,
                 from: $request->validated('from'),
                 to: $request->validated('to'),
+                dashboard: $request->boolean('dashboard'),
             ));
         } catch (AccountingNotActivatedException $exception) {
             return response()->json(['message' => $exception->getMessage(), 'code' => 'ACCOUNTING_NOT_ACTIVATED'], 409);

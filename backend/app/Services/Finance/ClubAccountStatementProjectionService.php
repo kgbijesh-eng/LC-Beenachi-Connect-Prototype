@@ -44,6 +44,13 @@ final class ClubAccountStatementProjectionService
             }
             [$period, $from, $to] = $this->resolveRange($query);
             $activation = $this->resolveActivation($query, $from);
+            $cutover = $activation->cutover_date->format('Y-m-d');
+            if ($query->dashboard) {
+                if ($to < $cutover) {
+                    throw new AccountingNotActivatedException('Accounting was not activated during the selected range.');
+                }
+                $from = max($from, $cutover);
+            }
             $entries = $this->eligibleEntries(
                 $query->clubId,
                 $activation->cutover_date->format('Y-m-d'),
@@ -119,6 +126,9 @@ final class ClubAccountStatementProjectionService
             ->where('club_id', $query->clubId)
             ->where('lions_year', $query->lionsYear)
             ->first();
+        if (! $yearPeriod && $query->dashboard) {
+            throw new AccountingNotActivatedException('Accounting is not activated for the selected Lions Year.');
+        }
         if (! $yearPeriod || $yearPeriod->start_date->format('Y-m-d') !== sprintf('%04d-07-01', $year)
             || $yearPeriod->end_date->format('Y-m-d') !== sprintf('%04d-06-30', $year + 1)) {
             throw new InvalidClubAccountStatementQueryException('The selected Lions Year does not exist.');
@@ -173,7 +183,7 @@ final class ClubAccountStatementProjectionService
         }
         $cutover = $package->cutover_date->format('Y-m-d');
         $opening = $package->openingJournal;
-        if ($from < $cutover) {
+        if ($from < $cutover && ! $query->dashboard) {
             throw new InvalidClubAccountStatementQueryException('The statement range starts before the activated cutover boundary.');
         }
         if ($opening->club_id !== $query->clubId || $opening->accounting_period_id === null
@@ -266,6 +276,15 @@ final class ClubAccountStatementProjectionService
                         'amount_paise' => $link->amount_paise,
                     ])->all(),
                 ];
+                if ($query->dashboard) {
+                    $trace += [
+                        'account_code' => $account->code,
+                        'classification' => $classification->value,
+                        'fund_code' => $fund->value,
+                        'direction' => $direction,
+                        'amount_paise' => $line->amount_paise,
+                    ];
+                }
                 $rows[$key]['trace_references'][] = $trace;
                 $traceLines[] = $trace;
                 $lineCount++;
