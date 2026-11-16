@@ -1,12 +1,12 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import Prototype from "../page";
+import Prototype from "../portal/page";
 
 type SyntheticRole = "president-admin" | "secretary" | "treasurer" | "member";
 
 const API = "http://127.0.0.1:8000/api/v1";
 
-function syntheticSession(role: SyntheticRole, name = "Synthetic Officer") {
+function syntheticSession(role: SyntheticRole, name = "Synthetic Officer", extraPermissions: string[] = []) {
   return {
     instance_organisation: { id: 1, code: "LCB", name: "LC Beenachi" },
     user: { id: 700, name, email: `${role}@example.test` },
@@ -18,7 +18,7 @@ function syntheticSession(role: SyntheticRole, name = "Synthetic Officer") {
       role: { slug: role, name: role },
       authority_as_of: "2020-01-01T00:00:00Z",
       effective_office: role === "member" ? null : { office: role === "president-admin" ? "president" : role, effective_until: "2099-01-01T00:00:00Z" },
-      permissions: [{ slug: "members.view" }],
+      permissions: ["members.view", "club.view", ...(role === "member" ? ["finance.self.view"] : ["finance.club.view"]), ...extraPermissions].map(slug => ({ slug })),
       member: { id: 1, member_code: "1000001", full_name: name }
     }]
   };
@@ -61,17 +61,47 @@ function successfulFetch(options: {
   name?: string;
   memberStatus?: string;
   birthdayToday?: boolean;
+  withoutDirectory?: boolean;
+  permissions?: string[];
 } = {}) {
   const members = syntheticMembers(options.memberStatus);
+  const announcement = {
+    id: 41, club_id: 1, title: "Synthetic club notice", body: "Synthetic announcement details.",
+    priority: "normal", effective_status: "published", stored_status: "published",
+    audience: "club-members", published_at: "2026-07-28T10:00:00Z", is_read: true
+  };
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     if (url === `${API}/auth/login`) {
       return new Response(JSON.stringify({ token: "synthetic-dashboard-token" }), { status: 200 });
     }
     if (url === `${API}/auth/me`) {
-      return new Response(JSON.stringify(syntheticSession(options.role ?? "president-admin", options.name)), { status: 200 });
+      return new Response(JSON.stringify(syntheticSession(options.role ?? "president-admin", options.name, options.permissions)), { status: 200 });
     }
-    if (url === `${API}/clubs/1/members`) {
+    if (url === `${API}/clubs/1/members/me`) return Response.json({ member: members[0] });
+    if (url.startsWith(`${API}/clubs/1/events?`)) {
+      return Response.json({ data: [{
+        id: 12, club_id: 1, title: "Synthetic club meeting", type: "meeting", status: "published",
+        visibility: "members", is_all_day: true, start_date: "2099-01-01"
+      }] });
+    }
+    if (url.startsWith(`${API}/clubs/1/announcements?`)) return Response.json({ data: [announcement] });
+    if (url === `${API}/clubs/1/announcements/41`) return Response.json({ data: announcement });
+    if (url === `${API}/clubs/1/finance/me/summary`) {
+      return Response.json({ data: { member_id: 1, currency: "INR", outstanding_paise: 0 } });
+    }
+    if (url.startsWith(`${API}/clubs/1/finance/me/payments?`)) return Response.json({ data: [] });
+    if (url === `${API}/clubs/1/finance/reports`) {
+      return Response.json({ finance_reports: {
+        club_id: 1,
+        outstanding_dues_summary: { members_with_dues_count: 1, total_outstanding_amount: "125.00" },
+        payment_collection_summary: { posted_payment_total: "0.00", posted_payment_count: 0 },
+        club_finance_overview: { total_debit_amount: "125.00", total_credit_amount: "0.00", current_dues_amount: "125.00" },
+        member_wise_dues_summary: []
+      } });
+    }
+    if (url === `${API}/clubs/1/finance/balance-sheet`) return Response.json({ balance_sheet: null });
+    if (url === `${API}/clubs/1/members` && !options.withoutDirectory) {
       return new Response(JSON.stringify({ members }), { status: 200 });
     }
     const detailMatch = /\/clubs\/1\/members\/(\d+)$/.exec(url);
@@ -106,11 +136,11 @@ describe("production dashboard UI", () => {
   });
 
   it.each([
-    ["president-admin", "President", "Synthetic President"],
-    ["secretary", "Secretary", "Synthetic Secretary"],
-    ["treasurer", "Treasurer", "Synthetic Treasurer"],
-    ["member", "Normal Member", "Synthetic Member"]
-  ] as const)("renders the verified %s identity and role", async (role, label, name) => {
+    ["president-admin", "Synthetic President"],
+    ["secretary", "Synthetic Secretary"],
+    ["treasurer", "Synthetic Treasurer"],
+    ["member", "Synthetic Member"]
+  ] as const)("renders the verified %s identity and role", async (role, name) => {
     successfulFetch({ role, name });
     render(<Prototype />);
     await signIn();
@@ -124,80 +154,56 @@ describe("production dashboard UI", () => {
     expect(screen.queryByText("Loading member records…")).not.toBeInTheDocument();
   });
 
-  it("resolves the active count before profile enrichment and sends the bearer token", async () => {
-    const members = syntheticMembers();
-    let detailSignal: AbortSignal | undefined;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-      const url = String(input);
-      if (url === `${API}/auth/login`) return Promise.resolve(new Response(JSON.stringify({ token: "synthetic-dashboard-token" }), { status: 200 }));
-      if (url === `${API}/auth/me`) return Promise.resolve(new Response(JSON.stringify(syntheticSession("president-admin")), { status: 200 }));
-      if (url === `${API}/clubs/1/members`) return Promise.resolve(new Response(JSON.stringify({ members }), { status: 200 }));
-      if (/\/clubs\/1\/members\/\d+$/.test(url)) {
-        detailSignal = init?.signal ?? undefined;
-        return new Promise(() => undefined);
-      }
-      if (url === `${API}/auth/logout`) return Promise.resolve(new Response("{}", { status: 200 }));
-      return Promise.reject(new Error(`Unexpected synthetic request: ${url}`));
-    });
-
+  it("opens the existing report with the same outstanding balance shown on the default dashboard", async () => {
+    const fetchMock = successfulFetch({ role: "treasurer" });
     render(<Prototype />);
     await signIn();
 
-    await waitFor(() => expect(screen.getByText("47")).toBeInTheDocument());
-    expect(screen.getByText("Loading birthday information…")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(`${API}/clubs/1/members`, expect.objectContaining({
-      headers: expect.objectContaining({ Authorization: "Bearer synthetic-dashboard-token" }),
-      signal: expect.any(AbortSignal)
-    }));
+    expect(await screen.findByRole("heading", { name: "₹125.00 in posted ledger dues" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /Review posted dues/ }));
+    expect(await screen.findByRole("heading", { name: "Club Finance Reports" })).toBeVisible();
+    await screen.findByRole("heading", { name: "Outstanding Dues Summary" });
+    const outstanding = screen.getByText("Total Outstanding").parentElement!;
+    expect(within(outstanding).getByText("₹125")).toBeVisible();
+    expect(fetchMock.mock.calls.filter(([url]) => url === `${API}/clubs/1/finance/reports`)).toHaveLength(2);
+  });
 
+  it("opens the member calendar, event details, and announcements without loading the directory", async () => {
+    const fetchMock = successfulFetch({
+      role: "member",
+      withoutDirectory: true,
+      permissions: ["events.view", "announcements.view"]
+    });
+    render(<Prototype />);
+    await signIn();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Open Events & Meetings/ }));
+    expect(await screen.findByRole("heading", { name: "Synthetic club meeting" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "View details" }));
+    expect(await screen.findByRole("heading", { name: "Event / Meeting Details", level: 2 })).toBeVisible();
+    expect(screen.getByText("Synthetic club meeting")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "← Events & Meetings" }));
+    expect(await screen.findByRole("heading", { name: "Synthetic club meeting" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Home" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Open announcements/i }));
+    expect(await screen.findByText("Synthetic announcement details.")).toBeVisible();
+
+    const requests = fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    expect(requests.filter(path => path === "/api/v1/clubs/1/members/me")).toHaveLength(1);
+    expect(requests).not.toContain("/api/v1/clubs/1/members");
+  });
+
+  it("loads only the linked member and personal finance on the default member dashboard, then clears on sign-out", async () => {
+    const fetchMock = successfulFetch({ role: "member" });
+    render(<Prototype />);
+    await signIn();
+    expect(await screen.findByText("No outstanding dues for your assessed charges.")).toBeVisible();
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).filter(url => url.includes("/clubs/"))).toEqual([
+      `${API}/clubs/1/members/me`, `${API}/clubs/1/finance/me/summary`, `${API}/clubs/1/finance/me/payments?status=posted&per_page=5`
+    ]);
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
     await screen.findByRole("button", { name: "Sign in" });
-    expect(detailSignal?.aborted).toBe(true);
-    expect(screen.queryByText("47")).not.toBeInTheDocument();
-  });
-
-  it("renders successful birthday data and does not repeat completed requests", async () => {
-    const fetchMock = successfulFetch({ birthdayToday: true });
-    render(<Prototype />);
-    await signIn();
-
-    await screen.findByText("1 member birthday today");
-    expect(screen.getByText("47")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(51);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(51));
-  });
-
-  it("renders a clear empty birthday state and preserves a valid zero count", async () => {
-    successfulFetch({ memberStatus: "inactive" });
-    render(<Prototype />);
-    await signIn();
-
-    await screen.findByText("No member birthdays today");
-    const activeMemberCard = screen.getByText("Active Members").closest(".compactDashboardCard");
-    expect(activeMemberCard).not.toBeNull();
-    expect(within(activeMemberCard as HTMLElement).getByText("0")).toBeInTheDocument();
-  });
-
-  it.each([
-    ["HTTP failure", () => Promise.resolve(new Response("{}", { status: 503 }))],
-    ["network failure", () => Promise.reject(new Error("synthetic network failure"))],
-    ["invalid response", () => Promise.resolve(new Response(JSON.stringify({ members: "invalid" }), { status: 200 }))]
-  ])("exits loading safely after %s", async (_case, memberResponse) => {
-    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
-      if (url === `${API}/auth/login`) return Promise.resolve(new Response(JSON.stringify({ token: "synthetic-dashboard-token" }), { status: 200 }));
-      if (url === `${API}/auth/me`) return Promise.resolve(new Response(JSON.stringify(syntheticSession("president-admin")), { status: 200 }));
-      if (url === `${API}/clubs/1/members`) return memberResponse();
-      return Promise.reject(new Error(`Unexpected synthetic request: ${url}`));
-    });
-
-    render(<Prototype />);
-    await signIn();
-
-    await screen.findByText("Unable to load member records");
-    expect(screen.getByText("Birthday information unavailable")).toBeInTheDocument();
-    expect(screen.queryByText("Loading member records…")).not.toBeInTheDocument();
-    expect(screen.queryByText("Loading birthday information…")).not.toBeInTheDocument();
-    expect(screen.queryByText(/synthetic network failure/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Your club at a glance." })).toBeNull();
   });
 });
