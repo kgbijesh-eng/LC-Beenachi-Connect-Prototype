@@ -12,5 +12,6 @@ final readonly class ClubAccountStatementQuery
         public ?int $periodId = null,
         public ?string $from = null,
         public ?string $to = null,
+        public bool $dashboard = false,
     ) {}
 }

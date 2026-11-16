@@ -18,6 +18,7 @@ final class ClubAccountStatementRequest extends FormRequest
     {
         return [
             'lions_year' => ['required', 'string', 'regex:/\A\d{4}-\d{2}\z/'],
+            'dashboard' => ['sometimes', 'boolean'],
             'period_id' => ['nullable', 'integer', 'min:1'],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d'],
