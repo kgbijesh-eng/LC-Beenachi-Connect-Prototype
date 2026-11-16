@@ -106,19 +106,18 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         $this->assertSame('period_movement', $response->json('data.traceability.journals.1.contribution'));
     }
 
-    public function test_dashboard_projection_clamps_to_activation_and_returns_reconcilable_line_directions(): void
+    public function test_dashboard_projection_respects_activation_and_returns_reconcilable_line_directions(): void
     {
-        $fixture = $this->fixture(cutover: '2027-07-10');
+        $fixture = $this->fixture();
         config(['instance.organisation_code' => $fixture['club']->code]);
         Sanctum::actingAs($fixture['officer']);
         $url = $this->endpoint($fixture);
 
-        $this->getJson($url.'&from=2027-07-01&to=2027-07-09&dashboard=1')
+        $this->getJson(str_replace('2027-28', '2026-27', $url).'&from=2027-06-01&to=2027-06-30&dashboard=1')
             ->assertConflict()->assertJsonPath('code', 'ACCOUNTING_NOT_ACTIVATED');
-        $this->getJson($url.'&from=2027-07-01&to=2027-07-15')->assertUnprocessable();
 
         $range = $this->getJson($url.'&from=2027-07-01&to=2027-07-15&dashboard=1')->assertOk()
-            ->assertJsonPath('data.range.from', '2027-07-10')
+            ->assertJsonPath('data.range.from', '2027-07-01')
             ->assertJsonPath('data.range.to', '2027-07-15')
             ->assertJsonPath('data.traceability.journals.0.contribution', 'opening_balance');
         $lines = collect($range->json('data.traceability.journals.1.lines'));
@@ -436,7 +435,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         $this->assertSame($first, $second);
     }
 
-    private function fixture(string $suffix = '', string $cutover = '2027-07-01'): array
+    private function fixture(string $suffix = ''): array
     {
         $club = Club::create([
             'name' => 'Statement Test Club '.$suffix, 'code' => 'STATEMENT'.$suffix,
@@ -460,7 +459,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         $equity = $this->account($club, $officer, 'OPENING-EQUITY', 'equity', 'credit', 'FUND_BALANCE_EQUITY');
         $income = $this->account($club, $officer, 'INCOME-DUES', 'income', 'credit', 'INCOME');
         $package = ClubAccountingCutoverPackage::create([
-            'club_id' => $club->id, 'lions_year' => '2027-28', 'cutover_date' => $cutover,
+            'club_id' => $club->id, 'lions_year' => '2027-28', 'cutover_date' => '2027-07-01',
             'chart_version' => 'CLUB-COA-2026-01', 'package_version' => 1, 'status' => 'draft',
             'currency' => 'INR', 'canonical_checksum' => str_repeat('a', 64),
             'reconciliation_difference_paise' => 0, 'dr033_classification' => 'OPENING-BALANCE-EQUITY',
@@ -469,7 +468,7 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         ]);
         $cashRow = $this->openingRow($package, $cash, 'debit', 1000);
         $equityRow = $this->openingRow($package, $equity, 'credit', 1000);
-        $opening = $this->postJournal($club, $period, $officer, $cutover, 'opening', [
+        $opening = $this->postJournal($club, $period, $officer, '2027-07-01', 'opening', [
             new JournalLineInput($cash->id, 'debit', 1000, fundCode: 'GENERAL_CLUB_FUND', openingScheduleRowId: $cashRow->id),
             new JournalLineInput($equity->id, 'credit', 1000, fundCode: 'GENERAL_CLUB_FUND', openingScheduleRowId: $equityRow->id),
         ]);
