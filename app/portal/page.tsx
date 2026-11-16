@@ -18,6 +18,7 @@ import { DevAuthProvider, hasEffectivePermission, type DevIdentity, type DevRole
 import { getApiBaseUrl } from "../apiBaseUrl";
 import LoginScreen from "../LoginScreen";
 import DashboardPreview, { type DashboardDestination } from "../DashboardPreview";
+import memberStyles from "../MemberDashboard.module.css";
 import previewStyles from "../DashboardPreview.module.css";
 
 type Role = DevRole;
@@ -1572,7 +1573,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
   const { session, logout } = useDevAuth();
   const [screen, setScreen] = useState<Screen>(initialScreen);
   const useOwnMemberData = role === "member" && [
-    "dashboard", "my-dues", "payment-history", "member-profile",
+    "dashboard", "my-dues", "payment-history", "member-profile", "digital-card", "my-finance-summary",
     "events-meetings", "event-meeting-detail", "announcements",
     "announcement-detail", "announcement-single-detail"
   ].includes(screen);
@@ -1901,6 +1902,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
     const screens = {
       "record-payment": "record-member-payment",
       outstanding: "outstanding-dues",
+      "digital-card": "digital-card",
       "my-dues": "my-dues",
       "my-receipts": "payment-history",
       profile: "member-profile",
@@ -2227,6 +2229,25 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
                       ? "Club member records"
                       : null;
 
+  const memberPrimaryScreens: Screen[] = ["dashboard", "my-dues", "events-meetings"];
+  const memberNavPermissions: Partial<Record<Screen, string>> = {
+    members: "members.view",
+    "nav-detail": "members.view",
+    "my-finance-summary": "finance.self.view",
+    "my-dues": "finance.self.view",
+    "payment-history": "finance.self.view",
+    "events-meetings": "events.view",
+    projects: "projects.view",
+    "notifications-reminders": "reminders.view",
+    announcements: "announcements.view",
+    "my-documents": "club.view",
+    celebrations: "members.view"
+  };
+  const memberItems = role === "member" ? navByRole.member[0].items.filter(item => {
+    const permission = item.screen && memberNavPermissions[item.screen];
+    return !permission || session?.membership.permissions?.some(grant => grant.slug === permission);
+  }) : [];
+
   const accountDetails = (
     <div className="prototypeSwitcher">
           <span>Signed in</span>
@@ -2237,7 +2258,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
 
   return (
     <MemberDataContext.Provider value={{ members: currentMembers, status: memberStatus, activeMemberCount, activeMemberStatus, error: memberLoadError, token: memberToken, clubId: memberClubId, authenticatedUserId, retry: () => setMemberRefreshKey((key) => key + 1) }}>
-    <main className="shell">
+    <main className={role === "member" ? `shell ${memberStyles.memberShell} ${screen === "dashboard" ? memberStyles.memberHome : ""}` : "shell"}>
       <style>{`
         .sidebar {
           display: flex !important;
@@ -2335,7 +2356,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           }
         }
       `}</style>
-      <aside className={`sidebar ${previewStyles.sidebar}`} aria-label="Primary navigation">
+      <aside className={`sidebar ${previewStyles.sidebar} ${role === "member" ? memberStyles.memberSidebar : ""}`} aria-label="Primary navigation">
         <div className="brand">
           <div className="brandMark">LC</div>
           <div>
@@ -2344,7 +2365,43 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
           </div>
         </div>
 
-        <nav className={role === "member" ? "memberNav" : undefined}>
+        {role === "member" ? (
+          <nav aria-label="Member navigation" className={memberStyles.memberNav}>
+            {memberItems.filter(item => item.screen && memberPrimaryScreens.includes(item.screen)).map(item => (
+              <button key={item.label} type="button" className={screen === item.screen ? "active navButton" : "navButton"}
+                aria-label={item.label} aria-current={screen === item.screen ? "page" : undefined} onClick={() => openDirect(item)}>
+                <PreviewNavIcon label={item.label} />
+                <span className={memberStyles.desktopLabel}>{item.label}</span>
+                <span className={memberStyles.mobileLabel}>{item.screen === "events-meetings" ? "Events" : item.screen === "my-dues" ? "My dues" : item.label}</span>
+              </button>
+            ))}
+            <details onBlur={event => {
+              if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+            }} onKeyDown={event => {
+              if (event.key !== "Escape" || !event.currentTarget.open) return;
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector("summary")?.focus();
+            }}>
+              <summary><PreviewNavIcon label="More" />More</summary>
+              <div className={memberStyles.moreItems}>
+                {memberItems.filter(item => item.screen && !memberPrimaryScreens.includes(item.screen)).map(item => (
+                  <button key={item.label} type="button" className={screen === item.screen ? "active navButton" : "navButton"}
+                    aria-current={screen === item.screen ? "page" : undefined} onClick={event => {
+                      const details = event.currentTarget.closest("details");
+                      if (details) {
+                        details.open = false;
+                        details.querySelector("summary")?.focus();
+                      }
+                      openDirect(item);
+                    }}>
+                    <PreviewNavIcon label={item.label} />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </details>
+          </nav>
+        ) : <nav>
           {navByRole[role].map((group) => (
             <div className="navGroup" key={`${role}-${group.title}`}>
               {group.direct ? (
@@ -2412,7 +2469,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
               )}
             </div>
           ))}
-        </nav>
+        </nav>}
         {accountDetails}
       </aside>
 

@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { hasEffectivePermission, useDevAuth } from "./DevAuthSession";
+import MemberDashboard from "./MemberDashboard";
+import memberStyles from "./MemberDashboard.module.css";
 import styles from "./DashboardPreview.module.css";
 
 export type DashboardDestination = "record-payment" | "statement" | "outstanding" | "finance-report"
-  | "my-dues" | "my-receipts" | "profile" | "events" | "announcements";
+  | "digital-card" | "my-dues" | "my-receipts" | "profile" | "events" | "announcements";
 
 type ReadState<T> = { status: "loading" | "unavailable" } | { status: "ready"; data: T };
 type ReadSource<T> = { path: string; fetcher: ReturnType<typeof useDevAuth>["authenticatedFetch"]; result: ReadState<T> };
@@ -85,19 +87,56 @@ function DashboardContent({ navigate }: { navigate: (destination: DashboardDesti
   const readDues = useMemoizedDues(clubId, memberId, officer);
   const readPayments = useMemoizedPayments(memberId);
   const readEvents = useMemoizedEvents(clubId);
-  const dues = useSource(canClubReport ? root + "/finance/reports" : canPersonalFinance ? root + "/finance/me/summary" : null, readDues);
+  const dues = useSource(officer && canClubReport ? root + "/finance/reports" : canPersonalFinance ? root + "/finance/me/summary" : null, readDues);
   const payments = useSource(canPersonalFinance ? root + "/finance/me/payments?status=posted&per_page=5" : null, readPayments);
   const upcoming = useSource(canEvents ? root + "/events?scope=upcoming&per_page=10" + (eventManagement ? "&status=published" : "") : null, readEvents);
   const announcements = useSource(canAnnouncements ? root + "/announcements?scope=current&per_page=3&sort=published_at&direction=desc"
     + (announcementManagement ? "&status=published&audience=club-members&effective_state=current" : "") : null, readAnnouncements);
 
-  const quick: Array<[DashboardDestination, string, boolean]> = officer
-    ? [["record-payment", "Record payment", canRecord], ["statement", "Club Account Statement", canStatement], ["outstanding", "Outstanding dues", canOutstanding]]
-    : [["my-dues", "My dues", canPersonalFinance], ["my-receipts", "My receipts", canPersonalFinance], ["profile", "My profile", Boolean(memberId) && can("members.view")]];
   const lastPayment = payments.status === "ready" ? payments.data[0] : undefined;
   const recentReceipt = payments.status === "ready" ? payments.data.find(row => row.receipt?.status === "issued") : undefined;
   const nextEvent = upcoming.status === "ready" ? upcoming.data[0] : undefined;
   const hasPriority = dues.status === "ready" && dues.data.paise > 0;
+
+  const events = <section className={officer ? `${styles.panel} ${styles.eventPanel}` : memberStyles.card}>
+        <h3>Coming up</h3>
+        {nextEvent ? <div className={styles.event}>
+          <time dateTime={nextEvent.start_date ?? nextEvent.starts_at ?? undefined}>{formatDate(nextEvent.start_date ?? nextEvent.starts_at!)}</time>
+          <h4>{nextEvent.title}</h4>
+          {nextEvent.venue && <p>{nextEvent.venue}</p>}
+        </div> : <p>{upcoming.status === "loading" ? "Loading club calendar…"
+          : upcoming.status === "ready" ? "No published events in the upcoming list." : "Club calendar unavailable."}</p>}
+        {canEvents && <button className={styles.textButton} onClick={() => navigate("events")}>Open Events &amp; Meetings ›</button>}
+      </section>;
+  const notices = <section className={officer ? `${styles.panel} ${styles.activityPanel}` : memberStyles.card}>
+        <h3>Club announcements</h3>
+        {announcements.status === "ready" && announcements.data.length > 0 ? <ul className={styles.activity}>
+          {announcements.data.map(item => <li key={item.id}><strong>{item.title}</strong><time dateTime={item.date}>{formatDate(item.date)}</time></li>)}
+        </ul> : <p>{announcements.status === "loading" ? "Loading announcements…"
+          : announcements.status === "ready" ? "No current announcements." : "Announcements unavailable."}</p>}
+        {canAnnouncements && <button className={styles.textButton} onClick={() => navigate("announcements")}>Open announcements ›</button>}
+      </section>;
+
+  if (!officer && session) return <MemberDashboard
+    name={session.user.name}
+    club={session.membership.club.name ?? session.organisation.name}
+    balance={dues.status === "ready" ? { status: "ready", amount: money.format(dues.data.paise / 100), outstanding: hasPriority } : dues}
+    payment={lastPayment ? money.format(lastPayment.amount_paise / 100) + " · " + formatDate(lastPayment.payment_date)
+      : payments.status === "ready" ? "No posted payments" : payments.status === "loading" ? "Loading…" : "Unavailable"}
+    receipt={recentReceipt?.receipt?.receipt_number ?? (payments.status === "ready" ? "None in recent payments"
+      : payments.status === "loading" ? "Loading…" : "Unavailable")}
+    events={events}
+    announcements={notices}
+    onCard={memberId ? () => navigate("digital-card") : undefined}
+    onDues={canPersonalFinance ? () => navigate("my-dues") : undefined}
+    onPayments={canPersonalFinance ? () => navigate("my-receipts") : undefined}
+  />;
+
+  const quick: Array<[DashboardDestination, string, boolean]> = [
+    ["record-payment", "Record payment", canRecord],
+    ["statement", "Club Account Statement", canStatement],
+    ["outstanding", "Outstanding dues", canOutstanding]
+  ];
 
   return <section className={styles.preview} aria-label="Dashboard preview">
     <header className={styles.hero}>
@@ -118,16 +157,6 @@ function DashboardContent({ navigate }: { navigate: (destination: DashboardDesti
       </article>}
       {canStatement && <article className={styles.metric}>
         <h3>Club statement</h3><button className={styles.textButton} onClick={() => navigate("statement")}>Open statement ›</button>
-      </article>}
-      {!officer && <article className={styles.metric}>
-        <h3>Last payment</h3><strong>{lastPayment ? money.format(lastPayment.amount_paise / 100)
-          : payments.status === "loading" ? "Loading…" : payments.status === "ready" ? "No posted payments" : "Unavailable"}</strong>
-        {lastPayment && <p>{formatDate(lastPayment.payment_date)}</p>}
-      </article>}
-      {!officer && <article className={styles.metric}>
-        <h3>My receipts</h3><strong>{recentReceipt ? recentReceipt.receipt?.receipt_number
-          : payments.status === "loading" ? "Loading…" : payments.status === "ready" ? "None in recent payments" : "Unavailable"}</strong>
-        {canPersonalFinance && <button className={styles.textButton} onClick={() => navigate("my-receipts")}>View payment history ›</button>}
       </article>}
     </section>
 
@@ -159,25 +188,8 @@ function DashboardContent({ navigate }: { navigate: (destination: DashboardDesti
         {!quick.some(([, , allowed]) => allowed) && <p>No shortcuts are available for this account.</p>}
       </section>
 
-      <section className={`${styles.panel} ${styles.eventPanel}`}>
-        <h3>Coming up</h3>
-        {nextEvent ? <div className={styles.event}>
-          <time dateTime={nextEvent.start_date ?? nextEvent.starts_at ?? undefined}>{formatDate(nextEvent.start_date ?? nextEvent.starts_at!)}</time>
-          <h4>{nextEvent.title}</h4>
-          {nextEvent.venue && <p>{nextEvent.venue}</p>}
-        </div> : <p>{upcoming.status === "loading" ? "Loading club calendar…"
-          : upcoming.status === "ready" ? "No published events in the upcoming list." : "Club calendar unavailable."}</p>}
-        {canEvents && <button className={styles.textButton} onClick={() => navigate("events")}>Open Events &amp; Meetings ›</button>}
-      </section>
-
-      <section className={`${styles.panel} ${styles.activityPanel}`}>
-        <h3>Club announcements</h3>
-        {announcements.status === "ready" && announcements.data.length > 0 ? <ul className={styles.activity}>
-          {announcements.data.map(item => <li key={item.id}><strong>{item.title}</strong><time dateTime={item.date}>{formatDate(item.date)}</time></li>)}
-        </ul> : <p>{announcements.status === "loading" ? "Loading announcements…"
-          : announcements.status === "ready" ? "No current announcements." : "Announcements unavailable."}</p>}
-        {canAnnouncements && <button className={styles.textButton} onClick={() => navigate("announcements")}>Open announcements ›</button>}
-      </section>
+      {events}
+      {notices}
     </div>
   </section>;
 }

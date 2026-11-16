@@ -199,11 +199,14 @@ describe("production dashboard UI", () => {
     render(<Prototype />);
     await signIn();
     expect(await screen.findByText("No outstanding dues for your assessed charges.")).toBeVisible();
+    const nav = screen.getByRole("navigation", { name: "Member navigation" });
+    expect(within(nav).queryByRole("button", { name: "Events & Meetings" })).toBeNull();
+    expect(within(nav).queryByRole("button", { name: "Announcements" })).toBeNull();
     expect(fetchMock.mock.calls.map(([url]) => String(url)).filter(url => url.includes("/clubs/"))).toEqual([
       `${API}/clubs/1/members/me`, `${API}/clubs/1/finance/me/summary`, `${API}/clubs/1/finance/me/payments?status=posted&per_page=5`
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
     await screen.findByRole("button", { name: "Sign in" });
-    expect(screen.queryByRole("heading", { name: "Your club at a glance." })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Member dashboard" })).toBeNull();
   });
 });
