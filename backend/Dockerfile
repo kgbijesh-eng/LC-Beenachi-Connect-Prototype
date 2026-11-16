@@ -5,7 +5,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libpq-dev unzip \
     && docker-php-ext-install -j"$(nproc)" pdo_pgsql \
     && rm -rf /var/lib/apt/lists/* \
-    && a2enmod rewrite \
+    && a2dismod mpm_event mpm_worker \
+    && a2enmod mpm_prefork rewrite \
     && sed -ri 's/^Listen 80$/Listen 8080/' /etc/apache2/ports.conf \
     && sed -ri 's!<VirtualHost \*:80>!<VirtualHost *:8080>!; s!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/000-default.conf \
     && printf 'ServerName localhost\n<Directory /var/www/html/public>\n    AllowOverride All\n    Require all granted\n</Directory>\n' > /etc/apache2/conf-available/laravel.conf \
