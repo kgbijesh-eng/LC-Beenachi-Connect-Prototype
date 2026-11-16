@@ -150,3 +150,32 @@ it("keeps statement-based accounting hidden without the statement grant", () => 
   expect(screen.queryByRole("heading", { name: "Cash & Bank" })).toBeNull();
   expect(auth.authenticatedFetch).not.toHaveBeenCalled();
 });
+
+it("passes the covered range to the statement and keeps confirmed zero distinct from an unavailable source", async () => {
+  auth.session.membership.permissions = grants("finance.club.statement.view");
+  const navigate = vi.fn();
+  auth.authenticatedFetch.mockImplementation(async (path: string) => {
+    const query = new URL(path, "https://example.test").searchParams;
+    return Response.json({ data: {
+      club_id: 7, currency: "INR", amount_unit: "paise",
+      lions_year: { label: query.get("lions_year") },
+      range: { from: query.get("from"), to: query.get("to") },
+      source: { cutover_date: query.get("from") },
+      integrity: { account_equations_reconcile: true },
+      funds: [], traceability: { journals: [] }
+    } });
+  });
+  const view = render(<DashboardPreview navigate={navigate} />);
+  fireEvent.click(await screen.findByRole("button", { name: /Open statement for this period/ }));
+  const query = new URL(auth.authenticatedFetch.mock.calls[0][0], "https://example.test").searchParams;
+  expect(navigate).toHaveBeenCalledWith("statement", {
+    lionsYear: query.get("lions_year"), from: query.get("from"), to: query.get("to")
+  });
+  expect(screen.getAllByText("₹0.00").length).toBeGreaterThan(0);
+
+  view.unmount();
+  auth.authenticatedFetch.mockResolvedValue(Response.json({}, { status: 503 }));
+  render(<DashboardPreview navigate={navigate} />);
+  expect((await screen.findAllByText("Unable to verify")).length).toBeGreaterThan(0);
+  expect(screen.queryByText("₹0.00")).toBeNull();
+});
