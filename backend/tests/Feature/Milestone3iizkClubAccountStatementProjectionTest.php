@@ -106,6 +106,35 @@ class Milestone3iizkClubAccountStatementProjectionTest extends TestCase
         $this->assertSame('period_movement', $response->json('data.traceability.journals.1.contribution'));
     }
 
+    public function test_dashboard_projection_respects_activation_and_returns_reconcilable_line_directions(): void
+    {
+        $fixture = $this->fixture();
+        config(['instance.organisation_code' => $fixture['club']->code]);
+        Sanctum::actingAs($fixture['officer']);
+        $url = $this->endpoint($fixture);
+
+        $this->getJson(str_replace('2027-28', '2026-27', $url).'&from=2027-06-01&to=2027-06-30&dashboard=1')
+            ->assertConflict()->assertJsonPath('code', 'ACCOUNTING_NOT_ACTIVATED');
+
+        $range = $this->getJson($url.'&from=2027-07-01&to=2027-07-15&dashboard=1')->assertOk()
+            ->assertJsonPath('data.range.from', '2027-07-01')
+            ->assertJsonPath('data.range.to', '2027-07-15')
+            ->assertJsonPath('data.traceability.journals.0.contribution', 'opening_balance');
+        $lines = collect($range->json('data.traceability.journals.1.lines'));
+        $cash = $lines->firstWhere('account_code', 'CASH-ON-HAND');
+        $this->assertSame('CASH_AND_BANK', $cash['classification']);
+        $this->assertSame('GENERAL_CLUB_FUND', $cash['fund_code']);
+        $this->assertSame('debit', $cash['direction']);
+        $this->assertSame(200, $cash['amount_paise']);
+
+        $standard = $this->getJson($url.'&from=2027-07-10&to=2027-07-15')->assertOk();
+        $this->assertSame($standard->json('data.overall_trial_balance'), $range->json('data.overall_trial_balance'));
+        $standard->assertJsonMissingPath('data.traceability.journals.1.lines.0.amount_paise');
+
+        Sanctum::actingAs(User::factory()->create());
+        $this->getJson($url.'&from=2027-07-01&to=2027-07-15&dashboard=1')->assertForbidden();
+    }
+
     public function test_valid_period_filter_uses_owned_period_and_closed_state(): void
     {
         $fixture = $this->fixture();

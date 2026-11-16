@@ -17,6 +17,7 @@ import AnnouncementsBackend from "../AnnouncementsBackend";
 import { DevAuthProvider, hasEffectivePermission, type DevIdentity, type DevRole, useDevAuth } from "../DevAuthSession";
 import { getApiBaseUrl } from "../apiBaseUrl";
 import LoginScreen from "../LoginScreen";
+import type { StatementRange } from "../treasurerStatement";
 import DashboardPreview, { type DashboardDestination } from "../DashboardPreview";
 import memberStyles from "../MemberDashboard.module.css";
 import previewStyles from "../DashboardPreview.module.css";
@@ -1606,6 +1607,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
   const [announcementDetail, setAnnouncementDetail] = useState<AnnouncementDetail>("Published");
   const [financeSection, setFinanceSection] = useState<FinanceSection>("Club Account Statement");
   const [fellowshipPaymentView, setFellowshipPaymentView] = useState<FellowshipPaymentView>("Current Month");
+  const [statementRange, setStatementRange] = useState<StatementRange>();
   const [clubStatementSection, setClubStatementSection] = useState<ClubStatementSection>("Account Overview");
   const [reportsSection, setReportsSection] = useState<ReportsSection>("Member Reports");
   const [clubVisibilitySection, setClubVisibilitySection] = useState<ClubVisibilitySection>("Members");
@@ -1898,7 +1900,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
     screen === "my-dues" ||
     screen === "payment-history";
 
-  function openDashboardDestination(destination: DashboardDestination) {
+  function openDashboardDestination(destination: DashboardDestination, range?: StatementRange) {
     const screens = {
       "record-payment": "record-member-payment",
       "record-expense": "finance-module",
@@ -1914,6 +1916,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
     } satisfies Record<DashboardDestination, Screen>;
     handleSetScreen(screens[destination]);
     if (destination === "statement") {
+      setStatementRange(range);
       setFinanceSection("Club Account Statement");
       setClubStatementSection("Account Overview");
     }
@@ -2146,7 +2149,10 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
       setOperationsSection("Fellowship");
     }
     if (item.financeSection) setFinanceSection(item.financeSection);
-    if (item.statementSection) setClubStatementSection(item.statementSection);
+    if (item.statementSection) {
+      setStatementRange(undefined);
+      setClubStatementSection(item.statementSection);
+    }
     if (item.collectionDetail) setCollectionDetail(item.collectionDetail);
     if (item.fellowshipPaymentView) setFellowshipPaymentView(item.fellowshipPaymentView);
     if (item.screen === "my-documents") { setSelectedAdministrativeDocumentId(null); setDocumentEditDraft(null); }
@@ -2649,7 +2655,7 @@ function PrototypeWorkspace({ identity, role, initialScreen }: { identity: DevId
         )}
                 {screen === "finance-module" && (
                   financeSection === "Club Account Statement"
-                    ? <ClubAccountStatementBackend role={role} />
+                    ? <ClubAccountStatementBackend role={role} initialRange={statementRange} />
                     : financeSection === "Record Expense"
                       ? <ClubExpenseBackend role={role} />
                     : financeSection === "Expense History"

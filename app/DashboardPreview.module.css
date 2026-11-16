@@ -175,3 +175,12 @@
 @media (max-width: 660px) {
   .treasurerFigures, .treasurerActivity { grid-template-columns: minmax(0, 1fr); }
 }
+
+.accounting { display: grid; gap: 12px; }
+.accountingPeriod { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.accountingPeriod label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 700; }
+.accountingPeriod input { min-height: 42px; max-width: 100%; }
+.coverage { color: var(--muted); font-size: .85rem; }
+.accountingFigures { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 12px 0; }
+.accountingFigures dt, .accountingFigures small { color: var(--muted); font-size: .85rem; }
+.accountingFigures dd { margin: 0; font-size: 1.15rem; font-weight: 800; font-variant-numeric: tabular-nums; }

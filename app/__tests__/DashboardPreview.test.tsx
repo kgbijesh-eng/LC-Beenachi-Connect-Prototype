@@ -55,7 +55,7 @@ it("shows one verified officer priority and opens existing finance destinations 
   fireEvent.click(screen.getByRole("button", { name: "Open Statement" }));
   fireEvent.click(screen.getByRole("button", { name: "Record Expense" }));
   expect(navigate.mock.calls).toEqual([["finance-report"], ["record-payment"], ["statement"], ["record-expense"]]);
-  expect(auth.authenticatedFetch.mock.calls.map(([path]) => path)).toEqual([
+  expect(auth.authenticatedFetch.mock.calls.map(([path]) => path).filter(path => !path.includes("/account-statement?"))).toEqual([
     "/clubs/7/finance/reports",
     "/clubs/7/events?scope=upcoming&per_page=10",
     "/clubs/7/announcements?scope=current&per_page=3&sort=published_at&direction=desc"
@@ -85,7 +85,7 @@ it("shows personal dues, recent receipts, and club activity without officer quer
   fireEvent.click(screen.getByRole("button", { name: /View payment history/ }));
   fireEvent.click(screen.getByRole("button", { name: "My digital card" }));
   expect(navigate.mock.calls).toEqual([["my-dues"], ["my-receipts"], ["digital-card"]]);
-  expect(auth.authenticatedFetch.mock.calls.map(([path]) => path)).toEqual([
+  expect(auth.authenticatedFetch.mock.calls.map(([path]) => path).filter(path => !path.includes("/account-statement?"))).toEqual([
     "/clubs/7/finance/me/summary", "/clubs/7/finance/me/payments?status=posted&per_page=5",
     "/clubs/7/events?scope=upcoming&per_page=10", "/clubs/7/announcements?scope=current&per_page=3&sort=published_at&direction=desc"
   ]);
@@ -132,5 +132,50 @@ it("keeps verified dues visible when the posted payment fields are invalid", asy
 
   expect(await screen.findByText("₹125.00")).toBeVisible();
   expect(screen.getByText("Posted payment count: Unavailable")).toBeVisible();
+  expect(screen.queryByText("₹0.00")).toBeNull();
+});
+
+it("shows accounting activation failure without displaying a synthetic zero", async () => {
+  auth.session.membership.permissions = grants("finance.club.statement.view");
+  auth.authenticatedFetch.mockResolvedValue(Response.json({ code: "ACCOUNTING_NOT_ACTIVATED" }, { status: 409 }));
+  render(<DashboardPreview navigate={vi.fn()} />);
+  expect((await screen.findAllByText("Accounting not activated")).length).toBeGreaterThan(0);
+  expect(screen.queryByText("₹0.00")).toBeNull();
+  expect(auth.authenticatedFetch.mock.calls[0][0]).toMatch(/account-statement\?.*dashboard=1/);
+});
+
+it("keeps statement-based accounting hidden without the statement grant", () => {
+  auth.session.membership.permissions = [];
+  render(<DashboardPreview navigate={vi.fn()} />);
+  expect(screen.queryByRole("heading", { name: "Cash & Bank" })).toBeNull();
+  expect(auth.authenticatedFetch).not.toHaveBeenCalled();
+});
+
+it("passes the covered range to the statement and keeps confirmed zero distinct from an unavailable source", async () => {
+  auth.session.membership.permissions = grants("finance.club.statement.view");
+  const navigate = vi.fn();
+  auth.authenticatedFetch.mockImplementation(async (path: string) => {
+    const query = new URL(path, "https://example.test").searchParams;
+    return Response.json({ data: {
+      club_id: 7, currency: "INR", amount_unit: "paise",
+      lions_year: { label: query.get("lions_year") },
+      range: { from: query.get("from"), to: query.get("to") },
+      source: { cutover_date: query.get("from") },
+      integrity: { account_equations_reconcile: true },
+      funds: [], traceability: { journals: [] }
+    } });
+  });
+  const view = render(<DashboardPreview navigate={navigate} />);
+  fireEvent.click(await screen.findByRole("button", { name: /Open statement for this period/ }));
+  const query = new URL(auth.authenticatedFetch.mock.calls[0][0], "https://example.test").searchParams;
+  expect(navigate).toHaveBeenCalledWith("statement", {
+    lionsYear: query.get("lions_year"), from: query.get("from"), to: query.get("to")
+  });
+  expect(screen.getAllByText("₹0.00").length).toBeGreaterThan(0);
+
+  view.unmount();
+  auth.authenticatedFetch.mockResolvedValue(Response.json({}, { status: 503 }));
+  render(<DashboardPreview navigate={navigate} />);
+  expect((await screen.findAllByText("Unable to verify")).length).toBeGreaterThan(0);
   expect(screen.queryByText("₹0.00")).toBeNull();
 });
