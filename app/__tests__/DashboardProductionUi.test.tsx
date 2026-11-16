@@ -159,10 +159,11 @@ describe("production dashboard UI", () => {
     render(<Prototype />);
     await signIn();
 
-    expect(await screen.findByRole("heading", { name: "₹125.00 in posted ledger dues" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: /Review posted dues/ }));
+    expect(await screen.findByText("₹125.00")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /Review member-wise dues/ }));
     expect(await screen.findByRole("heading", { name: "Club Finance Reports" })).toBeVisible();
     await screen.findByRole("heading", { name: "Outstanding Dues Summary" });
+    expect(screen.getByRole("heading", { name: "Member-wise Dues Summary" })).toBeVisible();
     const outstanding = screen.getByText("Total Outstanding").parentElement!;
     expect(within(outstanding).getByText("₹125")).toBeVisible();
     expect(fetchMock.mock.calls.filter(([url]) => url === `${API}/clubs/1/finance/reports`)).toHaveLength(2);
