@@ -17,6 +17,7 @@ const authState = vi.hoisted(() => ({
       club_id: 1,
       club: { id: 1, code: "LCB", name: "LC Beenachi" },
       role: { slug: "treasurer" },
+      permissions: [] as { slug: string }[],
       member: { id: 35, member_code: "26766860", full_name: "Ranjith MR" } as { id: number; member_code: string; full_name: string } | null
     }
   },
@@ -167,7 +168,7 @@ async function openSujeshProfile() {
 }
 
 beforeEach(() => {
-  Object.assign(authState.session.membership, { effective_office: null, permissions: [] });
+  Object.assign(authState.session.membership, { effective_office: null, permissions: ["members.view", "club.view", "finance.self.view", "projects.view"].map(slug => ({ slug })) });
   authState.role = "treasurer";
   authState.identity = "ranjith-treasurer";
   authState.member = { id: 35, member_code: "26766860", full_name: "Ranjith MR" };

@@ -7,8 +7,9 @@ const auth = vi.hoisted(() => ({
   authenticatedFetch: vi.fn(),
   session: {
     role: "treasurer",
+    user: { name: "Synthetic Member" },
     membership: {
-      club: { id: 7 },
+      club: { id: 7, name: "Synthetic Lions Club" },
       member: null as { id: number } | null,
       permissions: [] as { slug: string }[],
       authority_as_of: "2026-11-15T00:00:00Z",
@@ -72,15 +73,15 @@ it("shows personal dues, recent receipts, and club activity without officer quer
   const navigate = vi.fn();
   render(<StrictMode><DashboardPreview navigate={navigate} /></StrictMode>);
 
-  expect(await screen.findByRole("heading", { name: "₹123.00 in your outstanding dues" })).toBeVisible();
+  expect(await screen.findByText("₹123.00")).toBeVisible();
   expect(await screen.findByText("TEST-9")).toBeVisible();
   expect(await screen.findByText("Synthetic meeting")).toBeVisible();
   expect(await screen.findByText("Synthetic announcement")).toBeVisible();
   expect(screen.queryByRole("button", { name: /Record payment|Club Account Statement|Outstanding dues/ })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "My dues" }));
-  fireEvent.click(screen.getByRole("button", { name: "My receipts" }));
-  fireEvent.click(screen.getByRole("button", { name: "My profile" }));
-  expect(navigate.mock.calls).toEqual([["my-dues"], ["my-receipts"], ["profile"]]);
+  fireEvent.click(screen.getByRole("button", { name: /View my dues/ }));
+  fireEvent.click(screen.getByRole("button", { name: /View payment history/ }));
+  fireEvent.click(screen.getByRole("button", { name: "My digital card" }));
+  expect(navigate.mock.calls).toEqual([["my-dues"], ["my-receipts"], ["digital-card"]]);
   expect(auth.authenticatedFetch.mock.calls.map(([path]) => path)).toEqual([
     "/clubs/7/finance/me/summary", "/clubs/7/finance/me/payments?status=posted&per_page=5",
     "/clubs/7/events?scope=upcoming&per_page=10", "/clubs/7/announcements?scope=current&per_page=3&sort=published_at&direction=desc"
@@ -96,4 +97,23 @@ it.each([true, false])("distinguishes confirmed zero from an unavailable report 
   expect(screen.queryByRole("button", { name: "Record payment" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Club Account Statement" })).toBeNull();
   if (!available) expect(screen.queryByText("₹0.00")).toBeNull();
+});
+
+it.each([true, false])("distinguishes member loading from confirmed zero or failed verification (available: %s)", async available => {
+  auth.session.role = "member";
+  auth.session.membership.member = { id: 9 };
+  auth.session.membership.permissions = grants("finance.self.view");
+  auth.authenticatedFetch.mockImplementation(async (path: string) => path.endsWith("/summary")
+    ? available ? Response.json({ data: { member_id: 9, currency: "INR", outstanding_paise: 0 } }) : Response.json({}, { status: 503 })
+    : Response.json({ data: [] }));
+  render(<DashboardPreview navigate={vi.fn()} />);
+
+  expect(screen.getByText("Checking dues")).toBeVisible();
+  expect(screen.queryByText("₹0.00")).toBeNull();
+  expect(await screen.findByText(available ? "Up to date" : "Your balance could not be verified.")).toBeVisible();
+  if (available) expect(screen.getByText("₹0.00")).toBeVisible();
+  else {
+    expect(screen.queryByText("₹0.00")).toBeNull();
+    expect(screen.queryByText("Up to date")).toBeNull();
+  }
 });
