@@ -55,7 +55,7 @@ it("shows one verified officer priority and opens existing finance destinations 
   fireEvent.click(screen.getByRole("button", { name: "Open Statement" }));
   fireEvent.click(screen.getByRole("button", { name: "Record Expense" }));
   expect(navigate.mock.calls).toEqual([["finance-report"], ["record-payment"], ["statement"], ["record-expense"]]);
-  expect(auth.authenticatedFetch.mock.calls.map(([path]) => path)).toEqual([
+  expect(auth.authenticatedFetch.mock.calls.map(([path]) => path).filter(path => !path.includes("/account-statement?"))).toEqual([
     "/clubs/7/finance/reports",
     "/clubs/7/events?scope=upcoming&per_page=10",
     "/clubs/7/announcements?scope=current&per_page=3&sort=published_at&direction=desc"
@@ -85,7 +85,7 @@ it("shows personal dues, recent receipts, and club activity without officer quer
   fireEvent.click(screen.getByRole("button", { name: /View payment history/ }));
   fireEvent.click(screen.getByRole("button", { name: "My digital card" }));
   expect(navigate.mock.calls).toEqual([["my-dues"], ["my-receipts"], ["digital-card"]]);
-  expect(auth.authenticatedFetch.mock.calls.map(([path]) => path)).toEqual([
+  expect(auth.authenticatedFetch.mock.calls.map(([path]) => path).filter(path => !path.includes("/account-statement?"))).toEqual([
     "/clubs/7/finance/me/summary", "/clubs/7/finance/me/payments?status=posted&per_page=5",
     "/clubs/7/events?scope=upcoming&per_page=10", "/clubs/7/announcements?scope=current&per_page=3&sort=published_at&direction=desc"
   ]);
@@ -133,4 +133,20 @@ it("keeps verified dues visible when the posted payment fields are invalid", asy
   expect(await screen.findByText("₹125.00")).toBeVisible();
   expect(screen.getByText("Posted payment count: Unavailable")).toBeVisible();
   expect(screen.queryByText("₹0.00")).toBeNull();
+});
+
+it("shows accounting activation failure without displaying a synthetic zero", async () => {
+  auth.session.membership.permissions = grants("finance.club.statement.view");
+  auth.authenticatedFetch.mockResolvedValue(Response.json({ code: "ACCOUNTING_NOT_ACTIVATED" }, { status: 409 }));
+  render(<DashboardPreview navigate={vi.fn()} />);
+  expect((await screen.findAllByText("Accounting not activated")).length).toBeGreaterThan(0);
+  expect(screen.queryByText("₹0.00")).toBeNull();
+  expect(auth.authenticatedFetch.mock.calls[0][0]).toMatch(/account-statement\?.*dashboard=1/);
+});
+
+it("keeps statement-based accounting hidden without the statement grant", () => {
+  auth.session.membership.permissions = [];
+  render(<DashboardPreview navigate={vi.fn()} />);
+  expect(screen.queryByRole("heading", { name: "Cash & Bank" })).toBeNull();
+  expect(auth.authenticatedFetch).not.toHaveBeenCalled();
 });

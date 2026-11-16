@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { hasEffectivePermission, useDevAuth } from "./DevAuthSession";
+import TreasurerAccounting from "./TreasurerAccounting";
+import type { StatementRange } from "./treasurerStatement";
 import MemberDashboard from "./MemberDashboard";
 import memberStyles from "./MemberDashboard.module.css";
 import styles from "./DashboardPreview.module.css";
@@ -58,13 +60,13 @@ function Amount({ source, value }: { source: ReadState<Dues>; value: (dues: Dues
     : source.status === "loading" ? "Loading…" : "Unavailable"}</strong>;
 }
 
-export default function DashboardPreview({ navigate }: { navigate: (destination: DashboardDestination) => void }) {
+export default function DashboardPreview({ navigate }: { navigate: (destination: DashboardDestination, range?: StatementRange) => void }) {
   const { session } = useDevAuth();
   if (!session) return null;
   return <DashboardContent navigate={navigate} />;
 }
 
-function DashboardContent({ navigate }: { navigate: (destination: DashboardDestination) => void }) {
+function DashboardContent({ navigate }: { navigate: (destination: DashboardDestination, range?: StatementRange) => void }) {
   const { session } = useDevAuth();
   const clubId = session?.membership.club.id;
   const memberId = session?.membership.member?.id;
@@ -177,6 +179,7 @@ function DashboardContent({ navigate }: { navigate: (destination: DashboardDesti
         </div>
         {!actions.some(([, , allowed]) => allowed) && <p>No finance shortcuts are available for this account.</p>}
       </section>
+      <TreasurerAccounting openStatement={range => navigate("statement", range)} />
       <div className={styles.treasurerActivity}>{events}{notices}</div>
     </section>;
   }

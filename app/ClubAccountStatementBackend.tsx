@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import type { StatementRange } from "./treasurerStatement";
 import { hasEffectivePermission, useDevAuth, type DevRole } from "./DevAuthSession";
 
 type Amounts = {
@@ -114,17 +115,17 @@ function validStatement(value: unknown, clubId: number): value is Statement {
     && Object.values(row.integrity).every((status) => status === true));
 }
 
-export default function ClubAccountStatementBackend({ role }: { role: DevRole }) {
+export default function ClubAccountStatementBackend({ role, initialRange }: { role: DevRole; initialRange?: StatementRange }) {
   const { session, authenticatedFetch } = useDevAuth();
   const [statement, setStatement] = useState<Statement | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [message, setMessage] = useState("Loading canonical Club Account Statement…");
-  const [mode, setMode] = useState<FilterMode>("lions-year");
-  const [lionsYear, setLionsYear] = useState(currentLionsYear);
+  const [mode, setMode] = useState<FilterMode>(initialRange ? "custom" : "lions-year");
+  const [lionsYear, setLionsYear] = useState(() => initialRange?.lionsYear ?? currentLionsYear());
   const [periodId, setPeriodId] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [requestQuery, setRequestQuery] = useState(() => `lions_year=${encodeURIComponent(currentLionsYear())}`);
+  const [from, setFrom] = useState(initialRange?.from ?? "");
+  const [to, setTo] = useState(initialRange?.to ?? "");
+  const [requestQuery, setRequestQuery] = useState(() => initialRange ? new URLSearchParams({ lions_year: initialRange.lionsYear, from: initialRange.from, to: initialRange.to }).toString() : `lions_year=${encodeURIComponent(currentLionsYear())}`);
 
   const allowedRole = hasEffectivePermission(session, "finance.club.statement.view");
 
@@ -231,7 +232,7 @@ export default function ClubAccountStatementBackend({ role }: { role: DevRole })
       </section>
 
       <section aria-labelledby="traceability-heading"><h3 id="traceability-heading">Journal traceability</h3>
-        <div className="statementJournals">{statement.traceability.journals.map((journal) => <details key={journal.journal_id}>
+        <div className="statementJournals">{statement.traceability.journals.map((journal) => <details key={journal.journal_id} open={initialRange?.journalId === journal.journal_id || undefined}>
           <summary><strong>{journal.reference}</strong> · {journal.accounting_date} · {journal.description}</summary>
           <dl><div><dt>Journal ID</dt><dd>{journal.journal_id}</dd></div><div><dt>Classification</dt><dd>{label(journal.journal_type)}</dd></div><div><dt>Contribution</dt><dd>{label(journal.contribution)}</dd></div><div><dt>Debits</dt><dd>{formatInrPaise(journal.debit_total_paise)}</dd></div><div><dt>Credits</dt><dd>{formatInrPaise(journal.credit_total_paise)}</dd></div></dl>
           {journal.source_type && <p>Source: {journal.source_type}{journal.source_id ? ` · ${journal.source_id}` : ""}</p>}
