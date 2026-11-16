@@ -1,8 +1,13 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useState, useSyncExternalStore } from "react";
+
+const subscribeToHydration = () => () => {};
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
 
 export default function LoginScreen({ login, error, submitting }: { login: (email: string, password: string) => Promise<boolean>; error: string | null; submitting: boolean }) {
+  const hydrated = useSyncExternalStore(subscribeToHydration, clientSnapshot, serverSnapshot);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -24,13 +29,13 @@ export default function LoginScreen({ login, error, submitting }: { login: (emai
           </div>
         </div>
         <p className="loginIntro">Use your LC Connect account credentials.</p>
-        <form className="loginForm" onSubmit={submit}>
+        <form className="loginForm" method="post" onSubmit={submit}>
           <label htmlFor="login-email">Email</label>
           <input id="login-email" name="email" type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} />
           <label htmlFor="login-password">Password</label>
           <input id="login-password" name="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
           {error && <div className="notice" role="alert">{error}</div>}
-          <button type="submit" disabled={submitting}>{submitting ? "Signing in..." : "Sign in"}</button>
+          <button type="submit" disabled={!hydrated || submitting}>{submitting ? "Signing in..." : "Sign in"}</button>
         </form>
       </div>
     </section>
